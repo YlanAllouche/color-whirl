@@ -1,0 +1,22 @@
+{
+  "name": "@wallpaper-maker/cli",
+  "version": "1.0.0",
+  "type": "module",
+  "bin": {
+    "wallpaper-maker": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@wallpaper-maker/core": "workspace:*",
+    "commander": "^11.1.0",
+    "puppeteer": "^21.6.0",
+    "canvas": "^2.11.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "typescript": "^5.4.0"
+  }
+}
