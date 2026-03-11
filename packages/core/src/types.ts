@@ -8,6 +8,15 @@ export type Direction =
 
 export type StackingMode = 'perfect' | 'helix' | 'unstacked';
 
+export interface CameraConfig {
+  /** Distance from origin in scene units */
+  distance: number;
+  /** Rotation around the Y axis, in degrees */
+  azimuth: number;
+  /** Rotation above/below the horizon, in degrees */
+  elevation: number;
+}
+
 export interface LightingConfig {
   enabled: boolean;
   intensity: number;
@@ -28,7 +37,12 @@ export interface WallpaperConfig {
   helixAngle: number;
   stickGap: number;
   stickThickness: number;
+  /** 0 = square ends, 1 = fully rounded pill ends */
+  stickRoundness: number;
+  /** 0 = no bevel, 1 = strongest bevel */
+  stickBevel: number;
   lighting: LightingConfig;
+  camera: CameraConfig;
 }
 
 export const RESOLUTION_PRESETS = {
@@ -72,10 +86,18 @@ export const DEFAULT_CONFIG: WallpaperConfig = {
   helixAngle: 360,
   stickGap: 0.05,
   stickThickness: 1.0,
+  stickRoundness: 0.15,
+  stickBevel: 0.35,
   lighting: {
     enabled: true,
     intensity: 1.5,
     position: { x: 5, y: 5, z: 5 },
     ambientIntensity: 0.3
+  },
+  camera: {
+    // Roughly matches the previous hard-coded (10, 10, 10) isometric camera.
+    distance: 17.3,
+    azimuth: 45,
+    elevation: 35.3
   }
 };

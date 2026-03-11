@@ -130,8 +130,10 @@ function generateSVGContent(config: WallpaperConfig): string {
       rotation -= 45;
     }
     
-    const rx = stickWidth * 0.1;
-    const ry = stickHeight * 0.05;
+    const maxRadius = Math.min(stickWidth, stickHeight) / 2;
+    const radius = maxRadius * Math.max(0, Math.min(1, config.stickRoundness ?? 0));
+    const rx = radius;
+    const ry = radius;
     
     svg += `  <rect x="${x - stickWidth/2}" y="${y - stickHeight/2}" width="${stickWidth}" height="${stickHeight}" rx="${rx}" ry="${ry}" fill="${color}" transform="rotate(${rotation} ${x} ${y})" opacity="0.95"/>
 `;

@@ -5,7 +5,6 @@ interface StickDimensions {
   width: number;
   height: number;
   depth: number;
-  radius: number;
 }
 
 function getStickDimensions(direction: Direction, canvasWidth: number, canvasHeight: number, stickThickness: number): StickDimensions {
@@ -20,23 +19,21 @@ function getStickDimensions(direction: Direction, canvasWidth: number, canvasHei
     return {
       width: baseSize * aspect * 0.15,
       height: baseSize * 0.8,
-      depth: baseSize * aspect * 0.02 * stickThickness,
-      radius: baseSize * aspect * 0.01
+      depth: baseSize * aspect * 0.02 * stickThickness
     };
   } else if (isDiagonal) {
     const size = baseSize * 0.7;
     return {
       width: size * 0.12,
       height: size,
-      depth: baseSize * aspect * 0.02 * stickThickness,
-      radius: baseSize * aspect * 0.01
+      depth: baseSize * aspect * 0.02 * stickThickness
     };
   } else {
     return {
       width: baseSize * aspect * 0.8,
       height: baseSize * 0.15,
       depth: baseSize * 0.02 * stickThickness,
-      radius: baseSize * 0.01
+      // radius handled by stickRoundness
     };
   }
 }
@@ -87,28 +84,52 @@ function createMaterial(texture: TextureType, color: string): THREE.MeshPhysical
   }
 }
 
-function createRoundedBox(width: number, height: number, depth: number, radius: number): THREE.BufferGeometry {
+function createRoundedBox(
+  width: number,
+  height: number,
+  depth: number,
+  roundness: number,
+  bevel: number
+): THREE.BufferGeometry {
+  const safeRoundness = Math.max(0, Math.min(1, roundness));
+  const safeBevel = Math.max(0, Math.min(1, bevel));
+
+  const maxRadius = Math.min(width, height) / 2;
+  const radius = maxRadius * safeRoundness;
+
   const shape = new THREE.Shape();
   const x = -width / 2;
   const y = -height / 2;
+
+  if (radius <= 0) {
+    shape.moveTo(x, y);
+    shape.lineTo(x + width, y);
+    shape.lineTo(x + width, y + height);
+    shape.lineTo(x, y + height);
+    shape.closePath();
+  } else {
+    shape.moveTo(x + radius, y);
+    shape.lineTo(x + width - radius, y);
+    shape.quadraticCurveTo(x + width, y, x + width, y + radius);
+    shape.lineTo(x + width, y + height - radius);
+    shape.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+    shape.lineTo(x + radius, y + height);
+    shape.quadraticCurveTo(x, y + height, x, y + height - radius);
+    shape.lineTo(x, y + radius);
+    shape.quadraticCurveTo(x, y, x + radius, y);
+  }
   
-  shape.moveTo(x + radius, y);
-  shape.lineTo(x + width - radius, y);
-  shape.quadraticCurveTo(x + width, y, x + width, y + radius);
-  shape.lineTo(x + width, y + height - radius);
-  shape.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-  shape.lineTo(x + radius, y + height);
-  shape.quadraticCurveTo(x, y + height, x, y + height - radius);
-  shape.lineTo(x, y + radius);
-  shape.quadraticCurveTo(x, y, x + radius, y);
-  
+  const maxBevel = Math.min(width, height) * 0.15;
+  const bevelSize = maxBevel * safeBevel;
+  const bevelThickness = maxBevel * safeBevel;
+
   const extrudeSettings: THREE.ExtrudeGeometryOptions = {
     depth: depth,
-    bevelEnabled: true,
+    bevelEnabled: safeBevel > 0,
     bevelSegments: 4,
     steps: 1,
-    bevelSize: radius * 0.3,
-    bevelThickness: radius * 0.3,
+    bevelSize,
+    bevelThickness,
     curveSegments: 12
   };
   
@@ -116,6 +137,17 @@ function createRoundedBox(width: number, height: number, depth: number, radius: 
   geometry.center();
   
   return geometry;
+}
+
+function degToRad(deg: number): number {
+  return (deg * Math.PI) / 180;
+}
+
+function cameraZoomFromDistance(distance: number): number {
+  // Orthographic cameras don't "zoom" with distance; map distance to zoom instead.
+  const referenceDistance = 17.3;
+  const safeDistance = Math.max(0.1, distance);
+  return referenceDistance / safeDistance;
 }
 
 function getStackingOffset(
@@ -184,7 +216,23 @@ export function createPopsicleScene(config: WallpaperConfig): {
   camera: THREE.OrthographicCamera;
   renderer: THREE.WebGLRenderer;
 } {
-  const { width, height, colors, texture, backgroundColor, direction, stacking, stickCount, helixAngle, stickGap, stickThickness, lighting } = config;
+  const {
+    width,
+    height,
+    colors,
+    texture,
+    backgroundColor,
+    direction,
+    stacking,
+    stickCount,
+    helixAngle,
+    stickGap,
+    stickThickness,
+    stickRoundness,
+    stickBevel,
+    lighting,
+    camera: cameraConfig
+  } = config;
   
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(backgroundColor);
@@ -199,8 +247,15 @@ export function createPopsicleScene(config: WallpaperConfig): {
     0.1,
     1000
   );
-  // Isometric view - positioned at an angle to see depth and stacking
-  camera.position.set(10, 10, 10);
+  const azimuthRad = degToRad(cameraConfig.azimuth);
+  const elevationRad = degToRad(cameraConfig.elevation);
+  camera.position.set(
+    cameraConfig.distance * Math.cos(elevationRad) * Math.sin(azimuthRad),
+    cameraConfig.distance * Math.sin(elevationRad),
+    cameraConfig.distance * Math.cos(elevationRad) * Math.cos(azimuthRad)
+  );
+  camera.zoom = cameraZoomFromDistance(cameraConfig.distance);
+  camera.updateProjectionMatrix();
   camera.lookAt(0, 0, 0);
   
   if (lighting.enabled) {
@@ -236,7 +291,8 @@ export function createPopsicleScene(config: WallpaperConfig): {
       stickDimensions.width,
       stickDimensions.height,
       stickDimensions.depth,
-      stickDimensions.radius
+      stickRoundness,
+      stickBevel
     );
     
     const mesh = new THREE.Mesh(geometry, material);
