@@ -40,6 +40,11 @@ program
   .option('--helix-angle <degrees>', 'Helix rotation angle in degrees (0-720)', '360')
   .option('--gap <number>', 'Gap between sticks (0-5.0)', '0.05')
   .option('--thickness <number>', 'Stick thickness multiplier', '1.0')
+  .option('--roundness <number>', 'Stick end roundness (0-1)', '0.15')
+  .option('--bevel <number>', 'Bevel amount (0-1)', '0.35')
+  .option('--camera-distance <number>', 'Camera distance', '17.3')
+  .option('--camera-azimuth <number>', 'Camera azimuth in degrees', '45')
+  .option('--camera-elevation <number>', 'Camera elevation in degrees', '35.3')
   .option('-f, --format <format>', 'Output format (png, jpg, webp, svg)', 'png')
   .option('-q, --quality <number>', 'Image quality (0-1)', '0.95')
   .option('-o, --output <path>', 'Output file path')
@@ -122,6 +127,8 @@ function buildConfig(options: any): WallpaperConfig {
     helixAngle: parseFloat(options.helixAngle),
     stickGap: parseFloat(options.gap),
     stickThickness: parseFloat(options.thickness),
+    stickRoundness: parseFloat(options.roundness),
+    stickBevel: parseFloat(options.bevel),
     lighting: {
       enabled: options.lighting,
       intensity: parseFloat(options.lightIntensity),
@@ -131,6 +138,11 @@ function buildConfig(options: any): WallpaperConfig {
         z: parseFloat(options.lightZ)
       },
       ambientIntensity: parseFloat(options.ambient)
+    },
+    camera: {
+      distance: parseFloat(options.cameraDistance),
+      azimuth: parseFloat(options.cameraAzimuth),
+      elevation: parseFloat(options.cameraElevation)
     }
   };
   

@@ -108,8 +108,10 @@ function generateSVG(config: WallpaperConfig): GenerateResult {
       rotation -= 45;
     }
     
-    const rx = stickWidth * 0.1;
-    const ry = stickHeight * 0.05;
+    const maxRadius = Math.min(stickWidth, stickHeight) / 2;
+    const radius = maxRadius * Math.max(0, Math.min(1, config.stickRoundness ?? 0));
+    const rx = radius;
+    const ry = radius;
     
     const gradientId = `grad-${i}`;
     svg += `  <defs>
@@ -168,31 +170,32 @@ function generateHTML(config: WallpaperConfig): string {
     
     const config = ${configJson};
     
-    function getStickDimensions(direction, canvasWidth, canvasHeight) {
+    function getStickDimensions(direction, canvasWidth, canvasHeight, stickThickness) {
       const isVertical = direction === 'top-bottom';
       const isDiagonal = direction === 'top-right-to-bottom-left' || direction === 'bottom-left-to-top-right';
+      const aspect = canvasWidth / canvasHeight;
+      
+      // Normalize to frustum size (10 units) with aspect ratio correction
+      const baseSize = 8;
       
       if (isVertical) {
         return {
-          width: canvasWidth * 0.15,
-          height: canvasHeight * 0.8,
-          depth: canvasWidth * 0.02,
-          radius: canvasWidth * 0.01
+          width: baseSize * aspect * 0.15,
+          height: baseSize * 0.8,
+          depth: baseSize * aspect * 0.02 * stickThickness
         };
       } else if (isDiagonal) {
-        const size = Math.min(canvasWidth, canvasHeight) * 0.7;
+        const size = baseSize * 0.7;
         return {
           width: size * 0.12,
           height: size,
-          depth: canvasWidth * 0.02,
-          radius: canvasWidth * 0.01
+          depth: baseSize * aspect * 0.02 * stickThickness
         };
       } else {
         return {
-          width: canvasWidth * 0.8,
-          height: canvasHeight * 0.15,
-          depth: canvasHeight * 0.02,
-          radius: canvasHeight * 0.01
+          width: baseSize * aspect * 0.8,
+          height: baseSize * 0.15,
+          depth: baseSize * 0.02 * stickThickness
         };
       }
     }
@@ -233,28 +236,45 @@ function generateHTML(config: WallpaperConfig): string {
       }
     }
     
-    function createRoundedBox(width, height, depth, radius) {
+    function createRoundedBox(width, height, depth, roundness, bevel) {
+      const safeRoundness = Math.max(0, Math.min(1, roundness));
+      const safeBevel = Math.max(0, Math.min(1, bevel));
+      const maxRadius = Math.min(width, height) / 2;
+      const radius = maxRadius * safeRoundness;
+
       const shape = new THREE.Shape();
       const x = -width / 2;
       const y = -height / 2;
+
+      if (radius <= 0) {
+        shape.moveTo(x, y);
+        shape.lineTo(x + width, y);
+        shape.lineTo(x + width, y + height);
+        shape.lineTo(x, y + height);
+        shape.closePath();
+      } else {
+        shape.moveTo(x + radius, y);
+        shape.lineTo(x + width - radius, y);
+        shape.quadraticCurveTo(x + width, y, x + width, y + radius);
+        shape.lineTo(x + width, y + height - radius);
+        shape.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+        shape.lineTo(x + radius, y + height);
+        shape.quadraticCurveTo(x, y + height, x, y + height - radius);
+        shape.lineTo(x, y + radius);
+        shape.quadraticCurveTo(x, y, x + radius, y);
+      }
       
-      shape.moveTo(x + radius, y);
-      shape.lineTo(x + width - radius, y);
-      shape.quadraticCurveTo(x + width, y, x + width, y + radius);
-      shape.lineTo(x + width, y + height - radius);
-      shape.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-      shape.lineTo(x + radius, y + height);
-      shape.quadraticCurveTo(x, y + height, x, y + height - radius);
-      shape.lineTo(x, y + radius);
-      shape.quadraticCurveTo(x, y, x + radius, y);
-      
+      const maxBevel = Math.min(width, height) * 0.15;
+      const bevelSize = maxBevel * safeBevel;
+      const bevelThickness = maxBevel * safeBevel;
+
       const extrudeSettings = {
         depth: depth,
-        bevelEnabled: true,
+        bevelEnabled: safeBevel > 0,
         bevelSegments: 4,
         steps: 1,
-        bevelSize: radius * 0.3,
-        bevelThickness: radius * 0.3,
+        bevelSize,
+        bevelThickness,
         curveSegments: 12
       };
       
@@ -264,26 +284,24 @@ function generateHTML(config: WallpaperConfig): string {
       return geometry;
     }
     
-    function getStackingOffset(stacking, index, totalSticks, stickDimensions) {
-      const spacing = 0.05;
-      
+    function getStackingOffset(stacking, index, totalSticks, stickDimensions, helixAngle, stickGap) {
       switch (stacking) {
         case 'perfect':
           return {
             x: 0,
             y: 0,
-            z: index * (stickDimensions.depth + spacing),
+            z: index * (stickDimensions.depth + stickGap),
             rotationZ: 0
           };
         
         case 'helix':
-          const helixAmplitude = stickDimensions.width * 0.15;
-          const helixFrequency = 0.3;
+          const helixTurns = helixAngle / 360;
+          const rotationAngle = (index / (totalSticks - 1)) * Math.PI * 2 * helixTurns;
           return {
-            x: Math.sin(index * helixFrequency) * helixAmplitude,
-            y: Math.cos(index * helixFrequency) * helixAmplitude * 0.5,
-            z: index * (stickDimensions.depth + spacing),
-            rotationZ: (index / totalSticks) * Math.PI * 0.1
+            x: 0,
+            y: 0,
+            z: index * (stickDimensions.depth + stickGap),
+            rotationZ: rotationAngle
           };
         
         case 'unstacked':
@@ -293,7 +311,7 @@ function generateHTML(config: WallpaperConfig): string {
           return {
             x: Math.cos(currentAngle) * maxOffset * (index % 2 === 0 ? 1 : -1),
             y: Math.sin(currentAngle) * maxOffset * (index % 2 === 0 ? 1 : -1),
-            z: index * (stickDimensions.depth * 2 + spacing),
+            z: index * (stickDimensions.depth * 2 + stickGap),
             rotationZ: currentAngle * (index % 2 === 0 ? 1 : -1)
           };
         
@@ -317,7 +335,23 @@ function generateHTML(config: WallpaperConfig): string {
       }
     }
     
-    const { width, height, colors, texture, backgroundColor, direction, stacking, stickCount, lighting } = config;
+    const {
+      width,
+      height,
+      colors,
+      texture,
+      backgroundColor,
+      direction,
+      stacking,
+      stickCount,
+      helixAngle,
+      stickGap,
+      stickThickness,
+      stickRoundness,
+      stickBevel,
+      lighting,
+      camera: cameraConfig
+    } = config;
     
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(backgroundColor);
@@ -332,7 +366,16 @@ function generateHTML(config: WallpaperConfig): string {
       0.1,
       1000
     );
-    camera.position.set(0, 0, 20);
+    const azimuthRad = (cameraConfig.azimuth * Math.PI) / 180;
+    const elevationRad = (cameraConfig.elevation * Math.PI) / 180;
+    camera.position.set(
+      cameraConfig.distance * Math.cos(elevationRad) * Math.sin(azimuthRad),
+      cameraConfig.distance * Math.sin(elevationRad),
+      cameraConfig.distance * Math.cos(elevationRad) * Math.cos(azimuthRad)
+    );
+    // Orthographic cameras don't change size with distance; convert distance to zoom.
+    camera.zoom = 17.3 / Math.max(0.1, cameraConfig.distance);
+    camera.updateProjectionMatrix();
     camera.lookAt(0, 0, 0);
     
     if (lighting.enabled) {
@@ -356,7 +399,7 @@ function generateHTML(config: WallpaperConfig): string {
       scene.add(ambientLight);
     }
     
-    const stickDimensions = getStickDimensions(direction, width, height);
+    const stickDimensions = getStickDimensions(direction, width, height, stickThickness);
     const directionRotation = getDirectionRotation(direction);
     
     const group = new THREE.Group();
@@ -368,12 +411,13 @@ function generateHTML(config: WallpaperConfig): string {
         stickDimensions.width,
         stickDimensions.height,
         stickDimensions.depth,
-        stickDimensions.radius
+        stickRoundness,
+        stickBevel
       );
       
       const mesh = new THREE.Mesh(geometry, material);
       
-      const offset = getStackingOffset(stacking, i, stickCount, stickDimensions);
+      const offset = getStackingOffset(stacking, i, stickCount, stickDimensions, helixAngle, stickGap);
       
       mesh.position.set(offset.x, offset.y, offset.z);
       mesh.rotation.z = directionRotation + offset.rotationZ;
