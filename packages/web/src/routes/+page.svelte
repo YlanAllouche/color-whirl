@@ -756,7 +756,7 @@
          <h3>Stick Settings</h3>
          <label class="control-row slider">
            <span>Count: {config.stickCount}</span>
-           <input type="range" bind:value={config.stickCount} min="3" max="200" />
+           <input type="range" bind:value={config.stickCount} min="1" max="200" />
          </label>
          <label class="control-row slider">
            <span>Gap: {config.stickGap.toFixed(2)}</span>
