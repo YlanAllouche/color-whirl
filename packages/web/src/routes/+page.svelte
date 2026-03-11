@@ -6,6 +6,7 @@
     type WallpaperConfig,
     COLOR_PALETTES,
     RESOLUTION_PRESETS,
+    generateRandomConfig,
     exportToPNG,
     exportToJPG,
     exportToWebP,
@@ -406,7 +407,8 @@
   }
   
   function applyColorPalette(palette: keyof typeof COLOR_PALETTES) {
-    config = { ...config, colors: [...COLOR_PALETTES[palette]] };
+    const selected = COLOR_PALETTES[palette] as any;
+    config = { ...config, colors: [...selected.colors], backgroundColor: selected.backgroundColor };
   }
   
   function addColor() {
@@ -426,17 +428,21 @@
     config = { ...config, colors: newColors };
   }
 
-  function cloneDefaultConfig(): WallpaperConfig {
-    return {
-      ...DEFAULT_CONFIG,
-      colors: [...DEFAULT_CONFIG.colors],
-      lighting: {
-        ...DEFAULT_CONFIG.lighting,
-        position: { ...DEFAULT_CONFIG.lighting.position }
-      },
-      camera: { ...DEFAULT_CONFIG.camera }
-    };
-  }
+   function cloneDefaultConfig(): WallpaperConfig {
+     return {
+       ...DEFAULT_CONFIG,
+       colors: [...DEFAULT_CONFIG.colors],
+       lighting: {
+         ...DEFAULT_CONFIG.lighting,
+         position: { ...DEFAULT_CONFIG.lighting.position }
+       },
+       camera: { ...DEFAULT_CONFIG.camera }
+     };
+   }
+
+   function generateRandom() {
+     config = generateRandomConfig();
+   }
 
   function parseConfigFromUrl(searchParams: URLSearchParams) {
     const next = cloneDefaultConfig();
@@ -629,10 +635,18 @@
   });
   
   onMount(() => {
+    const hasUrlParams = window.location.search.length > 0;
+    
     try {
-      parseConfigFromUrl(new URLSearchParams(window.location.search));
+      if (hasUrlParams) {
+        parseConfigFromUrl(new URLSearchParams(window.location.search));
+      } else {
+        // Use random configuration when no URL parameters are present
+        config = generateRandomConfig();
+      }
     } catch {
-      // Ignore malformed URLs and keep defaults.
+      // Ignore malformed URLs and use random config
+      config = generateRandomConfig();
     }
 
     urlSyncEnabled = true;
@@ -675,16 +689,24 @@
         </div>
       </section>
       
-      <!-- Resolution Controls -->
-      <section class="control-section">
-        <h3>Resolution</h3>
-        <div class="preset-buttons">
-          {#each Object.keys(RESOLUTION_PRESETS) as preset}
-            <button on:click={() => applyResolutionPreset(preset as keyof typeof RESOLUTION_PRESETS)}>
-              {preset}
-            </button>
-          {/each}
-        </div>
+       <!-- Random Config -->
+       <section class="control-section">
+         <h3>Randomize</h3>
+         <button style="width: 100%; padding: 0.5rem;" on:click={generateRandom}>
+           Generate Random
+         </button>
+       </section>
+       
+       <!-- Resolution Controls -->
+       <section class="control-section">
+         <h3>Resolution</h3>
+         <div class="preset-buttons">
+           {#each Object.keys(RESOLUTION_PRESETS) as preset}
+             <button on:click={() => applyResolutionPreset(preset as keyof typeof RESOLUTION_PRESETS)}>
+               {preset}
+             </button>
+           {/each}
+         </div>
         <div class="input-row">
           <label>
             <span>W</span>

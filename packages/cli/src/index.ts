@@ -31,7 +31,7 @@ program
   .option('-H, --height <height>', 'Image height in pixels')
   .option('-r, --resolution <preset>', 'Use a preset resolution (1080p, 1440p, 4k, mobile, square, ultrawide)')
   .option('-c, --colors <colors>', 'Comma-separated hex colors (e.g., "#ff0000,#00ff00")')
-  .option('-p, --palette <palette>', 'Use a preset color palette (sunset, ocean, forest, monochrome, candy, neon)')
+   .option('-p, --palette <palette>', 'Use a preset color palette (sunset, ocean, forest, monochrome, candy, neon, lavender, tropical, vintage, midnight, aurora, ember)')
   .option('-T, --texture <texture>', 'Texture type (glossy, matte, metallic)', 'glossy')
   .option('-b, --background <color>', 'Background color (hex)', '#1a1a2e')
   .option('-d, --direction <direction>', 'Stacking direction (top-bottom, left-right, top-right-to-bottom-left, bottom-left-to-top-right)', 'top-bottom')
@@ -101,30 +101,33 @@ function buildConfig(options: any): WallpaperConfig {
   if (options.width) width = parseInt(options.width, 10);
   if (options.height) height = parseInt(options.height, 10);
   
-  let colors = DEFAULT_CONFIG.colors;
+   let colors = DEFAULT_CONFIG.colors;
+   let backgroundColor = DEFAULT_CONFIG.backgroundColor;
+   
+   if (options.palette) {
+     const paletteName = options.palette as ColorPalette;
+     if (paletteName in COLOR_PALETTES) {
+       const palette = COLOR_PALETTES[paletteName] as any;
+       colors = [...palette.colors];
+       backgroundColor = palette.backgroundColor;
+     } else {
+       console.warn(`Unknown color palette: ${options.palette}`);
+     }
+   }
+   
+   if (options.colors) {
+     colors = options.colors.split(',').map((c: string) => c.trim());
+   }
   
-  if (options.palette) {
-    const paletteName = options.palette as ColorPalette;
-    if (paletteName in COLOR_PALETTES) {
-      colors = [...COLOR_PALETTES[paletteName]];
-    } else {
-      console.warn(`Unknown color palette: ${options.palette}`);
-    }
-  }
-  
-  if (options.colors) {
-    colors = options.colors.split(',').map((c: string) => c.trim());
-  }
-  
-  const config: WallpaperConfig = {
-    type: options.type as 'popsickle',
-    width,
-    height,
-    colors,
-    texture: options.texture as TextureType,
-    backgroundColor: options.background,
-    direction: options.direction as Direction,
-     stacking: options.stacking as StackingMode,
+   const config: WallpaperConfig = {
+     type: options.type as 'popsickle',
+     width,
+     height,
+     colors,
+     texture: options.texture as TextureType,
+     backgroundColor: options.background || backgroundColor,
+     direction: options.direction as Direction,
+      stacking: options.stacking as StackingMode,
      stickCount: parseInt(options.count, 10),
      stickOverhang: parseFloat(options.stickOverhang),
      rotationCenterOffsetX: parseFloat(options.rotationCenterOffsetX),
