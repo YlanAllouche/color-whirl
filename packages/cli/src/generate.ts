@@ -90,15 +90,12 @@ function generateSVG(config: WallpaperConfig): GenerateResult {
     let y = centerY;
     let rotation = 0;
     
-    if (stacking === 'helix') {
-      const offset = (i / stickCount) * 20;
-      x += Math.sin(i * 0.5) * offset;
-      y += Math.cos(i * 0.5) * offset * 0.5;
-      rotation = (i / stickCount) * 10;
-    } else if (stacking === 'unstacked') {
-      const angle = (i / stickCount) * 90;
-      rotation = angle * (i % 2 === 0 ? 1 : -1);
-    }
+     if (stacking === 'helix') {
+       const offset = (i / stickCount) * 20;
+       x += Math.sin(i * 0.5) * offset;
+       y += Math.cos(i * 0.5) * offset * 0.5;
+       rotation = (i / stickCount) * 10;
+     }
     
     if (direction === 'left-right') {
       rotation += 90;
@@ -284,41 +281,46 @@ function generateHTML(config: WallpaperConfig): string {
       return geometry;
     }
     
-    function getStackingOffset(stacking, index, totalSticks, stickDimensions, helixAngle, stickGap) {
-      switch (stacking) {
-        case 'perfect':
-          return {
-            x: 0,
-            y: 0,
-            z: index * (stickDimensions.depth + stickGap),
-            rotationZ: 0
-          };
-        
-        case 'helix':
-          const helixTurns = helixAngle / 360;
-          const rotationAngle = (index / (totalSticks - 1)) * Math.PI * 2 * helixTurns;
-          return {
-            x: 0,
-            y: 0,
-            z: index * (stickDimensions.depth + stickGap),
-            rotationZ: rotationAngle
-          };
-        
-        case 'unstacked':
-          const angleStep = (Math.PI / 2) / (totalSticks - 1);
-          const currentAngle = index * angleStep;
-          const maxOffset = stickDimensions.width * 0.4;
-          return {
-            x: Math.cos(currentAngle) * maxOffset * (index % 2 === 0 ? 1 : -1),
-            y: Math.sin(currentAngle) * maxOffset * (index % 2 === 0 ? 1 : -1),
-            z: index * (stickDimensions.depth * 2 + stickGap),
-            rotationZ: currentAngle * (index % 2 === 0 ? 1 : -1)
-          };
-        
-        default:
-          return { x: 0, y: 0, z: index * stickDimensions.depth, rotationZ: 0 };
-      }
-    }
+     function degToRad(deg) {
+       return (deg * Math.PI) / 180;
+     }
+
+     function getStackingOffset(stacking, index, totalSticks, stickDimensions, stickOverhang, rotationCenterOffsetX, rotationCenterOffsetY, stickGap) {
+       switch (stacking) {
+         case 'perfect':
+           return {
+             x: 0,
+             y: 0,
+             z: index * (stickDimensions.depth + stickGap),
+             rotationZ: 0
+           };
+         
+         case 'helix':
+           const rotationAngle = index * degToRad(stickOverhang);
+           
+           const offsetXPercent = rotationCenterOffsetX / 100;
+           const offsetYPercent = rotationCenterOffsetY / 100;
+           
+           const pivotX = offsetXPercent * (stickDimensions.width / 2);
+           const pivotY = offsetYPercent * (stickDimensions.height / 2);
+           
+           const cos = Math.cos(rotationAngle);
+           const sin = Math.sin(rotationAngle);
+           
+           const offsetX = pivotX * (1 - cos) + pivotY * sin;
+           const offsetY = pivotY * (1 - cos) - pivotX * sin;
+           
+           return {
+             x: offsetX,
+             y: offsetY,
+             z: index * (stickDimensions.depth + stickGap),
+             rotationZ: rotationAngle
+           };
+         
+         default:
+           return { x: 0, y: 0, z: index * stickDimensions.depth, rotationZ: 0 };
+       }
+     }
     
     function getDirectionRotation(direction) {
       switch (direction) {
@@ -335,23 +337,25 @@ function generateHTML(config: WallpaperConfig): string {
       }
     }
     
-    const {
-      width,
-      height,
-      colors,
-      texture,
-      backgroundColor,
-      direction,
-      stacking,
-      stickCount,
-      helixAngle,
-      stickGap,
-      stickThickness,
-      stickRoundness,
-      stickBevel,
-      lighting,
-      camera: cameraConfig
-    } = config;
+     const {
+       width,
+       height,
+       colors,
+       texture,
+       backgroundColor,
+       direction,
+       stacking,
+       stickCount,
+       stickOverhang,
+       rotationCenterOffsetX,
+       rotationCenterOffsetY,
+       stickGap,
+       stickThickness,
+       stickRoundness,
+       stickBevel,
+       lighting,
+       camera: cameraConfig
+     } = config;
     
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(backgroundColor);
@@ -417,7 +421,7 @@ function generateHTML(config: WallpaperConfig): string {
       
       const mesh = new THREE.Mesh(geometry, material);
       
-      const offset = getStackingOffset(stacking, i, stickCount, stickDimensions, helixAngle, stickGap);
+       const offset = getStackingOffset(stacking, i, stickCount, stickDimensions, stickOverhang, rotationCenterOffsetX, rotationCenterOffsetY, stickGap);
       
       mesh.position.set(offset.x, offset.y, offset.z);
       mesh.rotation.z = directionRotation + offset.rotationZ;

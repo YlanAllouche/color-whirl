@@ -35,9 +35,11 @@ program
   .option('-T, --texture <texture>', 'Texture type (glossy, matte, metallic)', 'glossy')
   .option('-b, --background <color>', 'Background color (hex)', '#1a1a2e')
   .option('-d, --direction <direction>', 'Stacking direction (top-bottom, left-right, top-right-to-bottom-left, bottom-left-to-top-right)', 'top-bottom')
-  .option('-s, --stacking <mode>', 'Stacking mode (perfect, helix, unstacked)', 'helix')
-  .option('-n, --count <number>', 'Number of sticks', '12')
-  .option('--helix-angle <degrees>', 'Helix rotation angle in degrees (0-720)', '360')
+   .option('-s, --stacking <mode>', 'Stacking mode (perfect, helix)', 'helix')
+   .option('-n, --count <number>', 'Number of sticks', '12')
+   .option('--stick-overhang <degrees>', 'Stick overhang angle per stick in degrees', '30')
+   .option('--rotation-center-offset-x <percent>', 'Rotation center X offset as percentage (-100 to 100)', '0')
+   .option('--rotation-center-offset-y <percent>', 'Rotation center Y offset as percentage (-100 to 100)', '0')
   .option('--gap <number>', 'Gap between sticks (0-5.0)', '0.05')
   .option('--thickness <number>', 'Stick thickness multiplier', '1.0')
   .option('--roundness <number>', 'Stick end roundness (0-1)', '0.15')
@@ -122,10 +124,12 @@ function buildConfig(options: any): WallpaperConfig {
     texture: options.texture as TextureType,
     backgroundColor: options.background,
     direction: options.direction as Direction,
-    stacking: options.stacking as StackingMode,
-    stickCount: parseInt(options.count, 10),
-    helixAngle: parseFloat(options.helixAngle),
-    stickGap: parseFloat(options.gap),
+     stacking: options.stacking as StackingMode,
+     stickCount: parseInt(options.count, 10),
+     stickOverhang: parseFloat(options.stickOverhang),
+     rotationCenterOffsetX: parseFloat(options.rotationCenterOffsetX),
+     rotationCenterOffsetY: parseFloat(options.rotationCenterOffsetY),
+     stickGap: parseFloat(options.gap),
     stickThickness: parseFloat(options.thickness),
     stickRoundness: parseFloat(options.roundness),
     stickBevel: parseFloat(options.bevel),

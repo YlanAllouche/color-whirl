@@ -155,7 +155,9 @@ function getStackingOffset(
   index: number,
   totalSticks: number,
   stickDimensions: StickDimensions,
-  helixAngle: number,
+  stickOverhang: number,
+  rotationCenterOffsetX: number,
+  rotationCenterOffsetY: number,
   stickGap: number
 ): { x: number; y: number; z: number; rotationZ: number } {
   
@@ -168,28 +170,37 @@ function getStackingOffset(
         rotationZ: 0
       };
     
-    case 'helix':
-      // True helix: all sticks centered at (0,0), each rotated around Z axis progressively
-      // helixAngle is in degrees, convert to radians
-      const helixTurns = helixAngle / 360;
-      const rotationAngle = (index / (totalSticks - 1)) * Math.PI * 2 * helixTurns;
+    case 'helix': {
+      // Helix with configurable overhang angle and rotation center offset
+      // stickOverhang: degrees each stick rotates from the previous
+      const rotationAngle = index * degToRad(stickOverhang);
+      
+      // Rotation center offset: -100% = far left/bottom, 0% = center, +100% = far right/top
+      // We need to apply the rotation around a point other than (0,0)
+      const offsetXPercent = rotationCenterOffsetX / 100;
+      const offsetYPercent = rotationCenterOffsetY / 100;
+      
+      // Calculate the rotation pivot point relative to stick center
+      // The stick extends from -height/2 to +height/2 in its local Y axis
+      const pivotX = offsetXPercent * (stickDimensions.width / 2);
+      const pivotY = offsetYPercent * (stickDimensions.height / 2);
+      
+      // Apply rotation around the pivot point
+      // First translate to pivot, rotate, then translate back
+      const cos = Math.cos(rotationAngle);
+      const sin = Math.sin(rotationAngle);
+      
+      // Position offset from rotation around pivot
+      const offsetX = pivotX * (1 - cos) + pivotY * sin;
+      const offsetY = pivotY * (1 - cos) - pivotX * sin;
+      
       return {
-        x: 0,
-        y: 0,
+        x: offsetX,
+        y: offsetY,
         z: index * (stickDimensions.depth + stickGap),
         rotationZ: rotationAngle
       };
-    
-    case 'unstacked':
-      const angleStep = (Math.PI / 2) / (totalSticks - 1);
-      const currentAngle = index * angleStep;
-      const maxOffset = stickDimensions.width * 0.4;
-      return {
-        x: Math.cos(currentAngle) * maxOffset * (index % 2 === 0 ? 1 : -1),
-        y: Math.sin(currentAngle) * maxOffset * (index % 2 === 0 ? 1 : -1),
-        z: index * (stickDimensions.depth * 2 + stickGap),
-        rotationZ: currentAngle * (index % 2 === 0 ? 1 : -1)
-      };
+    }
     
     default:
       return { x: 0, y: 0, z: index * stickDimensions.depth, rotationZ: 0 };
@@ -225,7 +236,9 @@ export function createPopsicleScene(config: WallpaperConfig): {
     direction,
     stacking,
     stickCount,
-    helixAngle,
+    stickOverhang,
+    rotationCenterOffsetX,
+    rotationCenterOffsetY,
     stickGap,
     stickThickness,
     stickRoundness,
@@ -297,7 +310,7 @@ export function createPopsicleScene(config: WallpaperConfig): {
     
     const mesh = new THREE.Mesh(geometry, material);
     
-    const offset = getStackingOffset(stacking, i, stickCount, stickDimensions, helixAngle, stickGap);
+     const offset = getStackingOffset(stacking, i, stickCount, stickDimensions, stickOverhang, rotationCenterOffsetX, rotationCenterOffsetY, stickGap);
     
     mesh.position.set(offset.x, offset.y, offset.z);
     mesh.rotation.z = directionRotation + offset.rotationZ;

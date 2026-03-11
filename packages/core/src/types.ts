@@ -6,7 +6,7 @@ export type Direction =
   | 'top-right-to-bottom-left' 
   | 'bottom-left-to-top-right';
 
-export type StackingMode = 'perfect' | 'helix' | 'unstacked';
+export type StackingMode = 'perfect' | 'helix';
 
 export interface CameraConfig {
   /** Distance from origin in scene units */
@@ -34,7 +34,11 @@ export interface WallpaperConfig {
   direction: Direction;
   stacking: StackingMode;
   stickCount: number;
-  helixAngle: number;
+  /** Stick overhang angle per stick in degrees (e.g., each stick rotates 15° from the previous) */
+  stickOverhang: number;
+  /** Rotation center offset as percentage of stick length (-100 to +100, default 0 = center) */
+  rotationCenterOffsetX: number;
+  rotationCenterOffsetY: number;
   stickGap: number;
   stickThickness: number;
   /** 0 = square ends, 1 = fully rounded pill ends */
@@ -83,7 +87,9 @@ export const DEFAULT_CONFIG: WallpaperConfig = {
   direction: 'top-bottom',
   stacking: 'helix',
   stickCount: 12,
-  helixAngle: 360,
+  stickOverhang: 30,
+  rotationCenterOffsetX: 0,
+  rotationCenterOffsetY: 0,
   stickGap: 0.05,
   stickThickness: 1.0,
   stickRoundness: 0.15,

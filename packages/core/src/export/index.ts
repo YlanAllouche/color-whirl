@@ -112,15 +112,12 @@ function generateSVGContent(config: WallpaperConfig): string {
     let y = centerY;
     let rotation = 0;
     
-    if (stacking === 'helix') {
-      const offset = (i / stickCount) * 20;
-      x += Math.sin(i * 0.5) * offset;
-      y += Math.cos(i * 0.5) * offset * 0.5;
-      rotation = (i / stickCount) * 10;
-    } else if (stacking === 'unstacked') {
-      const angle = (i / stickCount) * 90;
-      rotation = angle * (i % 2 === 0 ? 1 : -1);
-    }
+     if (stacking === 'helix') {
+       const offset = (i / stickCount) * 20;
+       x += Math.sin(i * 0.5) * offset;
+       y += Math.cos(i * 0.5) * offset * 0.5;
+       rotation = (i / stickCount) * 10;
+     }
     
     if (direction === 'left-right') {
       rotation += 90;
