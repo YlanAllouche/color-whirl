@@ -169,12 +169,18 @@
     }
   }
   
+  function degToRad(deg: number): number {
+    return (deg * Math.PI) / 180;
+  }
+
   function getStackingOffset(
     stacking: string,
     index: number,
     totalSticks: number,
     stickDimensions: { width: number; height: number; depth: number },
-    helixAngle: number,
+    stickOverhang: number,
+    rotationCenterOffsetX: number,
+    rotationCenterOffsetY: number,
     stickGap: number
   ) {
     switch (stacking) {
@@ -187,24 +193,25 @@
         };
       
       case 'helix':
-        const helixTurns = helixAngle / 360;
-        const rotationAngle = (index / (totalSticks - 1)) * Math.PI * 2 * helixTurns;
+        const rotationAngle = index * degToRad(stickOverhang);
+        
+        const offsetXPercent = rotationCenterOffsetX / 100;
+        const offsetYPercent = rotationCenterOffsetY / 100;
+        
+        const pivotX = offsetXPercent * (stickDimensions.width / 2);
+        const pivotY = offsetYPercent * (stickDimensions.height / 2);
+        
+        const cos = Math.cos(rotationAngle);
+        const sin = Math.sin(rotationAngle);
+        
+        const offsetX = pivotX * (1 - cos) + pivotY * sin;
+        const offsetY = pivotY * (1 - cos) - pivotX * sin;
+        
         return {
-          x: 0,
-          y: 0,
+          x: offsetX,
+          y: offsetY,
           z: index * (stickDimensions.depth + stickGap),
           rotationZ: rotationAngle
-        };
-      
-      case 'unstacked':
-        const angleStep = (Math.PI / 2) / (totalSticks - 1);
-        const currentAngle = index * angleStep;
-        const maxOffset = stickDimensions.width * 0.4;
-        return {
-          x: Math.cos(currentAngle) * maxOffset * (index % 2 === 0 ? 1 : -1),
-          y: Math.sin(currentAngle) * maxOffset * (index % 2 === 0 ? 1 : -1),
-          z: index * (stickDimensions.depth * 2 + stickGap),
-          rotationZ: currentAngle * (index % 2 === 0 ? 1 : -1)
         };
       
       default:
@@ -235,23 +242,25 @@
       canvasContainer.innerHTML = '';
     }
     
-    const { 
-      width, 
-      height, 
-      colors, 
-      texture, 
-      backgroundColor, 
-      direction, 
-      stacking, 
-      stickCount, 
-      helixAngle,
-      stickGap,
-      stickThickness,
-      stickRoundness,
-      stickBevel,
-      lighting,
-      camera: cameraConfig
-    } = config;
+     const { 
+       width, 
+       height, 
+       colors, 
+       texture, 
+       backgroundColor, 
+       direction, 
+       stacking, 
+       stickCount, 
+       stickOverhang,
+       rotationCenterOffsetX,
+       rotationCenterOffsetY,
+       stickGap,
+       stickThickness,
+       stickRoundness,
+       stickBevel,
+       lighting,
+       camera: cameraConfig
+     } = config;
     
     scene = new THREE.Scene();
     scene.background = new THREE.Color(backgroundColor);
@@ -318,7 +327,7 @@
       
       const mesh = new THREE.Mesh(geometry, material);
       
-      const offset = getStackingOffset(stacking, i, stickCount, stickDimensions, helixAngle, stickGap);
+       const offset = getStackingOffset(stacking, i, stickCount, stickDimensions, stickOverhang, rotationCenterOffsetX, rotationCenterOffsetY, stickGap);
       
       mesh.position.set(offset.x, offset.y, offset.z);
       mesh.rotation.z = directionRotation + offset.rotationZ;
@@ -467,12 +476,14 @@
     next.direction = str('dir', next.direction) as any;
     next.stacking = str('stack', next.stacking) as any;
 
-    next.stickCount = Math.round(num('count', next.stickCount));
-    next.helixAngle = num('helix', next.helixAngle);
-    next.stickGap = num('gap', next.stickGap);
-    next.stickThickness = num('thick', next.stickThickness);
-    next.stickRoundness = num('round', next.stickRoundness);
-    next.stickBevel = num('bevel', next.stickBevel);
+     next.stickCount = Math.round(num('count', next.stickCount));
+     next.stickOverhang = num('overhang', next.stickOverhang);
+     next.rotationCenterOffsetX = num('rotx', next.rotationCenterOffsetX);
+     next.rotationCenterOffsetY = num('roty', next.rotationCenterOffsetY);
+     next.stickGap = num('gap', next.stickGap);
+     next.stickThickness = num('thick', next.stickThickness);
+     next.stickRoundness = num('round', next.stickRoundness);
+     next.stickBevel = num('bevel', next.stickBevel);
 
     next.lighting.enabled = bool('light', next.lighting.enabled);
     next.lighting.intensity = num('li', next.lighting.intensity);
@@ -496,19 +507,21 @@
   function buildUrlSearchParams(): URLSearchParams {
     const p = new URLSearchParams();
 
-    p.set('w', String(config.width));
-    p.set('h', String(config.height));
-    p.set('colors', config.colors.join(','));
-    p.set('tex', config.texture);
-    p.set('bg', config.backgroundColor);
-    p.set('dir', config.direction);
-    p.set('stack', config.stacking);
-    p.set('count', String(config.stickCount));
-    p.set('helix', String(config.helixAngle));
-    p.set('gap', String(config.stickGap));
-    p.set('thick', String(config.stickThickness));
-    p.set('round', String(config.stickRoundness));
-    p.set('bevel', String(config.stickBevel));
+     p.set('w', String(config.width));
+     p.set('h', String(config.height));
+     p.set('colors', config.colors.join(','));
+     p.set('tex', config.texture);
+     p.set('bg', config.backgroundColor);
+     p.set('dir', config.direction);
+     p.set('stack', config.stacking);
+     p.set('count', String(config.stickCount));
+     p.set('overhang', String(config.stickOverhang));
+     p.set('rotx', String(config.rotationCenterOffsetX));
+     p.set('roty', String(config.rotationCenterOffsetY));
+     p.set('gap', String(config.stickGap));
+     p.set('thick', String(config.stickThickness));
+     p.set('round', String(config.stickRoundness));
+     p.set('bevel', String(config.stickBevel));
 
     p.set('light', config.lighting.enabled ? '1' : '0');
     p.set('li', String(config.lighting.intensity));
@@ -541,10 +554,12 @@
     parts.push('--texture', config.texture);
     parts.push('--background', config.backgroundColor);
     parts.push('--direction', config.direction);
-    parts.push('--stacking', config.stacking);
-    parts.push('--count', String(config.stickCount));
-    parts.push('--helix-angle', String(config.helixAngle));
-    parts.push('--gap', String(config.stickGap));
+     parts.push('--stacking', config.stacking);
+     parts.push('--count', String(config.stickCount));
+     parts.push('--stick-overhang', String(config.stickOverhang));
+     parts.push('--rotation-center-offset-x', String(config.rotationCenterOffsetX));
+     parts.push('--rotation-center-offset-y', String(config.rotationCenterOffsetY));
+     parts.push('--gap', String(config.stickGap));
     parts.push('--thickness', String(config.stickThickness));
     parts.push('--roundness', String(config.stickRoundness));
     parts.push('--bevel', String(config.stickBevel));
@@ -727,51 +742,57 @@
             <option value="bottom-left-to-top-right">Diagonal ↗</option>
           </select>
         </label>
-        <label class="control-row">
-          <span>Stacking</span>
-          <select bind:value={config.stacking}>
-            <option value="perfect">Perfect Stack</option>
-            <option value="helix">Helix</option>
-            <option value="unstacked">Unstacked</option>
-          </select>
-        </label>
+         <label class="control-row">
+           <span>Stacking</span>
+           <select bind:value={config.stacking}>
+             <option value="perfect">Perfect Stack</option>
+             <option value="helix">Helix</option>
+           </select>
+         </label>
       </section>
       
-      <!-- Stick Settings -->
-      <section class="control-section">
-        <h3>Stick Settings</h3>
-        <label class="control-row slider">
-          <span>Count: {config.stickCount}</span>
-          <input type="range" bind:value={config.stickCount} min="3" max="200" />
-        </label>
-        <label class="control-row slider">
-          <span>Gap: {config.stickGap.toFixed(2)}</span>
-          <input type="range" bind:value={config.stickGap} min="0" max="5.0" step="0.01" />
-        </label>
-        <label class="control-row slider">
-          <span>Thickness: {config.stickThickness.toFixed(1)}</span>
-          <input type="range" bind:value={config.stickThickness} min="0.1" max="3.0" step="0.1" />
-        </label>
-        <label class="control-row slider">
-          <span>Roundness: {config.stickRoundness.toFixed(2)}</span>
-          <input type="range" bind:value={config.stickRoundness} min="0" max="1" step="0.01" />
-        </label>
-        <label class="control-row slider">
-          <span>Bevel: {config.stickBevel.toFixed(2)}</span>
-          <input type="range" bind:value={config.stickBevel} min="0" max="1" step="0.01" />
-        </label>
-      </section>
-      
-      <!-- Helix Settings -->
-      {#if config.stacking === 'helix'}
-        <section class="control-section">
-          <h3>Helix Settings</h3>
-          <label class="control-row slider">
-            <span>Angle: {config.helixAngle}°</span>
-            <input type="range" bind:value={config.helixAngle} min="0" max="720" step="5" />
-          </label>
-        </section>
-      {/if}
+       <!-- Stick Settings -->
+       <section class="control-section">
+         <h3>Stick Settings</h3>
+         <label class="control-row slider">
+           <span>Count: {config.stickCount}</span>
+           <input type="range" bind:value={config.stickCount} min="3" max="200" />
+         </label>
+         <label class="control-row slider">
+           <span>Gap: {config.stickGap.toFixed(2)}</span>
+           <input type="range" bind:value={config.stickGap} min="0" max="5.0" step="0.01" />
+         </label>
+         <label class="control-row slider">
+           <span>Thickness: {config.stickThickness.toFixed(1)}</span>
+           <input type="range" bind:value={config.stickThickness} min="0.1" max="3.0" step="0.1" />
+         </label>
+         <label class="control-row slider">
+           <span>Roundness: {config.stickRoundness.toFixed(2)}</span>
+           <input type="range" bind:value={config.stickRoundness} min="0" max="1" step="0.01" />
+         </label>
+         <label class="control-row slider">
+           <span>Bevel: {config.stickBevel.toFixed(2)}</span>
+           <input type="range" bind:value={config.stickBevel} min="0" max="1" step="0.01" />
+         </label>
+         
+         <!-- Helix Settings (when helix mode is selected) -->
+         {#if config.stacking === 'helix'}
+           <div style="border-top: 1px solid #333; margin-top: 0.75rem; padding-top: 0.75rem;">
+             <label class="control-row slider">
+               <span>Overhang: {config.stickOverhang.toFixed(0)}°</span>
+               <input type="range" bind:value={config.stickOverhang} min="0" max="180" step="1" />
+             </label>
+             <label class="control-row slider">
+               <span>Rotation Center X: {config.rotationCenterOffsetX.toFixed(0)}%</span>
+               <input type="range" bind:value={config.rotationCenterOffsetX} min="-100" max="100" step="5" />
+             </label>
+             <label class="control-row slider">
+               <span>Rotation Center Y: {config.rotationCenterOffsetY.toFixed(0)}%</span>
+               <input type="range" bind:value={config.rotationCenterOffsetY} min="-100" max="100" step="5" />
+             </label>
+           </div>
+         {/if}
+       </section>
       
       <!-- Camera View -->
       <section class="control-section">
