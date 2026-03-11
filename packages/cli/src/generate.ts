@@ -278,9 +278,9 @@ function generateHTML(config: WallpaperConfig): string {
       const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
       geometry.center();
       
-      return geometry;
-    }
-    
+       return geometry;
+     }
+     
      function degToRad(deg) {
        return (deg * Math.PI) / 180;
      }
@@ -335,8 +335,8 @@ function generateHTML(config: WallpaperConfig): string {
         default:
           return 0;
       }
-    }
-    
+     }
+     
      const {
        width,
        height,
@@ -419,11 +419,11 @@ function generateHTML(config: WallpaperConfig): string {
         stickBevel
       );
       
-      const mesh = new THREE.Mesh(geometry, material);
-      
+       const mesh = new THREE.Mesh(geometry, material);
+       
        const offset = getStackingOffset(stacking, i, stickCount, stickDimensions, stickOverhang, rotationCenterOffsetX, rotationCenterOffsetY, stickGap);
-      
-      mesh.position.set(offset.x, offset.y, offset.z);
+       
+       mesh.position.set(offset.x, offset.y, offset.z);
       mesh.rotation.z = directionRotation + offset.rotationZ;
       
       group.add(mesh);
