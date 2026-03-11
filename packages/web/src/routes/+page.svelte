@@ -17,10 +17,6 @@
   // Reactive state using Svelte 5 runes
   let config = $state<WallpaperConfig>({ ...DEFAULT_CONFIG });
   
-  // Local config extensions (not in core type)
-  let stickGap = $state(0.05);
-  let stickThickness = $state(1.0);
-  let helixAngle = $state(45);
   let canvasContainer: HTMLDivElement;
   let renderer: THREE.WebGLRenderer | null = null;
   let scene: THREE.Scene | null = null;
@@ -30,36 +26,59 @@
   let exportFormat = $state<'png' | 'jpg' | 'webp' | 'svg'>('png');
   let isExporting = $state(false);
   
-  // Camera rotation for live preview (spherical coordinates)
-  let cameraDistance = $state(20);
-  let cameraAzimuth = $state(45);
-  let cameraElevation = $state(30);
+  // URL sync + CLI preview
+  let urlSyncEnabled = $state(false);
+  let cliCommand = $state('');
   
   // Derived values
   let aspectRatio = $derived(config.width / config.height);
   
-  function createRoundedBox(width: number, height: number, depth: number, radius: number): THREE.BufferGeometry {
+  function createRoundedBox(
+    width: number,
+    height: number,
+    depth: number,
+    roundness: number,
+    bevel: number
+  ): THREE.BufferGeometry {
+    const safeRoundness = Math.max(0, Math.min(1, roundness));
+    const safeBevel = Math.max(0, Math.min(1, bevel));
+
+    const maxRadius = Math.min(width, height) / 2;
+    const radius = maxRadius * safeRoundness;
+
     const shape = new THREE.Shape();
     const x = -width / 2;
     const y = -height / 2;
+
+    if (radius <= 0) {
+      shape.moveTo(x, y);
+      shape.lineTo(x + width, y);
+      shape.lineTo(x + width, y + height);
+      shape.lineTo(x, y + height);
+      shape.closePath();
+    } else {
+      shape.moveTo(x + radius, y);
+      shape.lineTo(x + width - radius, y);
+      shape.quadraticCurveTo(x + width, y, x + width, y + radius);
+      shape.lineTo(x + width, y + height - radius);
+      shape.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+      shape.lineTo(x + radius, y + height);
+      shape.quadraticCurveTo(x, y + height, x, y + height - radius);
+      shape.lineTo(x, y + radius);
+      shape.quadraticCurveTo(x, y, x + radius, y);
+    }
     
-    shape.moveTo(x + radius, y);
-    shape.lineTo(x + width - radius, y);
-    shape.quadraticCurveTo(x + width, y, x + width, y + radius);
-    shape.lineTo(x + width, y + height - radius);
-    shape.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-    shape.lineTo(x + radius, y + height);
-    shape.quadraticCurveTo(x, y + height, x, y + height - radius);
-    shape.lineTo(x, y + radius);
-    shape.quadraticCurveTo(x, y, x + radius, y);
-    
+    const maxBevel = Math.min(width, height) * 0.15;
+    const bevelSize = maxBevel * safeBevel;
+    const bevelThickness = maxBevel * safeBevel;
+
     const extrudeSettings: THREE.ExtrudeGeometryOptions = {
       depth: depth,
-      bevelEnabled: true,
+      bevelEnabled: safeBevel > 0,
       bevelSegments: 4,
       steps: 1,
-      bevelSize: radius * 0.3,
-      bevelThickness: radius * 0.3,
+      bevelSize,
+      bevelThickness,
       curveSegments: 12
     };
     
@@ -132,23 +151,20 @@
       return {
         width: baseSize * aspect * 0.15,
         height: baseSize * 0.8,
-        depth: baseSize * aspect * 0.02 * thicknessScale,
-        radius: baseSize * aspect * 0.01
+        depth: baseSize * aspect * 0.02 * thicknessScale
       };
     } else if (isDiagonal) {
       const size = baseSize * 0.7;
       return {
         width: size * 0.12,
         height: size,
-        depth: baseSize * aspect * 0.02 * thicknessScale,
-        radius: baseSize * aspect * 0.01
+        depth: baseSize * aspect * 0.02 * thicknessScale
       };
     } else {
       return {
         width: baseSize * aspect * 0.8,
         height: baseSize * 0.15,
-        depth: baseSize * 0.02 * thicknessScale,
-        radius: baseSize * 0.01
+        depth: baseSize * 0.02 * thicknessScale
       };
     }
   }
@@ -157,7 +173,7 @@
     stacking: string,
     index: number,
     totalSticks: number,
-    stickDimensions: { width: number; height: number; depth: number; radius: number },
+    stickDimensions: { width: number; height: number; depth: number },
     helixAngle: number,
     stickGap: number
   ) {
@@ -228,7 +244,13 @@
       direction, 
       stacking, 
       stickCount, 
-      lighting
+      helixAngle,
+      stickGap,
+      stickThickness,
+      stickRoundness,
+      stickBevel,
+      lighting,
+      camera: cameraConfig
     } = config;
     
     scene = new THREE.Scene();
@@ -245,13 +267,16 @@
       1000
     );
     
-    const azimuthRad = (cameraAzimuth * Math.PI) / 180;
-    const elevationRad = (cameraElevation * Math.PI) / 180;
+    const azimuthRad = (cameraConfig.azimuth * Math.PI) / 180;
+    const elevationRad = (cameraConfig.elevation * Math.PI) / 180;
     camera.position.set(
-      cameraDistance * Math.cos(elevationRad) * Math.sin(azimuthRad),
-      cameraDistance * Math.sin(elevationRad),
-      cameraDistance * Math.cos(elevationRad) * Math.cos(azimuthRad)
+      cameraConfig.distance * Math.cos(elevationRad) * Math.sin(azimuthRad),
+      cameraConfig.distance * Math.sin(elevationRad),
+      cameraConfig.distance * Math.cos(elevationRad) * Math.cos(azimuthRad)
     );
+    // Orthographic cameras don't change size with distance; convert distance to zoom.
+    camera.zoom = 17.3 / Math.max(0.1, cameraConfig.distance);
+    camera.updateProjectionMatrix();
     camera.lookAt(0, 0, 0);
     
     if (lighting.enabled) {
@@ -283,12 +308,13 @@
     for (let i = 0; i < stickCount; i++) {
       const color = colors[i % colors.length];
       const material = createMaterial(texture, color);
-      const geometry = createRoundedBox(
-        stickDimensions.width,
-        stickDimensions.height,
-        stickDimensions.depth,
-        stickDimensions.radius
-      );
+    const geometry = createRoundedBox(
+      stickDimensions.width,
+      stickDimensions.height,
+      stickDimensions.depth,
+      stickRoundness,
+      stickBevel
+    );
       
       const mesh = new THREE.Mesh(geometry, material);
       
@@ -390,12 +416,211 @@
     newColors[index] = color;
     config = { ...config, colors: newColors };
   }
+
+  function cloneDefaultConfig(): WallpaperConfig {
+    return {
+      ...DEFAULT_CONFIG,
+      colors: [...DEFAULT_CONFIG.colors],
+      lighting: {
+        ...DEFAULT_CONFIG.lighting,
+        position: { ...DEFAULT_CONFIG.lighting.position }
+      },
+      camera: { ...DEFAULT_CONFIG.camera }
+    };
+  }
+
+  function parseConfigFromUrl(searchParams: URLSearchParams) {
+    const next = cloneDefaultConfig();
+
+    const num = (key: string, fallback: number) => {
+      const raw = searchParams.get(key);
+      if (raw === null) return fallback;
+      const n = Number(raw);
+      return Number.isFinite(n) ? n : fallback;
+    };
+
+    const str = (key: string, fallback: string) => {
+      const raw = searchParams.get(key);
+      return raw === null ? fallback : raw;
+    };
+
+    const bool = (key: string, fallback: boolean) => {
+      const raw = searchParams.get(key);
+      if (raw === null) return fallback;
+      return raw === '1' || raw === 'true' || raw === 'yes';
+    };
+
+    next.width = num('w', next.width);
+    next.height = num('h', next.height);
+
+    const colorsRaw = searchParams.get('colors');
+    if (colorsRaw) {
+      const parsed = colorsRaw
+        .split(',')
+        .map((c) => c.trim())
+        .filter(Boolean);
+      if (parsed.length > 0) next.colors = parsed;
+    }
+
+    next.texture = str('tex', next.texture) as any;
+    next.backgroundColor = str('bg', next.backgroundColor);
+    next.direction = str('dir', next.direction) as any;
+    next.stacking = str('stack', next.stacking) as any;
+
+    next.stickCount = Math.round(num('count', next.stickCount));
+    next.helixAngle = num('helix', next.helixAngle);
+    next.stickGap = num('gap', next.stickGap);
+    next.stickThickness = num('thick', next.stickThickness);
+    next.stickRoundness = num('round', next.stickRoundness);
+    next.stickBevel = num('bevel', next.stickBevel);
+
+    next.lighting.enabled = bool('light', next.lighting.enabled);
+    next.lighting.intensity = num('li', next.lighting.intensity);
+    next.lighting.position.x = num('lx', next.lighting.position.x);
+    next.lighting.position.y = num('ly', next.lighting.position.y);
+    next.lighting.position.z = num('lz', next.lighting.position.z);
+    next.lighting.ambientIntensity = num('amb', next.lighting.ambientIntensity);
+
+    next.camera.distance = num('cd', next.camera.distance);
+    next.camera.azimuth = num('ca', next.camera.azimuth);
+    next.camera.elevation = num('ce', next.camera.elevation);
+
+    const fmt = searchParams.get('fmt');
+    if (fmt === 'png' || fmt === 'jpg' || fmt === 'webp' || fmt === 'svg') {
+      exportFormat = fmt;
+    }
+
+    config = next;
+  }
+
+  function buildUrlSearchParams(): URLSearchParams {
+    const p = new URLSearchParams();
+
+    p.set('w', String(config.width));
+    p.set('h', String(config.height));
+    p.set('colors', config.colors.join(','));
+    p.set('tex', config.texture);
+    p.set('bg', config.backgroundColor);
+    p.set('dir', config.direction);
+    p.set('stack', config.stacking);
+    p.set('count', String(config.stickCount));
+    p.set('helix', String(config.helixAngle));
+    p.set('gap', String(config.stickGap));
+    p.set('thick', String(config.stickThickness));
+    p.set('round', String(config.stickRoundness));
+    p.set('bevel', String(config.stickBevel));
+
+    p.set('light', config.lighting.enabled ? '1' : '0');
+    p.set('li', String(config.lighting.intensity));
+    p.set('lx', String(config.lighting.position.x));
+    p.set('ly', String(config.lighting.position.y));
+    p.set('lz', String(config.lighting.position.z));
+    p.set('amb', String(config.lighting.ambientIntensity));
+
+    p.set('cd', String(config.camera.distance));
+    p.set('ca', String(config.camera.azimuth));
+    p.set('ce', String(config.camera.elevation));
+
+    p.set('fmt', exportFormat);
+
+    return p;
+  }
+
+  function quoteCliArg(value: string): string {
+    // Keep it simple and shell-friendly.
+    if (/^[A-Za-z0-9_\-.,#/:]+$/.test(value)) return value;
+    return JSON.stringify(value);
+  }
+
+  function buildCliCommandString(): string {
+    const parts: string[] = [];
+    parts.push('pnpm', 'cli', 'generate');
+    parts.push('--width', String(config.width));
+    parts.push('--height', String(config.height));
+    parts.push('--colors', quoteCliArg(config.colors.join(',')));
+    parts.push('--texture', config.texture);
+    parts.push('--background', config.backgroundColor);
+    parts.push('--direction', config.direction);
+    parts.push('--stacking', config.stacking);
+    parts.push('--count', String(config.stickCount));
+    parts.push('--helix-angle', String(config.helixAngle));
+    parts.push('--gap', String(config.stickGap));
+    parts.push('--thickness', String(config.stickThickness));
+    parts.push('--roundness', String(config.stickRoundness));
+    parts.push('--bevel', String(config.stickBevel));
+    parts.push('--camera-distance', String(config.camera.distance));
+    parts.push('--camera-azimuth', String(config.camera.azimuth));
+    parts.push('--camera-elevation', String(config.camera.elevation));
+
+    if (!config.lighting.enabled) {
+      parts.push('--no-lighting');
+    } else {
+      parts.push('--light-intensity', String(config.lighting.intensity));
+      parts.push('--light-x', String(config.lighting.position.x));
+      parts.push('--light-y', String(config.lighting.position.y));
+      parts.push('--light-z', String(config.lighting.position.z));
+      parts.push('--ambient', String(config.lighting.ambientIntensity));
+    }
+
+    parts.push('--format', exportFormat);
+    return parts.join(' ');
+  }
+
+  async function copyCliCommand() {
+    try {
+      await navigator.clipboard.writeText(cliCommand);
+    } catch {
+      // Older browsers / insecure contexts.
+      const ta = document.createElement('textarea');
+      ta.value = cliCommand;
+      ta.style.position = 'fixed';
+      ta.style.top = '0';
+      ta.style.left = '0';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+  }
+
+  $effect(() => {
+    cliCommand = buildCliCommandString();
+  });
+
+  $effect(() => {
+    if (!urlSyncEnabled) return;
+    if (typeof window === 'undefined') return;
+
+    const params = buildUrlSearchParams();
+    const url = new URL(window.location.href);
+    const next = params.toString();
+    if (url.searchParams.toString() === next) return;
+
+    // Debounce URL updates to avoid spamming history.
+    const handle = window.setTimeout(() => {
+      const u = new URL(window.location.href);
+      u.search = next;
+      history.replaceState({}, '', u);
+    }, 120);
+
+    return () => {
+      window.clearTimeout(handle);
+    };
+  });
   
   $effect(() => {
     renderScene();
   });
   
   onMount(() => {
+    try {
+      parseConfigFromUrl(new URLSearchParams(window.location.search));
+    } catch {
+      // Ignore malformed URLs and keep defaults.
+    }
+
+    urlSyncEnabled = true;
     renderScene();
     
     const resizeObserver = new ResizeObserver(() => {
@@ -520,12 +745,20 @@
           <input type="range" bind:value={config.stickCount} min="3" max="200" />
         </label>
         <label class="control-row slider">
-          <span>Gap: {stickGap.toFixed(2)}</span>
-          <input type="range" bind:value={stickGap} min="0" max="5.0" step="0.01" />
+          <span>Gap: {config.stickGap.toFixed(2)}</span>
+          <input type="range" bind:value={config.stickGap} min="0" max="5.0" step="0.01" />
         </label>
         <label class="control-row slider">
-          <span>Thickness: {stickThickness.toFixed(1)}</span>
-          <input type="range" bind:value={stickThickness} min="0.1" max="3.0" step="0.1" />
+          <span>Thickness: {config.stickThickness.toFixed(1)}</span>
+          <input type="range" bind:value={config.stickThickness} min="0.1" max="3.0" step="0.1" />
+        </label>
+        <label class="control-row slider">
+          <span>Roundness: {config.stickRoundness.toFixed(2)}</span>
+          <input type="range" bind:value={config.stickRoundness} min="0" max="1" step="0.01" />
+        </label>
+        <label class="control-row slider">
+          <span>Bevel: {config.stickBevel.toFixed(2)}</span>
+          <input type="range" bind:value={config.stickBevel} min="0" max="1" step="0.01" />
         </label>
       </section>
       
@@ -534,8 +767,8 @@
         <section class="control-section">
           <h3>Helix Settings</h3>
           <label class="control-row slider">
-            <span>Angle: {helixAngle}°</span>
-            <input type="range" bind:value={helixAngle} min="0" max="720" step="5" />
+            <span>Angle: {config.helixAngle}°</span>
+            <input type="range" bind:value={config.helixAngle} min="0" max="720" step="5" />
           </label>
         </section>
       {/if}
@@ -544,16 +777,16 @@
       <section class="control-section">
         <h3>Camera View</h3>
         <label class="control-row slider">
-          <span>Azimuth: {cameraAzimuth}°</span>
-          <input type="range" bind:value={cameraAzimuth} min="0" max="360" step="5" />
+          <span>Azimuth: {config.camera.azimuth}°</span>
+          <input type="range" bind:value={config.camera.azimuth} min="0" max="360" step="5" />
         </label>
         <label class="control-row slider">
-          <span>Elevation: {cameraElevation}°</span>
-          <input type="range" bind:value={cameraElevation} min="-80" max="80" step="5" />
+          <span>Elevation: {config.camera.elevation}°</span>
+          <input type="range" bind:value={config.camera.elevation} min="-80" max="80" step="5" />
         </label>
         <label class="control-row slider">
-          <span>Distance: {cameraDistance}</span>
-          <input type="range" bind:value={cameraDistance} min="5" max="50" step="1" />
+          <span>Distance: {config.camera.distance.toFixed(1)}</span>
+          <input type="range" bind:value={config.camera.distance} min="5" max="50" step="0.1" />
         </label>
       </section>
       
@@ -586,6 +819,14 @@
             <input type="range" bind:value={config.lighting.ambientIntensity} min="0" max="1" step="0.1" />
           </label>
         {/if}
+      </section>
+
+      <section class="control-section">
+        <h3>CLI</h3>
+        <div class="cli-controls">
+          <textarea class="cli-text" readonly rows="4">{cliCommand}</textarea>
+          <button class="cli-copy" on:click={copyCliCommand}>Copy</button>
+        </div>
       </section>
     </div>
   </aside>
@@ -714,6 +955,42 @@
   .export-controls button:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+
+  .cli-controls {
+    display: flex;
+    gap: 0.5rem;
+    align-items: stretch;
+  }
+
+  .cli-text {
+    flex: 1;
+    padding: 0.5rem;
+    border-radius: 6px;
+    border: 1px solid #333;
+    background: #0f0f14;
+    color: #d7d7e3;
+    font-size: 0.75rem;
+    line-height: 1.25;
+    resize: vertical;
+    min-height: 4.5rem;
+  }
+
+  .cli-copy {
+    padding: 0.5rem 0.75rem;
+    border-radius: 6px;
+    border: 1px solid #333;
+    background: #252530;
+    color: #fff;
+    font-weight: 600;
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: background 0.2s;
+    white-space: nowrap;
+  }
+
+  .cli-copy:hover {
+    background: #333;
   }
   
   .preset-buttons {
