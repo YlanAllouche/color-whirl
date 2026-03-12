@@ -39,6 +39,8 @@
     rotationCenterOffsetX: boolean;
     rotationCenterOffsetY: boolean;
     stickGap: boolean;
+    stickSize: boolean;
+    stickRatio: boolean;
     stickThickness: boolean;
     stickRoundness: boolean;
     stickBevel: boolean;
@@ -65,6 +67,8 @@
     rotationCenterOffsetX: false,
     rotationCenterOffsetY: false,
     stickGap: false,
+    stickSize: false,
+    stickRatio: false,
     stickThickness: false,
     stickRoundness: false,
     stickBevel: false,
@@ -187,19 +191,36 @@
     }
   }
   
+   function clamp(n: number, min: number, max: number): number {
+     return Math.max(min, Math.min(max, n));
+   }
+
    function getStickDimensions(
-     canvasWidth: number, 
+     canvasWidth: number,
      canvasHeight: number,
-     stickThickness: number
+     stickThickness: number,
+     stickSize: number,
+     stickRatio: number
    ) {
      const aspect = canvasWidth / canvasHeight;
      const baseSize = 8;
-     
-     // Default to vertical orientation (top-bottom)
+
+     const rawSize = Number(stickSize);
+     const rawRatio = Number(stickRatio);
+     const safeSize = clamp(Number.isFinite(rawSize) ? rawSize : 1.0, 0.01, 100);
+     const safeRatio = clamp(Number.isFinite(rawRatio) ? rawRatio : 3.0, 0.05, 100);
+
+     const baseWidth = baseSize * aspect * 0.15 * safeSize;
+     const baseHeight = baseSize * 0.8 * safeSize;
+     const area = baseWidth * baseHeight;
+
+     const width = Math.sqrt(area / safeRatio);
+     const height = Math.sqrt(area * safeRatio);
+
      return {
-       width: baseSize * aspect * 0.15,
-       height: baseSize * 0.8,
-       depth: baseSize * aspect * 0.02 * stickThickness
+       width,
+       height,
+       depth: baseSize * aspect * 0.02 * stickThickness * safeSize
      };
    }
   
@@ -246,23 +267,25 @@
       canvasContainer.innerHTML = '';
     }
     
-      const { 
-        width, 
-        height, 
-        colors, 
-        texture, 
-        backgroundColor, 
-        stickCount, 
-        stickOverhang,
-        rotationCenterOffsetX,
-        rotationCenterOffsetY,
-        stickGap,
-        stickThickness,
-        stickRoundness,
-        stickBevel,
-        lighting,
-        camera: cameraConfig
-      } = config;
+       const { 
+         width, 
+         height, 
+         colors, 
+         texture, 
+         backgroundColor, 
+         stickCount, 
+         stickOverhang,
+         rotationCenterOffsetX,
+         rotationCenterOffsetY,
+         stickGap,
+         stickSize,
+         stickRatio,
+         stickThickness,
+         stickRoundness,
+         stickBevel,
+         lighting,
+         camera: cameraConfig
+       } = config;
     
     scene = new THREE.Scene();
     scene.background = new THREE.Color(backgroundColor);
@@ -311,7 +334,7 @@
       scene.add(ambientLight);
     }
     
-     const stickDimensions = getStickDimensions(width, height, stickThickness);
+     const stickDimensions = getStickDimensions(width, height, stickThickness, stickSize, stickRatio);
      
      const group = new THREE.Group();
      
@@ -461,6 +484,8 @@
     if (locks.rotationCenterOffsetX) merged.rotationCenterOffsetX = current.rotationCenterOffsetX;
     if (locks.rotationCenterOffsetY) merged.rotationCenterOffsetY = current.rotationCenterOffsetY;
     if (locks.stickGap) merged.stickGap = current.stickGap;
+    if (locks.stickSize) merged.stickSize = current.stickSize;
+    if (locks.stickRatio) merged.stickRatio = current.stickRatio;
     if (locks.stickThickness) merged.stickThickness = current.stickThickness;
     if (locks.stickRoundness) merged.stickRoundness = current.stickRoundness;
     if (locks.stickBevel) merged.stickBevel = current.stickBevel;
@@ -525,6 +550,8 @@
      next.rotationCenterOffsetX = num('rotx', next.rotationCenterOffsetX);
      next.rotationCenterOffsetY = num('roty', next.rotationCenterOffsetY);
      next.stickGap = num('gap', next.stickGap);
+     next.stickSize = num('size', next.stickSize);
+     next.stickRatio = num('ratio', next.stickRatio);
      next.stickThickness = num('thick', next.stickThickness);
      next.stickRoundness = num('round', next.stickRoundness);
      next.stickBevel = num('bevel', next.stickBevel);
@@ -560,10 +587,12 @@
      p.set('overhang', String(config.stickOverhang));
      p.set('rotx', String(config.rotationCenterOffsetX));
      p.set('roty', String(config.rotationCenterOffsetY));
-     p.set('gap', String(config.stickGap));
-     p.set('thick', String(config.stickThickness));
-     p.set('round', String(config.stickRoundness));
-     p.set('bevel', String(config.stickBevel));
+      p.set('gap', String(config.stickGap));
+      p.set('size', String(config.stickSize));
+      p.set('ratio', String(config.stickRatio));
+      p.set('thick', String(config.stickThickness));
+      p.set('round', String(config.stickRoundness));
+      p.set('bevel', String(config.stickBevel));
 
     p.set('light', config.lighting.enabled ? '1' : '0');
     p.set('li', String(config.lighting.intensity));
@@ -599,10 +628,12 @@
      parts.push('--stick-overhang', String(config.stickOverhang));
      parts.push('--rotation-center-offset-x', String(config.rotationCenterOffsetX));
      parts.push('--rotation-center-offset-y', String(config.rotationCenterOffsetY));
-     parts.push('--gap', String(config.stickGap));
-    parts.push('--thickness', String(config.stickThickness));
-    parts.push('--roundness', String(config.stickRoundness));
-    parts.push('--bevel', String(config.stickBevel));
+      parts.push('--gap', String(config.stickGap));
+      parts.push('--size', String(config.stickSize));
+      parts.push('--ratio', String(config.stickRatio));
+     parts.push('--thickness', String(config.stickThickness));
+     parts.push('--roundness', String(config.stickRoundness));
+     parts.push('--bevel', String(config.stickBevel));
     parts.push('--camera-distance', String(config.camera.distance));
     parts.push('--camera-azimuth', String(config.camera.azimuth));
     parts.push('--camera-elevation', String(config.camera.elevation));
@@ -801,14 +832,22 @@
            <button type="button" class="setting-title" class:locked={locks.stickCount} onclick={() => toggleLock('stickCount')} title="Click to lock/unlock for randomize">Count: {config.stickCount}</button>
             <input type="range" bind:value={config.stickCount} min="1" max="200" />
           </label>
-          <label class="control-row slider">
-           <button type="button" class="setting-title" class:locked={locks.stickGap} onclick={() => toggleLock('stickGap')} title="Click to lock/unlock for randomize">Gap: {config.stickGap.toFixed(2)}</button>
-            <input type="range" bind:value={config.stickGap} min="0" max="5.0" step="0.01" />
-          </label>
-          <label class="control-row slider">
-           <button type="button" class="setting-title" class:locked={locks.stickThickness} onclick={() => toggleLock('stickThickness')} title="Click to lock/unlock for randomize">Thickness: {config.stickThickness.toFixed(1)}</button>
-            <input type="range" bind:value={config.stickThickness} min="0.1" max="3.0" step="0.1" />
-          </label>
+           <label class="control-row slider">
+            <button type="button" class="setting-title" class:locked={locks.stickGap} onclick={() => toggleLock('stickGap')} title="Click to lock/unlock for randomize">Gap: {config.stickGap.toFixed(2)}</button>
+             <input type="range" bind:value={config.stickGap} min="0" max="5.0" step="0.01" />
+           </label>
+           <label class="control-row slider">
+            <button type="button" class="setting-title" class:locked={locks.stickSize} onclick={() => toggleLock('stickSize')} title="Click to lock/unlock for randomize">Size: {config.stickSize.toFixed(2)}</button>
+             <input type="range" bind:value={config.stickSize} min="0.25" max="2.5" step="0.01" />
+           </label>
+           <label class="control-row slider">
+            <button type="button" class="setting-title" class:locked={locks.stickRatio} onclick={() => toggleLock('stickRatio')} title="Click to lock/unlock for randomize">Ratio: {config.stickRatio.toFixed(2)}</button>
+             <input type="range" bind:value={config.stickRatio} min="0.5" max="12" step="0.05" />
+           </label>
+           <label class="control-row slider">
+            <button type="button" class="setting-title" class:locked={locks.stickThickness} onclick={() => toggleLock('stickThickness')} title="Click to lock/unlock for randomize">Thickness: {config.stickThickness.toFixed(1)}</button>
+             <input type="range" bind:value={config.stickThickness} min="0.1" max="3.0" step="0.1" />
+           </label>
           <label class="control-row slider">
            <button type="button" class="setting-title" class:locked={locks.stickRoundness} onclick={() => toggleLock('stickRoundness')} title="Click to lock/unlock for randomize">Roundness: {config.stickRoundness.toFixed(2)}</button>
             <input type="range" bind:value={config.stickRoundness} min="0" max="1" step="0.01" />
