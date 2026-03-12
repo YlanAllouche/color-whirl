@@ -4,9 +4,7 @@
   import { 
     DEFAULT_CONFIG, 
     type WallpaperConfig,
-    COLOR_PALETTES,
     RESOLUTION_PRESETS,
-    generateRandomConfig,
     generateRandomConfigNoPresets,
     exportToPNG,
     exportToJPG,
@@ -36,8 +34,6 @@
     colors: boolean;
     backgroundColor: boolean;
     texture: boolean;
-    direction: boolean;
-    stacking: boolean;
     stickCount: boolean;
     stickOverhang: boolean;
     rotationCenterOffsetX: boolean;
@@ -64,8 +60,6 @@
     colors: false,
     backgroundColor: false,
     texture: false,
-    direction: false,
-    stacking: false,
     stickCount: false,
     stickOverhang: false,
     rotationCenterOffsetX: false,
@@ -193,107 +187,58 @@
     }
   }
   
-  function getStickDimensions(
-    direction: string, 
-    canvasWidth: number, 
-    canvasHeight: number,
-    stickThickness: number
-  ) {
-    const isVertical = direction === 'top-bottom';
-    const isDiagonal = direction === 'top-right-to-bottom-left' || direction === 'bottom-left-to-top-right';
-    const aspect = canvasWidth / canvasHeight;
-    
-    const baseSize = 8;
-    const thicknessScale = stickThickness;
-    
-    if (isVertical) {
-      return {
-        width: baseSize * aspect * 0.15,
-        height: baseSize * 0.8,
-        depth: baseSize * aspect * 0.02 * thicknessScale
-      };
-    } else if (isDiagonal) {
-      const size = baseSize * 0.7;
-      return {
-        width: size * 0.12,
-        height: size,
-        depth: baseSize * aspect * 0.02 * thicknessScale
-      };
-    } else {
-      return {
-        width: baseSize * aspect * 0.8,
-        height: baseSize * 0.15,
-        depth: baseSize * 0.02 * thicknessScale
-      };
-    }
-  }
+   function getStickDimensions(
+     canvasWidth: number, 
+     canvasHeight: number,
+     stickThickness: number
+   ) {
+     const aspect = canvasWidth / canvasHeight;
+     const baseSize = 8;
+     
+     // Default to vertical orientation (top-bottom)
+     return {
+       width: baseSize * aspect * 0.15,
+       height: baseSize * 0.8,
+       depth: baseSize * aspect * 0.02 * stickThickness
+     };
+   }
   
   function degToRad(deg: number): number {
     return (deg * Math.PI) / 180;
   }
 
-  function getStackingOffset(
-    stacking: string,
-    index: number,
-    totalSticks: number,
-    stickDimensions: { width: number; height: number; depth: number },
-    stickOverhang: number,
-    rotationCenterOffsetX: number,
-    rotationCenterOffsetY: number,
-    stickGap: number
-  ) {
-    switch (stacking) {
-      case 'perfect':
-        return {
-          x: 0,
-          y: 0,
-          z: index * (stickDimensions.depth + stickGap),
-          rotationZ: 0
-        };
-      
-      case 'helix':
-        const rotationAngle = index * degToRad(stickOverhang);
-        
-        const offsetXPercent = rotationCenterOffsetX / 100;
-        const offsetYPercent = rotationCenterOffsetY / 100;
-        
-        const pivotX = offsetXPercent * (stickDimensions.width / 2);
-        const pivotY = offsetYPercent * (stickDimensions.height / 2);
-        
-        const cos = Math.cos(rotationAngle);
-        const sin = Math.sin(rotationAngle);
-        
-        const offsetX = pivotX * (1 - cos) + pivotY * sin;
-        const offsetY = pivotY * (1 - cos) - pivotX * sin;
-        
-        return {
-          x: offsetX,
-          y: offsetY,
-          z: index * (stickDimensions.depth + stickGap),
-          rotationZ: rotationAngle
-        };
-      
-      default:
-        return { x: 0, y: 0, z: index * stickDimensions.depth, rotationZ: 0 };
-    }
-  }
+   function getStackingOffset(
+     index: number,
+     stickDimensions: { width: number; height: number; depth: number },
+     stickOverhang: number,
+     rotationCenterOffsetX: number,
+     rotationCenterOffsetY: number,
+     stickGap: number
+   ) {
+     // Helix with configurable overhang angle and rotation center offset
+     const rotationAngle = index * degToRad(stickOverhang);
+     
+     const offsetXPercent = rotationCenterOffsetX / 100;
+     const offsetYPercent = rotationCenterOffsetY / 100;
+     
+     const pivotX = offsetXPercent * (stickDimensions.width / 2);
+     const pivotY = offsetYPercent * (stickDimensions.height / 2);
+     
+     const cos = Math.cos(rotationAngle);
+     const sin = Math.sin(rotationAngle);
+     
+     const offsetX = pivotX * (1 - cos) + pivotY * sin;
+     const offsetY = pivotY * (1 - cos) - pivotX * sin;
+     
+     return {
+       x: offsetX,
+       y: offsetY,
+       z: index * (stickDimensions.depth + stickGap),
+       rotationZ: rotationAngle
+     };
+   }
   
-  function getDirectionRotation(direction: string): number {
-    switch (direction) {
-      case 'top-bottom':
-        return 0;
-      case 'left-right':
-        return Math.PI / 2;
-      case 'top-right-to-bottom-left':
-        return Math.PI / 4;
-      case 'bottom-left-to-top-right':
-        return -Math.PI / 4;
-      default:
-        return 0;
-    }
-  }
-  
-  function renderScene() {
+   function renderScene() {
     if (!canvasContainer) return;
     
     if (renderer) {
@@ -301,25 +246,23 @@
       canvasContainer.innerHTML = '';
     }
     
-     const { 
-       width, 
-       height, 
-       colors, 
-       texture, 
-       backgroundColor, 
-       direction, 
-       stacking, 
-       stickCount, 
-       stickOverhang,
-       rotationCenterOffsetX,
-       rotationCenterOffsetY,
-       stickGap,
-       stickThickness,
-       stickRoundness,
-       stickBevel,
-       lighting,
-       camera: cameraConfig
-     } = config;
+      const { 
+        width, 
+        height, 
+        colors, 
+        texture, 
+        backgroundColor, 
+        stickCount, 
+        stickOverhang,
+        rotationCenterOffsetX,
+        rotationCenterOffsetY,
+        stickGap,
+        stickThickness,
+        stickRoundness,
+        stickBevel,
+        lighting,
+        camera: cameraConfig
+      } = config;
     
     scene = new THREE.Scene();
     scene.background = new THREE.Color(backgroundColor);
@@ -368,28 +311,27 @@
       scene.add(ambientLight);
     }
     
-    const stickDimensions = getStickDimensions(direction, width, height, stickThickness);
-    const directionRotation = getDirectionRotation(direction);
-    
-    const group = new THREE.Group();
-    
-    for (let i = 0; i < stickCount; i++) {
-      const color = colors[i % colors.length];
-      const material = createMaterial(texture, color);
-    const geometry = createRoundedBox(
-      stickDimensions.width,
-      stickDimensions.height,
-      stickDimensions.depth,
-      stickRoundness,
-      stickBevel
-    );
-      
-      const mesh = new THREE.Mesh(geometry, material);
-      
-       const offset = getStackingOffset(stacking, i, stickCount, stickDimensions, stickOverhang, rotationCenterOffsetX, rotationCenterOffsetY, stickGap);
-      
-      mesh.position.set(offset.x, offset.y, offset.z);
-      mesh.rotation.z = directionRotation + offset.rotationZ;
+     const stickDimensions = getStickDimensions(width, height, stickThickness);
+     
+     const group = new THREE.Group();
+     
+     for (let i = 0; i < stickCount; i++) {
+       const color = colors[i % colors.length];
+       const material = createMaterial(texture, color);
+     const geometry = createRoundedBox(
+       stickDimensions.width,
+       stickDimensions.height,
+       stickDimensions.depth,
+       stickRoundness,
+       stickBevel
+     );
+       
+       const mesh = new THREE.Mesh(geometry, material);
+       
+       const offset = getStackingOffset(i, stickDimensions, stickOverhang, rotationCenterOffsetX, rotationCenterOffsetY, stickGap);
+       
+       mesh.position.set(offset.x, offset.y, offset.z);
+       mesh.rotation.z = offset.rotationZ;
       
       group.add(mesh);
     }
@@ -464,11 +406,6 @@
     config = { ...config, width, height };
   }
   
-  function applyColorPalette(palette: keyof typeof COLOR_PALETTES) {
-    const selected = COLOR_PALETTES[palette] as any;
-    config = { ...config, colors: [...selected.colors], backgroundColor: selected.backgroundColor };
-  }
-  
   function addColor() {
     config = { ...config, colors: [...config.colors, '#ffffff'] };
   }
@@ -514,12 +451,10 @@
     merged.width = current.width;
     merged.height = current.height;
 
-    if (locks.colors) merged.colors = [...current.colors];
-    if (locks.backgroundColor) merged.backgroundColor = current.backgroundColor;
+     if (locks.colors) merged.colors = [...current.colors];
+     if (locks.backgroundColor) merged.backgroundColor = current.backgroundColor;
 
-    if (locks.texture) merged.texture = current.texture;
-    if (locks.direction) merged.direction = current.direction;
-    if (locks.stacking) merged.stacking = current.stacking;
+     if (locks.texture) merged.texture = current.texture;
 
     if (locks.stickCount) merged.stickCount = current.stickCount;
     if (locks.stickOverhang) merged.stickOverhang = current.stickOverhang;
@@ -542,11 +477,6 @@
     if (locks.lightingAmbient) merged.lighting.ambientIntensity = current.lighting.ambientIntensity;
 
     return merged;
-  }
-
-  function generateRandomPresetColors() {
-    // Randomize all parameters, but pick colors from a predefined preset.
-    config = mergeWithLocks(generateRandomConfig());
   }
 
   function generateRandomGeneratedColors() {
@@ -587,10 +517,8 @@
       if (parsed.length > 0) next.colors = parsed;
     }
 
-    next.texture = str('tex', next.texture) as any;
-    next.backgroundColor = str('bg', next.backgroundColor);
-    next.direction = str('dir', next.direction) as any;
-    next.stacking = str('stack', next.stacking) as any;
+     next.texture = str('tex', next.texture) as any;
+     next.backgroundColor = str('bg', next.backgroundColor);
 
      next.stickCount = Math.round(num('count', next.stickCount));
      next.stickOverhang = num('overhang', next.stickOverhang);
@@ -625,12 +553,10 @@
 
      p.set('w', String(config.width));
      p.set('h', String(config.height));
-     p.set('colors', config.colors.join(','));
-     p.set('tex', config.texture);
-     p.set('bg', config.backgroundColor);
-     p.set('dir', config.direction);
-     p.set('stack', config.stacking);
-     p.set('count', String(config.stickCount));
+      p.set('colors', config.colors.join(','));
+      p.set('tex', config.texture);
+      p.set('bg', config.backgroundColor);
+      p.set('count', String(config.stickCount));
      p.set('overhang', String(config.stickOverhang));
      p.set('rotx', String(config.rotationCenterOffsetX));
      p.set('roty', String(config.rotationCenterOffsetY));
@@ -666,11 +592,9 @@
     parts.push('pnpm', 'cli', 'generate');
     parts.push('--width', String(config.width));
     parts.push('--height', String(config.height));
-    parts.push('--colors', quoteCliArg(config.colors.join(',')));
-    parts.push('--texture', config.texture);
-    parts.push('--background', config.backgroundColor);
-    parts.push('--direction', config.direction);
-     parts.push('--stacking', config.stacking);
+     parts.push('--colors', quoteCliArg(config.colors.join(',')));
+     parts.push('--texture', config.texture);
+     parts.push('--background', config.backgroundColor);
      parts.push('--count', String(config.stickCount));
      parts.push('--stick-overhang', String(config.stickOverhang));
      parts.push('--rotation-center-offset-x', String(config.rotationCenterOffsetX));
@@ -807,11 +731,8 @@
         <section class="control-section">
           <h3>Randomize</h3>
           <div class="randomize-buttons">
-            <button type="button" onclick={generateRandomPresetColors} title="Randomize all settings, colors come from a curated preset">
-              Preset
-            </button>
             <button type="button" onclick={generateRandomGeneratedColors} title="Randomize all settings, generate a new non-preset color theme">
-              Generated
+              Randomize
             </button>
           </div>
         </section>
@@ -845,13 +766,6 @@
             Colors
           </button>
         </h3>
-        <div class="preset-buttons">
-          {#each Object.keys(COLOR_PALETTES) as palette}
-            <button onclick={() => applyColorPalette(palette as keyof typeof COLOR_PALETTES)}>
-              {palette}
-            </button>
-          {/each}
-        </div>
         <div class="colors-list">
           {#each config.colors as color, i}
             <div class="color-item">
@@ -874,27 +788,11 @@
             <option value="metallic">Metallic</option>
           </select>
         </label>
-        <label class="control-row">
-          <button type="button" class="setting-title" class:locked={locks.backgroundColor} onclick={() => toggleLock('backgroundColor')} title="Click to lock/unlock for randomize">Background</button>
-          <input type="color" bind:value={config.backgroundColor} />
-        </label>
-        <label class="control-row">
-          <button type="button" class="setting-title" class:locked={locks.direction} onclick={() => toggleLock('direction')} title="Click to lock/unlock for randomize">Direction</button>
-          <select bind:value={config.direction}>
-            <option value="top-bottom">Top-Bottom</option>
-            <option value="left-right">Left-Right</option>
-            <option value="top-right-to-bottom-left">Diagonal ↘</option>
-            <option value="bottom-left-to-top-right">Diagonal ↗</option>
-          </select>
-        </label>
          <label class="control-row">
-           <button type="button" class="setting-title" class:locked={locks.stacking} onclick={() => toggleLock('stacking')} title="Click to lock/unlock for randomize">Stacking</button>
-           <select bind:value={config.stacking}>
-             <option value="perfect">Perfect Stack</option>
-             <option value="helix">Helix</option>
-           </select>
+           <button type="button" class="setting-title" class:locked={locks.backgroundColor} onclick={() => toggleLock('backgroundColor')} title="Click to lock/unlock for randomize">Background</button>
+           <input type="color" bind:value={config.backgroundColor} />
          </label>
-      </section>
+       </section>
       
        <!-- Stick Settings -->
         <section class="control-section">
@@ -918,25 +816,23 @@
           <label class="control-row slider">
            <button type="button" class="setting-title" class:locked={locks.stickBevel} onclick={() => toggleLock('stickBevel')} title="Click to lock/unlock for randomize">Bevel: {config.stickBevel.toFixed(2)}</button>
             <input type="range" bind:value={config.stickBevel} min="0" max="1" step="0.01" />
-          </label>
-         
-         <!-- Helix Settings (when helix mode is selected) -->
-         {#if config.stacking === 'helix'}
-           <div style="border-top: 1px solid #333; margin-top: 0.75rem; padding-top: 0.75rem;">
-              <label class="control-row slider">
-                <button type="button" class="setting-title" class:locked={locks.stickOverhang} onclick={() => toggleLock('stickOverhang')} title="Click to lock/unlock for randomize">Overhang: {config.stickOverhang.toFixed(0)}°</button>
-                <input type="range" bind:value={config.stickOverhang} min="0" max="180" step="1" />
-              </label>
-              <label class="control-row slider">
-                <button type="button" class="setting-title" class:locked={locks.rotationCenterOffsetX} onclick={() => toggleLock('rotationCenterOffsetX')} title="Click to lock/unlock for randomize">Rotation Center X: {config.rotationCenterOffsetX.toFixed(0)}%</button>
-                <input type="range" bind:value={config.rotationCenterOffsetX} min="-100" max="100" step="5" />
-              </label>
-              <label class="control-row slider">
-                <button type="button" class="setting-title" class:locked={locks.rotationCenterOffsetY} onclick={() => toggleLock('rotationCenterOffsetY')} title="Click to lock/unlock for randomize">Rotation Center Y: {config.rotationCenterOffsetY.toFixed(0)}%</button>
-                <input type="range" bind:value={config.rotationCenterOffsetY} min="-100" max="100" step="5" />
-              </label>
-            </div>
-          {/if}
+           </label>
+          
+          <!-- Helix Settings -->
+          <div style="border-top: 1px solid #333; margin-top: 0.75rem; padding-top: 0.75rem;">
+             <label class="control-row slider">
+               <button type="button" class="setting-title" class:locked={locks.stickOverhang} onclick={() => toggleLock('stickOverhang')} title="Click to lock/unlock for randomize">Overhang: {config.stickOverhang.toFixed(0)}°</button>
+               <input type="range" bind:value={config.stickOverhang} min="0" max="180" step="1" />
+             </label>
+             <label class="control-row slider">
+               <button type="button" class="setting-title" class:locked={locks.rotationCenterOffsetX} onclick={() => toggleLock('rotationCenterOffsetX')} title="Click to lock/unlock for randomize">Rotation Center X: {config.rotationCenterOffsetX.toFixed(0)}%</button>
+               <input type="range" bind:value={config.rotationCenterOffsetX} min="-100" max="100" step="5" />
+             </label>
+             <label class="control-row slider">
+               <button type="button" class="setting-title" class:locked={locks.rotationCenterOffsetY} onclick={() => toggleLock('rotationCenterOffsetY')} title="Click to lock/unlock for randomize">Rotation Center Y: {config.rotationCenterOffsetY.toFixed(0)}%</button>
+               <input type="range" bind:value={config.rotationCenterOffsetY} min="-100" max="100" step="5" />
+             </label>
+           </div>
         </section>
       
       <!-- Camera View -->

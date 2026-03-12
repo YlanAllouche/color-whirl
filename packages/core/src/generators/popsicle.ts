@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { WallpaperConfig, Direction, StackingMode, TextureType } from '../types.js';
+import type { WallpaperConfig, TextureType } from '../types.js';
 
 interface StickDimensions {
   width: number;
@@ -7,35 +7,18 @@ interface StickDimensions {
   depth: number;
 }
 
-function getStickDimensions(direction: Direction, canvasWidth: number, canvasHeight: number, stickThickness: number): StickDimensions {
-  const isVertical = direction === 'top-bottom';
-  const isDiagonal = direction === 'top-right-to-bottom-left' || direction === 'bottom-left-to-top-right';
+function getStickDimensions(canvasWidth: number, canvasHeight: number, stickThickness: number): StickDimensions {
   const aspect = canvasWidth / canvasHeight;
   
   // Normalize to frustum size (10 units) with aspect ratio correction
   const baseSize = 8; // Use 80% of the 10-unit frustum
   
-  if (isVertical) {
-    return {
-      width: baseSize * aspect * 0.15,
-      height: baseSize * 0.8,
-      depth: baseSize * aspect * 0.02 * stickThickness
-    };
-  } else if (isDiagonal) {
-    const size = baseSize * 0.7;
-    return {
-      width: size * 0.12,
-      height: size,
-      depth: baseSize * aspect * 0.02 * stickThickness
-    };
-  } else {
-    return {
-      width: baseSize * aspect * 0.8,
-      height: baseSize * 0.15,
-      depth: baseSize * 0.02 * stickThickness,
-      // radius handled by stickRoundness
-    };
-  }
+  // Default to vertical orientation (top-bottom)
+  return {
+    width: baseSize * aspect * 0.15,
+    height: baseSize * 0.8,
+    depth: baseSize * aspect * 0.02 * stickThickness
+  };
 }
 
 function createMaterial(texture: TextureType, color: string): THREE.MeshPhysicalMaterial {
@@ -151,75 +134,42 @@ function cameraZoomFromDistance(distance: number): number {
 }
 
 function getStackingOffset(
-  stacking: StackingMode,
   index: number,
-  totalSticks: number,
   stickDimensions: StickDimensions,
   stickOverhang: number,
   rotationCenterOffsetX: number,
   rotationCenterOffsetY: number,
   stickGap: number
 ): { x: number; y: number; z: number; rotationZ: number } {
+  // Helix with configurable overhang angle and rotation center offset
+  // stickOverhang: degrees each stick rotates from the previous
+  const rotationAngle = index * degToRad(stickOverhang);
   
-  switch (stacking) {
-    case 'perfect':
-      return {
-        x: 0,
-        y: 0,
-        z: index * (stickDimensions.depth + stickGap),
-        rotationZ: 0
-      };
-    
-    case 'helix': {
-      // Helix with configurable overhang angle and rotation center offset
-      // stickOverhang: degrees each stick rotates from the previous
-      const rotationAngle = index * degToRad(stickOverhang);
-      
-      // Rotation center offset: -100% = far left/bottom, 0% = center, +100% = far right/top
-      // We need to apply the rotation around a point other than (0,0)
-      const offsetXPercent = rotationCenterOffsetX / 100;
-      const offsetYPercent = rotationCenterOffsetY / 100;
-      
-      // Calculate the rotation pivot point relative to stick center
-      // The stick extends from -height/2 to +height/2 in its local Y axis
-      const pivotX = offsetXPercent * (stickDimensions.width / 2);
-      const pivotY = offsetYPercent * (stickDimensions.height / 2);
-      
-      // Apply rotation around the pivot point
-      // First translate to pivot, rotate, then translate back
-      const cos = Math.cos(rotationAngle);
-      const sin = Math.sin(rotationAngle);
-      
-      // Position offset from rotation around pivot
-      const offsetX = pivotX * (1 - cos) + pivotY * sin;
-      const offsetY = pivotY * (1 - cos) - pivotX * sin;
-      
-      return {
-        x: offsetX,
-        y: offsetY,
-        z: index * (stickDimensions.depth + stickGap),
-        rotationZ: rotationAngle
-      };
-    }
-    
-    default:
-      return { x: 0, y: 0, z: index * stickDimensions.depth, rotationZ: 0 };
-  }
-}
-
-function getDirectionRotation(direction: Direction): number {
-  switch (direction) {
-    case 'top-bottom':
-      return 0;
-    case 'left-right':
-      return Math.PI / 2;
-    case 'top-right-to-bottom-left':
-      return Math.PI / 4;
-    case 'bottom-left-to-top-right':
-      return -Math.PI / 4;
-    default:
-      return 0;
-  }
+  // Rotation center offset: -100% = far left/bottom, 0% = center, +100% = far right/top
+  // We need to apply the rotation around a point other than (0,0)
+  const offsetXPercent = rotationCenterOffsetX / 100;
+  const offsetYPercent = rotationCenterOffsetY / 100;
+  
+  // Calculate the rotation pivot point relative to stick center
+  // The stick extends from -height/2 to +height/2 in its local Y axis
+  const pivotX = offsetXPercent * (stickDimensions.width / 2);
+  const pivotY = offsetYPercent * (stickDimensions.height / 2);
+  
+  // Apply rotation around the pivot point
+  // First translate to pivot, rotate, then translate back
+  const cos = Math.cos(rotationAngle);
+  const sin = Math.sin(rotationAngle);
+  
+  // Position offset from rotation around pivot
+  const offsetX = pivotX * (1 - cos) + pivotY * sin;
+  const offsetY = pivotY * (1 - cos) - pivotX * sin;
+  
+  return {
+    x: offsetX,
+    y: offsetY,
+    z: index * (stickDimensions.depth + stickGap),
+    rotationZ: rotationAngle
+  };
 }
 
 export function createPopsicleScene(config: WallpaperConfig): {
@@ -233,8 +183,6 @@ export function createPopsicleScene(config: WallpaperConfig): {
     colors,
     texture,
     backgroundColor,
-    direction,
-    stacking,
     stickCount,
     stickOverhang,
     rotationCenterOffsetX,
@@ -292,8 +240,7 @@ export function createPopsicleScene(config: WallpaperConfig): {
     scene.add(ambientLight);
   }
   
-  const stickDimensions = getStickDimensions(direction, width, height, stickThickness);
-  const directionRotation = getDirectionRotation(direction);
+  const stickDimensions = getStickDimensions(width, height, stickThickness);
   
   const group = new THREE.Group();
   
@@ -310,10 +257,10 @@ export function createPopsicleScene(config: WallpaperConfig): {
     
     const mesh = new THREE.Mesh(geometry, material);
     
-     const offset = getStackingOffset(stacking, i, stickCount, stickDimensions, stickOverhang, rotationCenterOffsetX, rotationCenterOffsetY, stickGap);
+    const offset = getStackingOffset(i, stickDimensions, stickOverhang, rotationCenterOffsetX, rotationCenterOffsetY, stickGap);
     
     mesh.position.set(offset.x, offset.y, offset.z);
-    mesh.rotation.z = directionRotation + offset.rotationZ;
+    mesh.rotation.z = offset.rotationZ;
     
     group.add(mesh);
   }

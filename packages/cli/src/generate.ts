@@ -69,11 +69,11 @@ async function generateRaster(
 }
 
 function generateSVG(config: WallpaperConfig): GenerateResult {
-  const { width, height, colors, backgroundColor, stickCount, direction, stacking } = config;
+  const { width, height, colors, backgroundColor, stickCount, stickOverhang, rotationCenterOffsetX, rotationCenterOffsetY } = config;
   
-  const isVertical = direction === 'top-bottom';
-  const stickWidth = isVertical ? width * 0.15 : width * 0.8;
-  const stickHeight = isVertical ? height * 0.8 : height * 0.15;
+  // Default to vertical orientation
+  const stickWidth = width * 0.15;
+  const stickHeight = height * 0.8;
   
   let svg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
@@ -88,22 +88,24 @@ function generateSVG(config: WallpaperConfig): GenerateResult {
     
     let x = centerX;
     let y = centerY;
-    let rotation = 0;
     
-     if (stacking === 'helix') {
-       const offset = (i / stickCount) * 20;
-       x += Math.sin(i * 0.5) * offset;
-       y += Math.cos(i * 0.5) * offset * 0.5;
-       rotation = (i / stickCount) * 10;
-     }
+    // Helix stacking with rotation
+    const rotationAngle = (i * stickOverhang * Math.PI) / 180;
+    const offsetXPercent = rotationCenterOffsetX / 100;
+    const offsetYPercent = rotationCenterOffsetY / 100;
     
-    if (direction === 'left-right') {
-      rotation += 90;
-    } else if (direction === 'top-right-to-bottom-left') {
-      rotation += 45;
-    } else if (direction === 'bottom-left-to-top-right') {
-      rotation -= 45;
-    }
+    const pivotX = offsetXPercent * (stickWidth / 2);
+    const pivotY = offsetYPercent * (stickHeight / 2);
+    
+    const cos = Math.cos(rotationAngle);
+    const sin = Math.sin(rotationAngle);
+    
+    const offsetX = pivotX * (1 - cos) + pivotY * sin;
+    const offsetY = pivotY * (1 - cos) - pivotX * sin;
+    
+    x += offsetX;
+    y += offsetY;
+    const rotation = (rotationAngle * 180) / Math.PI;
     
     const maxRadius = Math.min(stickWidth, stickHeight) / 2;
     const radius = maxRadius * Math.max(0, Math.min(1, config.stickRoundness ?? 0));
@@ -167,34 +169,16 @@ function generateHTML(config: WallpaperConfig): string {
     
     const config = ${configJson};
     
-    function getStickDimensions(direction, canvasWidth, canvasHeight, stickThickness) {
-      const isVertical = direction === 'top-bottom';
-      const isDiagonal = direction === 'top-right-to-bottom-left' || direction === 'bottom-left-to-top-right';
+    function getStickDimensions(canvasWidth, canvasHeight, stickThickness) {
       const aspect = canvasWidth / canvasHeight;
-      
-      // Normalize to frustum size (10 units) with aspect ratio correction
       const baseSize = 8;
       
-      if (isVertical) {
-        return {
-          width: baseSize * aspect * 0.15,
-          height: baseSize * 0.8,
-          depth: baseSize * aspect * 0.02 * stickThickness
-        };
-      } else if (isDiagonal) {
-        const size = baseSize * 0.7;
-        return {
-          width: size * 0.12,
-          height: size,
-          depth: baseSize * aspect * 0.02 * stickThickness
-        };
-      } else {
-        return {
-          width: baseSize * aspect * 0.8,
-          height: baseSize * 0.15,
-          depth: baseSize * 0.02 * stickThickness
-        };
-      }
+      // Default to vertical orientation
+      return {
+        width: baseSize * aspect * 0.15,
+        height: baseSize * 0.8,
+        depth: baseSize * aspect * 0.02 * stickThickness
+      };
     }
     
     function createMaterial(texture, color) {
@@ -285,77 +269,47 @@ function generateHTML(config: WallpaperConfig): string {
        return (deg * Math.PI) / 180;
      }
 
-     function getStackingOffset(stacking, index, totalSticks, stickDimensions, stickOverhang, rotationCenterOffsetX, rotationCenterOffsetY, stickGap) {
-       switch (stacking) {
-         case 'perfect':
-           return {
-             x: 0,
-             y: 0,
-             z: index * (stickDimensions.depth + stickGap),
-             rotationZ: 0
-           };
-         
-         case 'helix':
-           const rotationAngle = index * degToRad(stickOverhang);
-           
-           const offsetXPercent = rotationCenterOffsetX / 100;
-           const offsetYPercent = rotationCenterOffsetY / 100;
-           
-           const pivotX = offsetXPercent * (stickDimensions.width / 2);
-           const pivotY = offsetYPercent * (stickDimensions.height / 2);
-           
-           const cos = Math.cos(rotationAngle);
-           const sin = Math.sin(rotationAngle);
-           
-           const offsetX = pivotX * (1 - cos) + pivotY * sin;
-           const offsetY = pivotY * (1 - cos) - pivotX * sin;
-           
-           return {
-             x: offsetX,
-             y: offsetY,
-             z: index * (stickDimensions.depth + stickGap),
-             rotationZ: rotationAngle
-           };
-         
-         default:
-           return { x: 0, y: 0, z: index * stickDimensions.depth, rotationZ: 0 };
-       }
-     }
-    
-    function getDirectionRotation(direction) {
-      switch (direction) {
-        case 'top-bottom':
-          return 0;
-        case 'left-right':
-          return Math.PI / 2;
-        case 'top-right-to-bottom-left':
-          return Math.PI / 4;
-        case 'bottom-left-to-top-right':
-          return -Math.PI / 4;
-        default:
-          return 0;
+      function getStackingOffset(index, stickDimensions, stickOverhang, rotationCenterOffsetX, rotationCenterOffsetY, stickGap) {
+        // Helix stacking with rotation
+        const rotationAngle = index * degToRad(stickOverhang);
+        
+        const offsetXPercent = rotationCenterOffsetX / 100;
+        const offsetYPercent = rotationCenterOffsetY / 100;
+        
+        const pivotX = offsetXPercent * (stickDimensions.width / 2);
+        const pivotY = offsetYPercent * (stickDimensions.height / 2);
+        
+        const cos = Math.cos(rotationAngle);
+        const sin = Math.sin(rotationAngle);
+        
+        const offsetX = pivotX * (1 - cos) + pivotY * sin;
+        const offsetY = pivotY * (1 - cos) - pivotX * sin;
+        
+        return {
+          x: offsetX,
+          y: offsetY,
+          z: index * (stickDimensions.depth + stickGap),
+          rotationZ: rotationAngle
+        };
       }
-     }
-     
-     const {
-       width,
-       height,
-       colors,
-       texture,
-       backgroundColor,
-       direction,
-       stacking,
-       stickCount,
-       stickOverhang,
-       rotationCenterOffsetX,
-       rotationCenterOffsetY,
-       stickGap,
-       stickThickness,
-       stickRoundness,
-       stickBevel,
-       lighting,
-       camera: cameraConfig
-     } = config;
+    
+      const {
+        width,
+        height,
+        colors,
+        texture,
+        backgroundColor,
+        stickCount,
+        stickOverhang,
+        rotationCenterOffsetX,
+        rotationCenterOffsetY,
+        stickGap,
+        stickThickness,
+        stickRoundness,
+        stickBevel,
+        lighting,
+        camera: cameraConfig
+      } = config;
     
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(backgroundColor);
@@ -403,28 +357,27 @@ function generateHTML(config: WallpaperConfig): string {
       scene.add(ambientLight);
     }
     
-    const stickDimensions = getStickDimensions(direction, width, height, stickThickness);
-    const directionRotation = getDirectionRotation(direction);
-    
-    const group = new THREE.Group();
-    
-    for (let i = 0; i < stickCount; i++) {
-      const color = colors[i % colors.length];
-      const material = createMaterial(texture, color);
-      const geometry = createRoundedBox(
-        stickDimensions.width,
-        stickDimensions.height,
-        stickDimensions.depth,
-        stickRoundness,
-        stickBevel
-      );
-      
-       const mesh = new THREE.Mesh(geometry, material);
+     const stickDimensions = getStickDimensions(width, height, stickThickness);
+     
+     const group = new THREE.Group();
+     
+     for (let i = 0; i < stickCount; i++) {
+       const color = colors[i % colors.length];
+       const material = createMaterial(texture, color);
+       const geometry = createRoundedBox(
+         stickDimensions.width,
+         stickDimensions.height,
+         stickDimensions.depth,
+         stickRoundness,
+         stickBevel
+       );
        
-       const offset = getStackingOffset(stacking, i, stickCount, stickDimensions, stickOverhang, rotationCenterOffsetX, rotationCenterOffsetY, stickGap);
-       
-       mesh.position.set(offset.x, offset.y, offset.z);
-      mesh.rotation.z = directionRotation + offset.rotationZ;
+        const mesh = new THREE.Mesh(geometry, material);
+        
+        const offset = getStackingOffset(i, stickDimensions, stickOverhang, rotationCenterOffsetX, rotationCenterOffsetY, stickGap);
+        
+        mesh.position.set(offset.x, offset.y, offset.z);
+       mesh.rotation.z = offset.rotationZ;
       
       group.add(mesh);
     }

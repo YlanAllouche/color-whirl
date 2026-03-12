@@ -90,11 +90,11 @@ export async function exportToSVG(
 }
 
 function generateSVGContent(config: WallpaperConfig): string {
-  const { width, height, colors, backgroundColor, stickCount, direction, stacking } = config;
+  const { width, height, colors, backgroundColor, stickCount, stickOverhang, rotationCenterOffsetX, rotationCenterOffsetY } = config;
   
-  const isVertical = direction === 'top-bottom';
-  const stickWidth = isVertical ? width * 0.15 : width * 0.8;
-  const stickHeight = isVertical ? height * 0.8 : height * 0.15;
+  // Default to vertical orientation
+  const stickWidth = width * 0.15;
+  const stickHeight = height * 0.8;
   
   let svg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
@@ -106,26 +106,27 @@ function generateSVGContent(config: WallpaperConfig): string {
   
   for (let i = 0; i < stickCount; i++) {
     const color = colors[i % colors.length];
-    const z = i * 5;
     
     let x = centerX;
     let y = centerY;
-    let rotation = 0;
     
-     if (stacking === 'helix') {
-       const offset = (i / stickCount) * 20;
-       x += Math.sin(i * 0.5) * offset;
-       y += Math.cos(i * 0.5) * offset * 0.5;
-       rotation = (i / stickCount) * 10;
-     }
+    // Helix stacking with rotation
+    const rotationAngle = (i * stickOverhang * Math.PI) / 180;
+    const offsetXPercent = rotationCenterOffsetX / 100;
+    const offsetYPercent = rotationCenterOffsetY / 100;
     
-    if (direction === 'left-right') {
-      rotation += 90;
-    } else if (direction === 'top-right-to-bottom-left') {
-      rotation += 45;
-    } else if (direction === 'bottom-left-to-top-right') {
-      rotation -= 45;
-    }
+    const pivotX = offsetXPercent * (stickWidth / 2);
+    const pivotY = offsetYPercent * (stickHeight / 2);
+    
+    const cos = Math.cos(rotationAngle);
+    const sin = Math.sin(rotationAngle);
+    
+    const offsetX = pivotX * (1 - cos) + pivotY * sin;
+    const offsetY = pivotY * (1 - cos) - pivotX * sin;
+    
+    x += offsetX;
+    y += offsetY;
+    const rotation = (rotationAngle * 180) / Math.PI;
     
     const maxRadius = Math.min(stickWidth, stickHeight) / 2;
     const radius = maxRadius * Math.max(0, Math.min(1, config.stickRoundness ?? 0));

@@ -5,11 +5,7 @@ import {
   WallpaperConfig,
   DEFAULT_CONFIG,
   RESOLUTION_PRESETS,
-  COLOR_PALETTES,
   ResolutionPreset,
-  ColorPalette,
-  Direction,
-  StackingMode,
   TextureType
 } from '@wallpaper-maker/core';
 import { generateWallpaper } from './generate.js';
@@ -31,11 +27,8 @@ program
   .option('-H, --height <height>', 'Image height in pixels')
   .option('-r, --resolution <preset>', 'Use a preset resolution (1080p, 1440p, 4k, mobile, square, ultrawide)')
   .option('-c, --colors <colors>', 'Comma-separated hex colors (e.g., "#ff0000,#00ff00")')
-   .option('-p, --palette <palette>', 'Use a preset color palette (sunset, ocean, forest, monochrome, candy, neon, lavender, tropical, vintage, midnight, aurora, ember)')
-  .option('-T, --texture <texture>', 'Texture type (glossy, matte, metallic)', 'glossy')
-  .option('-b, --background <color>', 'Background color (hex)', '#1a1a2e')
-  .option('-d, --direction <direction>', 'Stacking direction (top-bottom, left-right, top-right-to-bottom-left, bottom-left-to-top-right)', 'top-bottom')
-   .option('-s, --stacking <mode>', 'Stacking mode (perfect, helix)', 'helix')
+   .option('-T, --texture <texture>', 'Texture type (glossy, matte, metallic)', 'glossy')
+   .option('-b, --background <color>', 'Background color (hex)', '#1a1a2e')
    .option('-n, --count <number>', 'Number of sticks', '12')
    .option('--stick-overhang <degrees>', 'Stick overhang angle per stick in degrees', '30')
    .option('--rotation-center-offset-x <percent>', 'Rotation center X offset as percentage (-100 to 100)', '0')
@@ -48,7 +41,6 @@ program
   .option('--camera-azimuth <number>', 'Camera azimuth in degrees', '45')
   .option('--camera-elevation <number>', 'Camera elevation in degrees', '35.3')
   .option('-f, --format <format>', 'Output format (png, jpg, webp, svg)', 'png')
-  .option('-q, --quality <number>', 'Image quality (0-1)', '0.95')
   .option('-o, --output <path>', 'Output file path')
   .option('--lighting', 'Enable lighting', true)
   .option('--no-lighting', 'Disable lighting')
@@ -102,33 +94,20 @@ function buildConfig(options: any): WallpaperConfig {
   if (options.height) height = parseInt(options.height, 10);
   
    let colors = DEFAULT_CONFIG.colors;
-   let backgroundColor = DEFAULT_CONFIG.backgroundColor;
-   
-   if (options.palette) {
-     const paletteName = options.palette as ColorPalette;
-     if (paletteName in COLOR_PALETTES) {
-       const palette = COLOR_PALETTES[paletteName] as any;
-       colors = [...palette.colors];
-       backgroundColor = palette.backgroundColor;
-     } else {
-       console.warn(`Unknown color palette: ${options.palette}`);
-     }
-   }
+   const backgroundColor = DEFAULT_CONFIG.backgroundColor;
    
    if (options.colors) {
      colors = options.colors.split(',').map((c: string) => c.trim());
    }
   
-   const config: WallpaperConfig = {
-     type: options.type as 'popsickle',
-     width,
-     height,
-     colors,
-     texture: options.texture as TextureType,
-     backgroundColor: options.background || backgroundColor,
-     direction: options.direction as Direction,
-      stacking: options.stacking as StackingMode,
-     stickCount: parseInt(options.count, 10),
+    const config: WallpaperConfig = {
+      type: options.type as 'popsickle',
+      width,
+      height,
+      colors,
+      texture: options.texture as TextureType,
+      backgroundColor: options.background || backgroundColor,
+      stickCount: parseInt(options.count, 10),
      stickOverhang: parseFloat(options.stickOverhang),
      rotationCenterOffsetX: parseFloat(options.rotationCenterOffsetX),
      rotationCenterOffsetY: parseFloat(options.rotationCenterOffsetY),

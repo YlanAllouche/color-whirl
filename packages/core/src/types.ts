@@ -1,13 +1,5 @@
 export type TextureType = 'glossy' | 'matte' | 'metallic';
 
-export type Direction = 
-  | 'top-bottom' 
-  | 'left-right' 
-  | 'top-right-to-bottom-left' 
-  | 'bottom-left-to-top-right';
-
-export type StackingMode = 'perfect' | 'helix';
-
 export interface CameraConfig {
   /** Distance from origin in scene units */
   distance: number;
@@ -31,8 +23,6 @@ export interface WallpaperConfig {
   colors: string[];
   texture: TextureType;
   backgroundColor: string;
-  direction: Direction;
-  stacking: StackingMode;
   stickCount: number;
   /** Stick overhang angle per stick in degrees (e.g., each stick rotates 15° from the previous) */
   stickOverhang: number;
@@ -60,28 +50,6 @@ export const RESOLUTION_PRESETS = {
 
 export type ResolutionPreset = keyof typeof RESOLUTION_PRESETS;
 
-export interface ColorPalettePreset {
-  colors: string[];
-  backgroundColor: string;
-}
-
-export const COLOR_PALETTES = {
-  sunset: { colors: ['#FF6B6B', '#FF8E53', '#FE6B8B', '#FF8E53', '#FFD93D'], backgroundColor: '#1a1a2e' },
-  ocean: { colors: ['#0077BE', '#0099CC', '#00BBDD', '#4ECDC4', '#44A08D'], backgroundColor: '#0a1d2e' },
-  forest: { colors: ['#2D5016', '#3E6B1F', '#4F7D28', '#61A534', '#7CB342'], backgroundColor: '#0d1a0a' },
-  monochrome: { colors: ['#1a1a1a', '#4d4d4d', '#808080', '#b3b3b3', '#e6e6e6'], backgroundColor: '#0f0f0f' },
-  candy: { colors: ['#FF006E', '#8338EC', '#3A86FF', '#06FFB4', '#FFBE0B'], backgroundColor: '#1a0d26' },
-  neon: { colors: ['#FF00FF', '#00FFFF', '#00FF00', '#FFFF00', '#FF0000'], backgroundColor: '#0a0a15' },
-  lavender: { colors: ['#B19CD9', '#D8BFD8', '#E6B3E0', '#DDA0DD', '#C8A2C8'], backgroundColor: '#2a1f3d' },
-  tropical: { colors: ['#FF6B9D', '#FFC656', '#26C485', '#00D4FF', '#C44569'], backgroundColor: '#1a2d3a' },
-  vintage: { colors: ['#A0522D', '#CD853F', '#DEB887', '#D2B48C', '#BC8F8F'], backgroundColor: '#2a1f15' },
-  midnight: { colors: ['#0F3460', '#16213E', '#533483', '#E94560', '#FFBB3F'], backgroundColor: '#0a0e1a' },
-  aurora: { colors: ['#1FBF71', '#00D4FF', '#FF6BCB', '#FFE66D', '#6C3DFF'], backgroundColor: '#0d1117' },
-  ember: { colors: ['#FF4500', '#FF6347', '#FF8C42', '#FFA500', '#FFD700'], backgroundColor: '#1a0a00' }
-} as const;
-
-export type ColorPalette = keyof typeof COLOR_PALETTES;
-
 export interface ExportOptions {
   format: 'png' | 'jpg' | 'webp' | 'svg';
   quality?: number;
@@ -92,11 +60,9 @@ export const DEFAULT_CONFIG: WallpaperConfig = {
   type: 'popsickle',
   width: 1920,
   height: 1080,
-  colors: [...COLOR_PALETTES.sunset.colors],
+  colors: ['#FF6B6B', '#FF8E53', '#FE6B8B', '#FF8E53', '#FFD93D'],
   texture: 'glossy',
-  backgroundColor: COLOR_PALETTES.sunset.backgroundColor,
-  direction: 'top-bottom',
-  stacking: 'helix',
+  backgroundColor: '#1a1a2e',
   stickCount: 12,
   stickOverhang: 30,
   rotationCenterOffsetX: 0,
@@ -239,60 +205,12 @@ export function generateRandomColorTheme(count: number = 5): RandomColorTheme {
 }
 
 /**
- * Generate a random wallpaper configuration.
- */
-export function generateRandomConfig(): WallpaperConfig {
-  const palettes = Object.values(COLOR_PALETTES);
-  const selectedPalette = palettes[Math.floor(Math.random() * palettes.length)];
-  
-  const textures: TextureType[] = ['glossy', 'matte', 'metallic'];
-  const directions: Direction[] = ['top-bottom', 'left-right', 'top-right-to-bottom-left', 'bottom-left-to-top-right'];
-  const stackingModes: StackingMode[] = ['perfect', 'helix'];
-  
-  return {
-    type: 'popsickle',
-    width: DEFAULT_CONFIG.width,
-    height: DEFAULT_CONFIG.height,
-    colors: [...selectedPalette.colors],
-    texture: textures[Math.floor(Math.random() * textures.length)],
-    backgroundColor: selectedPalette.backgroundColor,
-    direction: directions[Math.floor(Math.random() * directions.length)],
-    stacking: stackingModes[Math.floor(Math.random() * stackingModes.length)],
-    stickCount: Math.round(randomWeighted(1, 200, 40)),
-    stickOverhang: randomWeighted(0, 180, 30),
-    rotationCenterOffsetX: randomWeighted(-100, 100, 0),
-    rotationCenterOffsetY: randomWeighted(-100, 100, 0),
-    stickGap: randomWeighted(0, 5, 0.05),
-    stickThickness: randomWeighted(0.1, 3, 1.0),
-    stickRoundness: randomWeighted(0, 1, 0.15),
-    stickBevel: randomWeighted(0, 1, 0.35),
-    lighting: {
-      enabled: Math.random() > 0.2, // 80% chance enabled
-      intensity: randomWeighted(0.5, 3, 1.5),
-      position: {
-        x: randomWeighted(-10, 10, 5),
-        y: randomWeighted(-10, 10, 5),
-        z: randomWeighted(0, 20, 5)
-      },
-      ambientIntensity: randomWeighted(0.1, 1, 0.3)
-    },
-    camera: {
-      distance: randomWeighted(5, 50, 17.3),
-      azimuth: randomWeighted(0, 360, 45),
-      elevation: randomWeighted(-80, 80, 35.3)
-    }
-  };
-}
-
-/**
  * Generate a random wallpaper configuration, including colors, without using presets.
  */
 export function generateRandomConfigNoPresets(): WallpaperConfig {
   const theme = generateRandomColorTheme(5);
 
   const textures: TextureType[] = ['glossy', 'matte', 'metallic'];
-  const directions: Direction[] = ['top-bottom', 'left-right', 'top-right-to-bottom-left', 'bottom-left-to-top-right'];
-  const stackingModes: StackingMode[] = ['perfect', 'helix'];
 
   return {
     type: 'popsickle',
@@ -301,8 +219,6 @@ export function generateRandomConfigNoPresets(): WallpaperConfig {
     colors: [...theme.colors],
     texture: textures[Math.floor(Math.random() * textures.length)],
     backgroundColor: theme.backgroundColor,
-    direction: directions[Math.floor(Math.random() * directions.length)],
-    stacking: stackingModes[Math.floor(Math.random() * stackingModes.length)],
     stickCount: Math.round(randomWeighted(1, 200, 40)),
     stickOverhang: randomWeighted(0, 180, 30),
     rotationCenterOffsetX: randomWeighted(-100, 100, 0),
