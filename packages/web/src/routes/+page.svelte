@@ -776,10 +776,14 @@
   });
 </script>
 
+<svelte:head>
+  <title>ColorWhirl</title>
+</svelte:head>
+
 <div class="app">
   <aside class="sidebar">
     <div class="sidebar-header">
-      <h1>Wallpaper Maker</h1>
+      <h1>ColorWhirl</h1>
     </div>
     
     <div class="sidebar-content">
