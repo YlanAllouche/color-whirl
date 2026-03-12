@@ -30,6 +30,10 @@ export interface WallpaperConfig {
   rotationCenterOffsetX: number;
   rotationCenterOffsetY: number;
   stickGap: number;
+  /** Overall scale multiplier for stick dimensions */
+  stickSize: number;
+  /** Stick aspect ratio (length/width) */
+  stickRatio: number;
   stickThickness: number;
   /** 0 = square ends, 1 = fully rounded pill ends */
   stickRoundness: number;
@@ -68,6 +72,8 @@ export const DEFAULT_CONFIG: WallpaperConfig = {
   rotationCenterOffsetX: 0,
   rotationCenterOffsetY: 0,
   stickGap: 0.05,
+  stickSize: 1.0,
+  stickRatio: 3.0,
   stickThickness: 1.0,
   stickRoundness: 0.15,
   stickBevel: 0.35,
@@ -224,6 +230,8 @@ export function generateRandomConfigNoPresets(): WallpaperConfig {
     rotationCenterOffsetX: randomWeighted(-100, 100, 0),
     rotationCenterOffsetY: randomWeighted(-100, 100, 0),
     stickGap: randomWeighted(0, 5, 0.05),
+    stickSize: randomWeighted(0.25, 2.5, 1.0),
+    stickRatio: randomWeighted(0.75, 12, 3.0),
     stickThickness: randomWeighted(0.1, 3, 1.0),
     stickRoundness: randomWeighted(0, 1, 0.15),
     stickBevel: randomWeighted(0, 1, 0.35),

@@ -7,17 +7,38 @@ interface StickDimensions {
   depth: number;
 }
 
-function getStickDimensions(canvasWidth: number, canvasHeight: number, stickThickness: number): StickDimensions {
+function clamp(n: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, n));
+}
+
+function getStickDimensions(
+  canvasWidth: number,
+  canvasHeight: number,
+  stickThickness: number,
+  stickSize: number,
+  stickRatio: number
+): StickDimensions {
   const aspect = canvasWidth / canvasHeight;
   
   // Normalize to frustum size (10 units) with aspect ratio correction
   const baseSize = 8; // Use 80% of the 10-unit frustum
-  
-  // Default to vertical orientation (top-bottom)
+
+  const safeSize = clamp(Number.isFinite(stickSize) ? stickSize : 1.0, 0.01, 100);
+  const safeRatio = clamp(Number.isFinite(stickRatio) ? stickRatio : 3.0, 0.05, 100);
+
+  // Start from the historical defaults (expressed as fractions of viewport width/height),
+  // then apply ratio while keeping the overall footprint (area) stable.
+  const baseWidth = baseSize * aspect * 0.15 * safeSize;
+  const baseHeight = baseSize * 0.8 * safeSize;
+  const area = baseWidth * baseHeight;
+
+  const width = Math.sqrt(area / safeRatio);
+  const height = Math.sqrt(area * safeRatio);
+
   return {
-    width: baseSize * aspect * 0.15,
-    height: baseSize * 0.8,
-    depth: baseSize * aspect * 0.02 * stickThickness
+    width,
+    height,
+    depth: baseSize * aspect * 0.02 * stickThickness * safeSize
   };
 }
 
@@ -188,6 +209,8 @@ export function createPopsicleScene(config: WallpaperConfig): {
     rotationCenterOffsetX,
     rotationCenterOffsetY,
     stickGap,
+    stickSize,
+    stickRatio,
     stickThickness,
     stickRoundness,
     stickBevel,
@@ -240,7 +263,7 @@ export function createPopsicleScene(config: WallpaperConfig): {
     scene.add(ambientLight);
   }
   
-  const stickDimensions = getStickDimensions(width, height, stickThickness);
+  const stickDimensions = getStickDimensions(width, height, stickThickness, stickSize, stickRatio);
   
   const group = new THREE.Group();
   

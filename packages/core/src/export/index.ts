@@ -90,11 +90,31 @@ export async function exportToSVG(
 }
 
 function generateSVGContent(config: WallpaperConfig): string {
-  const { width, height, colors, backgroundColor, stickCount, stickOverhang, rotationCenterOffsetX, rotationCenterOffsetY } = config;
-  
-  // Default to vertical orientation
-  const stickWidth = width * 0.15;
-  const stickHeight = height * 0.8;
+  const {
+    width,
+    height,
+    colors,
+    backgroundColor,
+    stickCount,
+    stickOverhang,
+    rotationCenterOffsetX,
+    rotationCenterOffsetY
+  } = config;
+
+  const stickSize = (config as any).stickSize ?? 1.0;
+  const stickRatio = (config as any).stickRatio ?? 3.0;
+
+  const sizeNum = Number(stickSize);
+  const ratioNum = Number(stickRatio);
+  const safeSize = Math.max(0.01, Number.isFinite(sizeNum) ? sizeNum : 1.0);
+  const safeRatio = Math.max(0.05, Number.isFinite(ratioNum) ? ratioNum : 3.0);
+
+  // Base footprint matches historical defaults; ratio re-shapes while preserving area.
+  const baseStickWidth = width * 0.15 * safeSize;
+  const baseStickHeight = height * 0.8 * safeSize;
+  const area = baseStickWidth * baseStickHeight;
+  const stickWidth = Math.sqrt(area / safeRatio);
+  const stickHeight = Math.sqrt(area * safeRatio);
   
   let svg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
