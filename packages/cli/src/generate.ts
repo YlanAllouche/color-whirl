@@ -69,11 +69,32 @@ async function generateRaster(
 }
 
 function generateSVG(config: WallpaperConfig): GenerateResult {
-  const { width, height, colors, backgroundColor, stickCount, stickOverhang, rotationCenterOffsetX, rotationCenterOffsetY } = config;
-  
-  // Default to vertical orientation
-  const stickWidth = width * 0.15;
-  const stickHeight = height * 0.8;
+  const {
+    width,
+    height,
+    colors,
+    backgroundColor,
+    stickCount,
+    stickOverhang,
+    rotationCenterOffsetX,
+    rotationCenterOffsetY
+  } = config;
+
+  const stickSize = (config as any).stickSize ?? 1.0;
+  const stickRatio = (config as any).stickRatio ?? 3.0;
+
+  const sizeNum = Number(stickSize);
+  const ratioNum = Number(stickRatio);
+  const safeSize = Math.max(0.01, Number.isFinite(sizeNum) ? sizeNum : 1.0);
+  const safeRatio = Math.max(0.05, Number.isFinite(ratioNum) ? ratioNum : 3.0);
+
+  // Base footprint matches historical defaults; ratio re-shapes while preserving area.
+  const baseStickWidth = width * 0.15 * safeSize;
+  const baseStickHeight = height * 0.8 * safeSize;
+  const area = baseStickWidth * baseStickHeight;
+
+  const stickWidth = Math.sqrt(area / safeRatio);
+  const stickHeight = Math.sqrt(area * safeRatio);
   
   let svg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
@@ -169,15 +190,30 @@ function generateHTML(config: WallpaperConfig): string {
     
     const config = ${configJson};
     
-    function getStickDimensions(canvasWidth, canvasHeight, stickThickness) {
+    function clamp(n, min, max) {
+      return Math.max(min, Math.min(max, n));
+    }
+
+    function getStickDimensions(canvasWidth, canvasHeight, stickThickness, stickSize, stickRatio) {
       const aspect = canvasWidth / canvasHeight;
       const baseSize = 8;
-      
-      // Default to vertical orientation
+
+      const rawSize = Number(stickSize);
+      const rawRatio = Number(stickRatio);
+      const safeSize = clamp(Number.isFinite(rawSize) ? rawSize : 1.0, 0.01, 100);
+      const safeRatio = clamp(Number.isFinite(rawRatio) ? rawRatio : 3.0, 0.05, 100);
+
+      const baseWidth = baseSize * aspect * 0.15 * safeSize;
+      const baseHeight = baseSize * 0.8 * safeSize;
+      const area = baseWidth * baseHeight;
+
+      const width = Math.sqrt(area / safeRatio);
+      const height = Math.sqrt(area * safeRatio);
+
       return {
-        width: baseSize * aspect * 0.15,
-        height: baseSize * 0.8,
-        depth: baseSize * aspect * 0.02 * stickThickness
+        width,
+        height,
+        depth: baseSize * aspect * 0.02 * stickThickness * safeSize
       };
     }
     
@@ -304,6 +340,8 @@ function generateHTML(config: WallpaperConfig): string {
         rotationCenterOffsetX,
         rotationCenterOffsetY,
         stickGap,
+        stickSize,
+        stickRatio,
         stickThickness,
         stickRoundness,
         stickBevel,
@@ -357,7 +395,7 @@ function generateHTML(config: WallpaperConfig): string {
       scene.add(ambientLight);
     }
     
-     const stickDimensions = getStickDimensions(width, height, stickThickness);
+      const stickDimensions = getStickDimensions(width, height, stickThickness, stickSize, stickRatio);
      
      const group = new THREE.Group();
      

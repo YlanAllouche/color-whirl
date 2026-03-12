@@ -30,10 +30,12 @@ program
    .option('-T, --texture <texture>', 'Texture type (glossy, matte, metallic)', 'glossy')
    .option('-b, --background <color>', 'Background color (hex)', '#1a1a2e')
    .option('-n, --count <number>', 'Number of sticks', '12')
-   .option('--stick-overhang <degrees>', 'Stick overhang angle per stick in degrees', '30')
-   .option('--rotation-center-offset-x <percent>', 'Rotation center X offset as percentage (-100 to 100)', '0')
-   .option('--rotation-center-offset-y <percent>', 'Rotation center Y offset as percentage (-100 to 100)', '0')
+    .option('--stick-overhang <degrees>', 'Stick overhang angle per stick in degrees', '30')
+    .option('--rotation-center-offset-x <percent>', 'Rotation center X offset as percentage (-100 to 100)', '0')
+    .option('--rotation-center-offset-y <percent>', 'Rotation center Y offset as percentage (-100 to 100)', '0')
   .option('--gap <number>', 'Gap between sticks (0-5.0)', '0.05')
+  .option('--size <number>', 'Stick size multiplier (0.25-2.5)', '1.0')
+  .option('--ratio <number>', 'Stick ratio (length/width)', '3.0')
   .option('--thickness <number>', 'Stick thickness multiplier', '1.0')
   .option('--roundness <number>', 'Stick end roundness (0-1)', '0.15')
   .option('--bevel <number>', 'Bevel amount (0-1)', '0.35')
@@ -109,14 +111,16 @@ function buildConfig(options: any): WallpaperConfig {
       backgroundColor: options.background || backgroundColor,
       stickCount: parseInt(options.count, 10),
      stickOverhang: parseFloat(options.stickOverhang),
-     rotationCenterOffsetX: parseFloat(options.rotationCenterOffsetX),
-     rotationCenterOffsetY: parseFloat(options.rotationCenterOffsetY),
-     stickGap: parseFloat(options.gap),
-    stickThickness: parseFloat(options.thickness),
-    stickRoundness: parseFloat(options.roundness),
-    stickBevel: parseFloat(options.bevel),
-    lighting: {
-      enabled: options.lighting,
+      rotationCenterOffsetX: parseFloat(options.rotationCenterOffsetX),
+      rotationCenterOffsetY: parseFloat(options.rotationCenterOffsetY),
+      stickGap: parseFloat(options.gap),
+     stickSize: parseFloat(options.size),
+     stickRatio: parseFloat(options.ratio),
+     stickThickness: parseFloat(options.thickness),
+     stickRoundness: parseFloat(options.roundness),
+     stickBevel: parseFloat(options.bevel),
+     lighting: {
+       enabled: options.lighting,
       intensity: parseFloat(options.lightIntensity),
       position: {
         x: parseFloat(options.lightX),
