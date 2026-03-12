@@ -803,18 +803,18 @@
         </div>
       </section>
       
-       <!-- Random Config -->
-       <section class="control-section">
-         <h3>Randomize</h3>
-         <div style="display: flex; gap: 0.5rem;">
-           <button style="flex: 1; padding: 0.5rem;" onclick={generateRandomPresetColors}>
-             Randomize (Preset Colors)
-           </button>
-           <button style="flex: 1; padding: 0.5rem;" onclick={generateRandomGeneratedColors}>
-             Randomize (Generated Colors)
-           </button>
-         </div>
-       </section>
+        <!-- Random Config -->
+        <section class="control-section">
+          <h3>Randomize</h3>
+          <div class="randomize-buttons">
+            <button type="button" onclick={generateRandomPresetColors} title="Randomize all settings, colors come from a curated preset">
+              Preset
+            </button>
+            <button type="button" onclick={generateRandomGeneratedColors} title="Randomize all settings, generate a new non-preset color theme">
+              Generated
+            </button>
+          </div>
+        </section>
        
        <!-- Resolution Controls -->
       <section class="control-section">
@@ -1132,6 +1132,20 @@
   .export-controls button:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+
+  .randomize-buttons {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: nowrap;
+  }
+
+  .randomize-buttons button {
+    flex: 1;
+    min-width: 0;
+    padding: 0.45rem 0.5rem;
+    font-size: 0.8125rem;
+    white-space: nowrap;
   }
 
   .cli-controls {
