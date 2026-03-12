@@ -7,6 +7,7 @@
     COLOR_PALETTES,
     RESOLUTION_PRESETS,
     generateRandomConfig,
+    generateRandomConfigNoPresets,
     exportToPNG,
     exportToJPG,
     exportToWebP,
@@ -30,6 +31,63 @@
   // URL sync + CLI preview
   let urlSyncEnabled = $state(false);
   let cliCommand = $state('');
+
+  type LockState = {
+    colors: boolean;
+    backgroundColor: boolean;
+    texture: boolean;
+    direction: boolean;
+    stacking: boolean;
+    stickCount: boolean;
+    stickOverhang: boolean;
+    rotationCenterOffsetX: boolean;
+    rotationCenterOffsetY: boolean;
+    stickGap: boolean;
+    stickThickness: boolean;
+    stickRoundness: boolean;
+    stickBevel: boolean;
+    cameraDistance: boolean;
+    cameraAzimuth: boolean;
+    cameraElevation: boolean;
+    lightingEnabled: boolean;
+    lightingIntensity: boolean;
+    lightingX: boolean;
+    lightingY: boolean;
+    lightingZ: boolean;
+    lightingAmbient: boolean;
+  };
+
+  type LockKey = keyof LockState;
+
+  // UI-only: locks are not synced to URL.
+  let locks = $state<LockState>({
+    colors: false,
+    backgroundColor: false,
+    texture: false,
+    direction: false,
+    stacking: false,
+    stickCount: false,
+    stickOverhang: false,
+    rotationCenterOffsetX: false,
+    rotationCenterOffsetY: false,
+    stickGap: false,
+    stickThickness: false,
+    stickRoundness: false,
+    stickBevel: false,
+    cameraDistance: false,
+    cameraAzimuth: false,
+    cameraElevation: false,
+    lightingEnabled: false,
+    lightingIntensity: false,
+    lightingX: false,
+    lightingY: false,
+    lightingZ: false,
+    lightingAmbient: false
+  });
+
+  function toggleLock(key: LockKey) {
+    locks = { ...locks, [key]: !locks[key] };
+  }
   
   // Derived values
   let aspectRatio = $derived(config.width / config.height);
@@ -428,7 +486,7 @@
     config = { ...config, colors: newColors };
   }
 
-   function cloneDefaultConfig(): WallpaperConfig {
+  function cloneDefaultConfig(): WallpaperConfig {
      return {
        ...DEFAULT_CONFIG,
        colors: [...DEFAULT_CONFIG.colors],
@@ -438,11 +496,63 @@
        },
        camera: { ...DEFAULT_CONFIG.camera }
      };
-   }
+  }
 
-   function generateRandom() {
-     config = generateRandomConfig();
-   }
+  function mergeWithLocks(next: WallpaperConfig): WallpaperConfig {
+    const current = config;
+    const merged: WallpaperConfig = {
+      ...next,
+      colors: [...next.colors],
+      lighting: {
+        ...next.lighting,
+        position: { ...next.lighting.position }
+      },
+      camera: { ...next.camera }
+    };
+
+    // Resolution is not randomized; always preserve the current values.
+    merged.width = current.width;
+    merged.height = current.height;
+
+    if (locks.colors) merged.colors = [...current.colors];
+    if (locks.backgroundColor) merged.backgroundColor = current.backgroundColor;
+
+    if (locks.texture) merged.texture = current.texture;
+    if (locks.direction) merged.direction = current.direction;
+    if (locks.stacking) merged.stacking = current.stacking;
+
+    if (locks.stickCount) merged.stickCount = current.stickCount;
+    if (locks.stickOverhang) merged.stickOverhang = current.stickOverhang;
+    if (locks.rotationCenterOffsetX) merged.rotationCenterOffsetX = current.rotationCenterOffsetX;
+    if (locks.rotationCenterOffsetY) merged.rotationCenterOffsetY = current.rotationCenterOffsetY;
+    if (locks.stickGap) merged.stickGap = current.stickGap;
+    if (locks.stickThickness) merged.stickThickness = current.stickThickness;
+    if (locks.stickRoundness) merged.stickRoundness = current.stickRoundness;
+    if (locks.stickBevel) merged.stickBevel = current.stickBevel;
+
+    if (locks.cameraDistance) merged.camera.distance = current.camera.distance;
+    if (locks.cameraAzimuth) merged.camera.azimuth = current.camera.azimuth;
+    if (locks.cameraElevation) merged.camera.elevation = current.camera.elevation;
+
+    if (locks.lightingEnabled) merged.lighting.enabled = current.lighting.enabled;
+    if (locks.lightingIntensity) merged.lighting.intensity = current.lighting.intensity;
+    if (locks.lightingX) merged.lighting.position.x = current.lighting.position.x;
+    if (locks.lightingY) merged.lighting.position.y = current.lighting.position.y;
+    if (locks.lightingZ) merged.lighting.position.z = current.lighting.position.z;
+    if (locks.lightingAmbient) merged.lighting.ambientIntensity = current.lighting.ambientIntensity;
+
+    return merged;
+  }
+
+  function generateRandomPresetColors() {
+    // Randomize all parameters, but pick colors from a predefined preset.
+    config = mergeWithLocks(generateRandomConfig());
+  }
+
+  function generateRandomGeneratedColors() {
+    // Randomize everything, including a non-preset generated color theme.
+    config = mergeWithLocks(generateRandomConfigNoPresets());
+  }
 
   function parseConfigFromUrl(searchParams: URLSearchParams) {
     const next = cloneDefaultConfig();
@@ -641,12 +751,12 @@
       if (hasUrlParams) {
         parseConfigFromUrl(new URLSearchParams(window.location.search));
       } else {
-        // Use random configuration when no URL parameters are present
-        config = generateRandomConfig();
+        // Use fully random configuration when no URL parameters are present
+        config = generateRandomConfigNoPresets();
       }
     } catch {
       // Ignore malformed URLs and use random config
-      config = generateRandomConfig();
+      config = generateRandomConfigNoPresets();
     }
 
     urlSyncEnabled = true;
@@ -683,7 +793,7 @@
             <option value="webp">WebP</option>
             <option value="svg">SVG</option>
           </select>
-          <button on:click={handleExport} disabled={isExporting}>
+          <button onclick={handleExport} disabled={isExporting}>
             {isExporting ? 'Exporting...' : 'Export'}
           </button>
         </div>
@@ -692,21 +802,26 @@
        <!-- Random Config -->
        <section class="control-section">
          <h3>Randomize</h3>
-         <button style="width: 100%; padding: 0.5rem;" on:click={generateRandom}>
-           Generate Random
-         </button>
+         <div style="display: flex; gap: 0.5rem;">
+           <button style="flex: 1; padding: 0.5rem;" onclick={generateRandomPresetColors}>
+             Randomize (Preset Colors)
+           </button>
+           <button style="flex: 1; padding: 0.5rem;" onclick={generateRandomGeneratedColors}>
+             Randomize (Generated Colors)
+           </button>
+         </div>
        </section>
        
        <!-- Resolution Controls -->
-       <section class="control-section">
-         <h3>Resolution</h3>
-         <div class="preset-buttons">
-           {#each Object.keys(RESOLUTION_PRESETS) as preset}
-             <button on:click={() => applyResolutionPreset(preset as keyof typeof RESOLUTION_PRESETS)}>
-               {preset}
-             </button>
-           {/each}
-         </div>
+      <section class="control-section">
+        <h3>Resolution</h3>
+        <div class="preset-buttons">
+          {#each Object.keys(RESOLUTION_PRESETS) as preset}
+            <button onclick={() => applyResolutionPreset(preset as keyof typeof RESOLUTION_PRESETS)}>
+              {preset}
+            </button>
+          {/each}
+        </div>
         <div class="input-row">
           <label>
             <span>W</span>
@@ -721,10 +836,14 @@
       
       <!-- Colors Section -->
       <section class="control-section">
-        <h3>Colors</h3>
+        <h3>
+          <button type="button" class="setting-title" class:locked={locks.colors} onclick={() => toggleLock('colors')} title="Click to lock/unlock for randomize">
+            Colors
+          </button>
+        </h3>
         <div class="preset-buttons">
           {#each Object.keys(COLOR_PALETTES) as palette}
-            <button on:click={() => applyColorPalette(palette as keyof typeof COLOR_PALETTES)}>
+            <button onclick={() => applyColorPalette(palette as keyof typeof COLOR_PALETTES)}>
               {palette}
             </button>
           {/each}
@@ -732,11 +851,11 @@
         <div class="colors-list">
           {#each config.colors as color, i}
             <div class="color-item">
-              <input type="color" value={color} on:input={(e) => updateColor(i, e.currentTarget.value)} />
-              <button class="remove-btn" on:click={() => removeColor(i)} disabled={config.colors.length <= 1}>×</button>
+              <input type="color" value={color} oninput={(e) => updateColor(i, e.currentTarget.value)} />
+              <button class="remove-btn" onclick={() => removeColor(i)} disabled={config.colors.length <= 1}>×</button>
             </div>
           {/each}
-          <button class="add-btn" on:click={addColor}>+ Add Color</button>
+          <button class="add-btn" onclick={addColor}>+ Add Color</button>
         </div>
       </section>
       
@@ -744,7 +863,7 @@
       <section class="control-section">
         <h3>Appearance</h3>
         <label class="control-row">
-          <span>Texture</span>
+          <button type="button" class="setting-title" class:locked={locks.texture} onclick={() => toggleLock('texture')} title="Click to lock/unlock for randomize">Texture</button>
           <select bind:value={config.texture}>
             <option value="glossy">Glossy</option>
             <option value="matte">Matte</option>
@@ -752,11 +871,11 @@
           </select>
         </label>
         <label class="control-row">
-          <span>Background</span>
+          <button type="button" class="setting-title" class:locked={locks.backgroundColor} onclick={() => toggleLock('backgroundColor')} title="Click to lock/unlock for randomize">Background</button>
           <input type="color" bind:value={config.backgroundColor} />
         </label>
         <label class="control-row">
-          <span>Direction</span>
+          <button type="button" class="setting-title" class:locked={locks.direction} onclick={() => toggleLock('direction')} title="Click to lock/unlock for randomize">Direction</button>
           <select bind:value={config.direction}>
             <option value="top-bottom">Top-Bottom</option>
             <option value="left-right">Left-Right</option>
@@ -765,7 +884,7 @@
           </select>
         </label>
          <label class="control-row">
-           <span>Stacking</span>
+           <button type="button" class="setting-title" class:locked={locks.stacking} onclick={() => toggleLock('stacking')} title="Click to lock/unlock for randomize">Stacking</button>
            <select bind:value={config.stacking}>
              <option value="perfect">Perfect Stack</option>
              <option value="helix">Helix</option>
@@ -774,61 +893,61 @@
       </section>
       
        <!-- Stick Settings -->
-       <section class="control-section">
-         <h3>Stick Settings</h3>
-         <label class="control-row slider">
-           <span>Count: {config.stickCount}</span>
-           <input type="range" bind:value={config.stickCount} min="1" max="200" />
-         </label>
-         <label class="control-row slider">
-           <span>Gap: {config.stickGap.toFixed(2)}</span>
-           <input type="range" bind:value={config.stickGap} min="0" max="5.0" step="0.01" />
-         </label>
-         <label class="control-row slider">
-           <span>Thickness: {config.stickThickness.toFixed(1)}</span>
-           <input type="range" bind:value={config.stickThickness} min="0.1" max="3.0" step="0.1" />
-         </label>
-         <label class="control-row slider">
-           <span>Roundness: {config.stickRoundness.toFixed(2)}</span>
-           <input type="range" bind:value={config.stickRoundness} min="0" max="1" step="0.01" />
-         </label>
-         <label class="control-row slider">
-           <span>Bevel: {config.stickBevel.toFixed(2)}</span>
-           <input type="range" bind:value={config.stickBevel} min="0" max="1" step="0.01" />
-         </label>
+        <section class="control-section">
+          <h3>Stick Settings</h3>
+          <label class="control-row slider">
+           <button type="button" class="setting-title" class:locked={locks.stickCount} onclick={() => toggleLock('stickCount')} title="Click to lock/unlock for randomize">Count: {config.stickCount}</button>
+            <input type="range" bind:value={config.stickCount} min="1" max="200" />
+          </label>
+          <label class="control-row slider">
+           <button type="button" class="setting-title" class:locked={locks.stickGap} onclick={() => toggleLock('stickGap')} title="Click to lock/unlock for randomize">Gap: {config.stickGap.toFixed(2)}</button>
+            <input type="range" bind:value={config.stickGap} min="0" max="5.0" step="0.01" />
+          </label>
+          <label class="control-row slider">
+           <button type="button" class="setting-title" class:locked={locks.stickThickness} onclick={() => toggleLock('stickThickness')} title="Click to lock/unlock for randomize">Thickness: {config.stickThickness.toFixed(1)}</button>
+            <input type="range" bind:value={config.stickThickness} min="0.1" max="3.0" step="0.1" />
+          </label>
+          <label class="control-row slider">
+           <button type="button" class="setting-title" class:locked={locks.stickRoundness} onclick={() => toggleLock('stickRoundness')} title="Click to lock/unlock for randomize">Roundness: {config.stickRoundness.toFixed(2)}</button>
+            <input type="range" bind:value={config.stickRoundness} min="0" max="1" step="0.01" />
+          </label>
+          <label class="control-row slider">
+           <button type="button" class="setting-title" class:locked={locks.stickBevel} onclick={() => toggleLock('stickBevel')} title="Click to lock/unlock for randomize">Bevel: {config.stickBevel.toFixed(2)}</button>
+            <input type="range" bind:value={config.stickBevel} min="0" max="1" step="0.01" />
+          </label>
          
          <!-- Helix Settings (when helix mode is selected) -->
          {#if config.stacking === 'helix'}
            <div style="border-top: 1px solid #333; margin-top: 0.75rem; padding-top: 0.75rem;">
-             <label class="control-row slider">
-               <span>Overhang: {config.stickOverhang.toFixed(0)}°</span>
-               <input type="range" bind:value={config.stickOverhang} min="0" max="180" step="1" />
-             </label>
-             <label class="control-row slider">
-               <span>Rotation Center X: {config.rotationCenterOffsetX.toFixed(0)}%</span>
-               <input type="range" bind:value={config.rotationCenterOffsetX} min="-100" max="100" step="5" />
-             </label>
-             <label class="control-row slider">
-               <span>Rotation Center Y: {config.rotationCenterOffsetY.toFixed(0)}%</span>
-               <input type="range" bind:value={config.rotationCenterOffsetY} min="-100" max="100" step="5" />
-             </label>
-           </div>
-         {/if}
-       </section>
+              <label class="control-row slider">
+                <button type="button" class="setting-title" class:locked={locks.stickOverhang} onclick={() => toggleLock('stickOverhang')} title="Click to lock/unlock for randomize">Overhang: {config.stickOverhang.toFixed(0)}°</button>
+                <input type="range" bind:value={config.stickOverhang} min="0" max="180" step="1" />
+              </label>
+              <label class="control-row slider">
+                <button type="button" class="setting-title" class:locked={locks.rotationCenterOffsetX} onclick={() => toggleLock('rotationCenterOffsetX')} title="Click to lock/unlock for randomize">Rotation Center X: {config.rotationCenterOffsetX.toFixed(0)}%</button>
+                <input type="range" bind:value={config.rotationCenterOffsetX} min="-100" max="100" step="5" />
+              </label>
+              <label class="control-row slider">
+                <button type="button" class="setting-title" class:locked={locks.rotationCenterOffsetY} onclick={() => toggleLock('rotationCenterOffsetY')} title="Click to lock/unlock for randomize">Rotation Center Y: {config.rotationCenterOffsetY.toFixed(0)}%</button>
+                <input type="range" bind:value={config.rotationCenterOffsetY} min="-100" max="100" step="5" />
+              </label>
+            </div>
+          {/if}
+        </section>
       
       <!-- Camera View -->
       <section class="control-section">
         <h3>Camera View</h3>
         <label class="control-row slider">
-          <span>Azimuth: {config.camera.azimuth}°</span>
+          <button type="button" class="setting-title" class:locked={locks.cameraAzimuth} onclick={() => toggleLock('cameraAzimuth')} title="Click to lock/unlock for randomize">Azimuth: {config.camera.azimuth}°</button>
           <input type="range" bind:value={config.camera.azimuth} min="0" max="360" step="5" />
         </label>
         <label class="control-row slider">
-          <span>Elevation: {config.camera.elevation}°</span>
+          <button type="button" class="setting-title" class:locked={locks.cameraElevation} onclick={() => toggleLock('cameraElevation')} title="Click to lock/unlock for randomize">Elevation: {config.camera.elevation}°</button>
           <input type="range" bind:value={config.camera.elevation} min="-80" max="80" step="5" />
         </label>
         <label class="control-row slider">
-          <span>Distance: {config.camera.distance.toFixed(1)}</span>
+          <button type="button" class="setting-title" class:locked={locks.cameraDistance} onclick={() => toggleLock('cameraDistance')} title="Click to lock/unlock for randomize">Distance: {config.camera.distance.toFixed(1)}</button>
           <input type="range" bind:value={config.camera.distance} min="5" max="50" step="0.1" />
         </label>
       </section>
@@ -838,27 +957,38 @@
         <h3>Lighting</h3>
         <label class="control-row checkbox">
           <input type="checkbox" bind:checked={config.lighting.enabled} />
-          <span>Enable Lighting</span>
+          <button
+            type="button"
+            class="setting-title"
+            class:locked={locks.lightingEnabled}
+            onclick={(e) => {
+              e.preventDefault();
+              toggleLock('lightingEnabled');
+            }}
+            title="Click to lock/unlock for randomize"
+          >
+            Enable Lighting
+          </button>
         </label>
         {#if config.lighting.enabled}
           <label class="control-row slider">
-            <span>Intensity: {config.lighting.intensity.toFixed(1)}</span>
+            <button type="button" class="setting-title" class:locked={locks.lightingIntensity} onclick={() => toggleLock('lightingIntensity')} title="Click to lock/unlock for randomize">Intensity: {config.lighting.intensity.toFixed(1)}</button>
             <input type="range" bind:value={config.lighting.intensity} min="0" max="3" step="0.1" />
           </label>
           <label class="control-row slider">
-            <span>Position X: {config.lighting.position.x}</span>
+            <button type="button" class="setting-title" class:locked={locks.lightingX} onclick={() => toggleLock('lightingX')} title="Click to lock/unlock for randomize">Position X: {config.lighting.position.x}</button>
             <input type="range" bind:value={config.lighting.position.x} min="-10" max="10" step="0.5" />
           </label>
           <label class="control-row slider">
-            <span>Position Y: {config.lighting.position.y}</span>
+            <button type="button" class="setting-title" class:locked={locks.lightingY} onclick={() => toggleLock('lightingY')} title="Click to lock/unlock for randomize">Position Y: {config.lighting.position.y}</button>
             <input type="range" bind:value={config.lighting.position.y} min="-10" max="10" step="0.5" />
           </label>
           <label class="control-row slider">
-            <span>Position Z: {config.lighting.position.z}</span>
+            <button type="button" class="setting-title" class:locked={locks.lightingZ} onclick={() => toggleLock('lightingZ')} title="Click to lock/unlock for randomize">Position Z: {config.lighting.position.z}</button>
             <input type="range" bind:value={config.lighting.position.z} min="0" max="20" step="0.5" />
           </label>
           <label class="control-row slider">
-            <span>Ambient: {config.lighting.ambientIntensity.toFixed(1)}</span>
+            <button type="button" class="setting-title" class:locked={locks.lightingAmbient} onclick={() => toggleLock('lightingAmbient')} title="Click to lock/unlock for randomize">Ambient: {config.lighting.ambientIntensity.toFixed(1)}</button>
             <input type="range" bind:value={config.lighting.ambientIntensity} min="0" max="1" step="0.1" />
           </label>
         {/if}
@@ -868,7 +998,7 @@
         <h3>CLI</h3>
         <div class="cli-controls">
           <textarea class="cli-text" readonly rows="4">{cliCommand}</textarea>
-          <button class="cli-copy" on:click={copyCliCommand}>Copy</button>
+          <button class="cli-copy" onclick={copyCliCommand}>Copy</button>
         </div>
       </section>
     </div>
@@ -1161,10 +1291,42 @@
     margin-bottom: 0;
   }
   
-  .control-row span {
+  .control-row .setting-title {
     min-width: 100px;
     font-size: 0.875rem;
     color: #ccc;
+    text-align: left;
+  }
+
+  .setting-title {
+    cursor: pointer;
+    user-select: none;
+    background: transparent;
+    border: none;
+    padding: 0;
+    font: inherit;
+    line-height: inherit;
+    color: inherit;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  .setting-title:not(.locked):hover {
+    color: #fff;
+  }
+
+  .setting-title.locked {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.125rem 0.5rem;
+    border-radius: 999px;
+    background: #3a1111;
+    border: 1px solid #ff5a5a;
+    color: #ffd5d5;
+  }
+
+  .setting-title.locked:hover {
+    background: #4a1616;
   }
   
   .control-row select {
@@ -1193,7 +1355,7 @@
     gap: 0.375rem;
   }
   
-  .control-row.slider span {
+  .control-row.slider .setting-title {
     min-width: auto;
     font-size: 0.8125rem;
     color: #aaa;
@@ -1239,7 +1401,7 @@
     cursor: pointer;
   }
   
-  .control-row.checkbox span {
+  .control-row.checkbox .setting-title {
     min-width: auto;
   }
   
