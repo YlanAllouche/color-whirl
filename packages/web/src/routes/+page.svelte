@@ -13,6 +13,8 @@
     downloadFile
   } from '@wallpaper-maker/core';
 
+  import { COLOR_PRESETS, COLOR_PRESET_GROUPS, type ColorPreset } from '$lib/color-presets';
+
   
   // Reactive state using Svelte 5 runes
   let config = $state<WallpaperConfig>({ ...DEFAULT_CONFIG });
@@ -85,6 +87,41 @@
 
   function toggleLock(key: LockKey) {
     locks = { ...locks, [key]: !locks[key] };
+  }
+
+  const colorPresetGroups: Array<{ group: string; presets: ColorPreset[] }> = COLOR_PRESET_GROUPS
+    .map((group) => ({ group, presets: COLOR_PRESETS.filter((p) => p.group === group) }))
+    .filter((g) => g.presets.length > 0);
+
+  // UI-only: selected preset is not synced to URL.
+  let selectedColorPresetId = $state(COLOR_PRESETS[0]?.id ?? '');
+  let selectedColorPreset = $derived(COLOR_PRESETS.find((p) => p.id === selectedColorPresetId) ?? null);
+
+  function applyColorPreset(preset: ColorPreset) {
+    if (preset.colors.length === 0) return;
+    config = {
+      ...config,
+      colors: [...preset.colors],
+      backgroundColor: preset.backgroundColor
+    };
+  }
+
+  function applySelectedColorPreset() {
+    const preset = COLOR_PRESETS.find((p) => p.id === selectedColorPresetId);
+    if (!preset) return;
+    applyColorPreset(preset);
+  }
+
+  function cycleColorPreset(delta: number) {
+    if (COLOR_PRESETS.length === 0) return;
+
+    const currentIndex = COLOR_PRESETS.findIndex((p) => p.id === selectedColorPresetId);
+    const base = currentIndex >= 0 ? currentIndex : 0;
+    const nextIndex = (base + delta + COLOR_PRESETS.length) % COLOR_PRESETS.length;
+    const next = COLOR_PRESETS[nextIndex];
+
+    selectedColorPresetId = next.id;
+    applyColorPreset(next);
   }
   
   // Derived values
@@ -797,6 +834,33 @@
             Colors
           </button>
         </h3>
+        <div class="palette-controls">
+          <div class="palette-row">
+            <button type="button" class="palette-nav" onclick={() => cycleColorPreset(-1)} title="Previous preset">
+              Prev
+            </button>
+            <select bind:value={selectedColorPresetId} onchange={applySelectedColorPreset} title="Apply a preset to colors + background">
+              {#each colorPresetGroups as g}
+                <optgroup label={g.group}>
+                  {#each g.presets as preset}
+                    <option value={preset.id}>{preset.label}</option>
+                  {/each}
+                </optgroup>
+              {/each}
+            </select>
+            <button type="button" class="palette-nav" onclick={() => cycleColorPreset(1)} title="Next preset">
+              Next
+            </button>
+          </div>
+          {#if selectedColorPreset}
+            <div class="palette-preview" title={selectedColorPreset.source ?? ''}>
+              <span class="swatch swatch-bg" style={`background: ${selectedColorPreset.backgroundColor}`}></span>
+              {#each selectedColorPreset.colors.slice(0, 10) as c}
+                <span class="swatch" style={`background: ${c}`}></span>
+              {/each}
+            </div>
+          {/if}
+        </div>
         <div class="colors-list">
           {#each config.colors as color, i}
             <div class="color-item">
@@ -1141,6 +1205,68 @@
     background: #333;
     color: #fff;
     border-color: #444;
+  }
+
+  .palette-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .palette-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+  }
+
+  .palette-row select {
+    flex: 1;
+    min-width: 0;
+    padding: 0.375rem 0.5rem;
+    border-radius: 6px;
+    border: 1px solid #333;
+    background: #252530;
+    color: #fff;
+    font-size: 0.8125rem;
+  }
+
+  .palette-nav {
+    padding: 0.375rem 0.5rem;
+    border-radius: 6px;
+    border: 1px solid #333;
+    background: #1b1b24;
+    color: #ddd;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.75rem;
+    transition: background 0.2s, color 0.2s, border-color 0.2s;
+    white-space: nowrap;
+  }
+
+  .palette-nav:hover {
+    background: #333;
+    color: #fff;
+    border-color: #444;
+  }
+
+  .palette-preview {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    flex-wrap: wrap;
+  }
+
+  .swatch {
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25) inset;
+  }
+
+  .swatch-bg {
+    width: 22px;
   }
   
   .input-row {
