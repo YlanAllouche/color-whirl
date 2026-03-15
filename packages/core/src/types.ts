@@ -16,6 +16,40 @@ export interface LightingConfig {
   ambientIntensity: number;
 }
 
+export type EnvironmentStyle = 'studio' | 'overcast' | 'sunset';
+
+export interface EnvironmentConfig {
+  enabled: boolean;
+  /** Overall intensity for image-based lighting reflections */
+  intensity: number;
+  /** Rotation around the Y axis, in degrees */
+  rotation: number;
+  style: EnvironmentStyle;
+}
+
+export type ShadowType = 'pcfsoft' | 'vsm';
+
+export interface ShadowConfig {
+  enabled: boolean;
+  type: ShadowType;
+  /** Shadow map size (power of two recommended) */
+  mapSize: number;
+  bias: number;
+  normalBias: number;
+}
+
+export type ToneMappingType = 'aces' | 'none';
+
+export interface RenderingConfig {
+  toneMapping: ToneMappingType;
+  exposure: number;
+}
+
+export interface GeometryConfig {
+  /** 0..1: controls bevel/curve segments for smoother shading */
+  quality: number;
+}
+
 export interface WallpaperConfig {
   type: 'popsickle';
   width: number;
@@ -41,6 +75,10 @@ export interface WallpaperConfig {
   stickBevel: number;
   lighting: LightingConfig;
   camera: CameraConfig;
+  environment: EnvironmentConfig;
+  shadows: ShadowConfig;
+  rendering: RenderingConfig;
+  geometry: GeometryConfig;
 }
 
 export const RESOLUTION_PRESETS = {
@@ -88,6 +126,26 @@ export const DEFAULT_CONFIG: WallpaperConfig = {
     distance: 17.3,
     azimuth: 45,
     elevation: 35.3
+  },
+  environment: {
+    enabled: true,
+    intensity: 1.2,
+    rotation: 0,
+    style: 'studio'
+  },
+  shadows: {
+    enabled: true,
+    type: 'pcfsoft',
+    mapSize: 2048,
+    bias: -0.0005,
+    normalBias: 0.02
+  },
+  rendering: {
+    toneMapping: 'aces',
+    exposure: 1.0
+  },
+  geometry: {
+    quality: 0.6
   }
 };
 
@@ -249,6 +307,11 @@ export function generateRandomConfigNoPresets(): WallpaperConfig {
       distance: randomWeighted(5, 50, 17.3),
       azimuth: randomWeighted(0, 360, 45),
       elevation: randomWeighted(-80, 80, 35.3)
-    }
+    },
+    // Render pipeline settings are not randomized.
+    environment: { ...DEFAULT_CONFIG.environment },
+    shadows: { ...DEFAULT_CONFIG.shadows },
+    rendering: { ...DEFAULT_CONFIG.rendering },
+    geometry: { ...DEFAULT_CONFIG.geometry }
   };
 }

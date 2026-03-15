@@ -17,7 +17,7 @@
 
   
   // Reactive state using Svelte 5 runes
-  let config = $state<WallpaperConfig>({ ...DEFAULT_CONFIG });
+  let config = $state<WallpaperConfig>(cloneDefaultConfig());
   
   let canvasContainer: HTMLDivElement;
   let renderer: THREE.WebGLRenderer | null = null;
@@ -132,10 +132,12 @@
     height: number,
     depth: number,
     roundness: number,
-    bevel: number
+    bevel: number,
+    geometryQuality: number
   ): THREE.BufferGeometry {
     const safeRoundness = Math.max(0, Math.min(1, roundness));
     const safeBevel = Math.max(0, Math.min(1, bevel));
+    const q = Math.max(0, Math.min(1, geometryQuality));
 
     const maxRadius = Math.min(width, height) / 2;
     const radius = maxRadius * safeRoundness;
@@ -166,27 +168,32 @@
     const bevelSize = maxBevel * safeBevel;
     const bevelThickness = maxBevel * safeBevel;
 
+    const curveSegments = Math.round(18 + q * 102); // 18..120
+    const bevelSegments = Math.round(4 + q * 28); // 4..32
+
     const extrudeSettings: THREE.ExtrudeGeometryOptions = {
       depth: depth,
       bevelEnabled: safeBevel > 0,
-      bevelSegments: 4,
+      bevelSegments,
       steps: 1,
       bevelSize,
       bevelThickness,
-      curveSegments: 12
+      curveSegments
     };
     
     const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
     geometry.center();
+    geometry.computeVertexNormals();
     
     return geometry;
   }
   
-  function createMaterial(texture: string, color: string): THREE.MeshPhysicalMaterial {
+  function createMaterial(texture: string, color: string, envIntensity: number): THREE.MeshPhysicalMaterial {
     const baseConfig: THREE.MeshPhysicalMaterialParameters = {
       color: color,
       transparent: true,
-      opacity: 0.98
+      opacity: 0.98,
+      dithering: true
     };
 
     switch (texture) {
@@ -198,6 +205,7 @@
           clearcoat: 1.0,
           clearcoatRoughness: 0.05,
           reflectivity: 1.0,
+          envMapIntensity: envIntensity,
           ior: 1.5,
           transmission: 0.0,
           thickness: 0.1
@@ -205,12 +213,12 @@
       case 'metallic':
         return new THREE.MeshPhysicalMaterial({
           ...baseConfig,
-          roughness: 0.15,
-          metalness: 1.0,
+          roughness: 0.25,
+          metalness: 0.95,
           clearcoat: 0.3,
           clearcoatRoughness: 0.1,
           reflectivity: 1.0,
-          envMapIntensity: 1.5,
+          envMapIntensity: envIntensity * 1.6,
           ior: 2.0
         });
       case 'matte':
@@ -223,7 +231,8 @@
           sheen: 0.3,
           sheenRoughness: 0.8,
           sheenColor: new THREE.Color(0xffffff),
-          reflectivity: 0.2
+          reflectivity: 0.2,
+          envMapIntensity: envIntensity * 0.35
         });
     }
   }
@@ -265,6 +274,104 @@
     return (deg * Math.PI) / 180;
   }
 
+  let envRenderTarget: THREE.WebGLRenderTarget | null = null;
+
+  function clamp01(n: number): number {
+    return Math.max(0, Math.min(1, n));
+  }
+
+  function createProceduralEnvironment(
+    renderer: THREE.WebGLRenderer,
+    style: 'studio' | 'overcast' | 'sunset',
+    rotationDeg: number
+  ): THREE.Texture {
+    const width = 256;
+    const height = 128;
+    const data = new Uint8Array(width * height * 4);
+
+    const rot = ((((rotationDeg % 360) + 360) % 360) / 360) * width;
+
+    const addSoftbox = (u: number, v: number, radius: number, strength: number) => {
+      return (x: number, y: number) => {
+        const dx = x - u;
+        const dy = y - v;
+        const d2 = dx * dx + dy * dy;
+        const r2 = radius * radius;
+        if (d2 >= r2) return 0;
+        const t = 1 - d2 / r2;
+        return strength * t * t;
+      };
+    };
+
+    const spotA = addSoftbox(0.25, 0.22, 0.12, 0.9);
+    const spotB = addSoftbox(0.72, 0.18, 0.16, 0.7);
+    const spotC = addSoftbox(0.52, 0.55, 0.22, 0.45);
+
+    for (let y = 0; y < height; y++) {
+      const v = y / (height - 1);
+      for (let x = 0; x < width; x++) {
+        const xx = (x + rot) % width;
+        const u = xx / (width - 1);
+
+        // Base gradients
+        let r = 0;
+        let g = 0;
+        let b = 0;
+
+        if (style === 'overcast') {
+          const top = 0.78;
+          const bot = 0.46;
+          const t = clamp01(1 - v);
+          const k = bot + (top - bot) * Math.pow(t, 1.4);
+          r = k;
+          g = k;
+          b = k;
+        } else if (style === 'sunset') {
+          const t = clamp01(1 - v);
+          const warm = 0.55 + 0.4 * Math.pow(t, 1.2);
+          r = warm;
+          g = 0.35 + 0.25 * Math.pow(t, 1.1);
+          b = 0.32 + 0.18 * Math.pow(1 - t, 1.7);
+        } else {
+          // studio
+          const t = clamp01(1 - v);
+          const sky = 0.74 * Math.pow(t, 1.6);
+          const floor = 0.06 + 0.05 * (1 - t);
+          const k = floor + sky;
+          r = k;
+          g = k;
+          b = k;
+        }
+
+        // Softbox highlights
+        const s = spotA(u, v) + spotB(u, v) + spotC(u, v);
+        r = clamp01(r + s);
+        g = clamp01(g + s);
+        b = clamp01(b + s);
+
+        const i = (y * width + x) * 4;
+        data[i + 0] = Math.round(r * 255);
+        data[i + 1] = Math.round(g * 255);
+        data[i + 2] = Math.round(b * 255);
+        data[i + 3] = 255;
+      }
+    }
+
+    const tex = new THREE.DataTexture(data, width, height, THREE.RGBAFormat);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.mapping = THREE.EquirectangularReflectionMapping;
+    tex.needsUpdate = true;
+
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    pmrem.compileEquirectangularShader();
+    envRenderTarget?.dispose();
+    envRenderTarget = pmrem.fromEquirectangular(tex);
+    pmrem.dispose();
+    tex.dispose();
+
+    return envRenderTarget.texture;
+  }
+
    function getStackingOffset(
      index: number,
      stickDimensions: { width: number; height: number; depth: number },
@@ -302,6 +409,8 @@
     if (renderer) {
       renderer.dispose();
       canvasContainer.innerHTML = '';
+      envRenderTarget?.dispose();
+      envRenderTarget = null;
     }
     
        const { 
@@ -319,10 +428,14 @@
          stickRatio,
          stickThickness,
          stickRoundness,
-         stickBevel,
-         lighting,
-         camera: cameraConfig
-       } = config;
+          stickBevel,
+          lighting,
+          camera: cameraConfig,
+          environment: environmentConfig,
+          shadows: shadowsConfig,
+          rendering: renderingConfig,
+          geometry: geometryConfig
+        } = config;
     
     scene = new THREE.Scene();
     scene.background = new THREE.Color(backgroundColor);
@@ -350,9 +463,14 @@
     camera.updateProjectionMatrix();
     camera.lookAt(0, 0, 0);
     
+    let keyLight: THREE.DirectionalLight | null = null;
+
     if (lighting.enabled) {
       const ambientLight = new THREE.AmbientLight(0xffffff, lighting.ambientIntensity);
       scene.add(ambientLight);
+
+      const hemi = new THREE.HemisphereLight(0xffffff, 0x0b0b10, Math.max(0.0, lighting.ambientIntensity * 0.55));
+      scene.add(hemi);
       
       const directionalLight = new THREE.DirectionalLight(0xffffff, lighting.intensity);
       directionalLight.position.set(
@@ -360,12 +478,17 @@
         lighting.position.y,
         lighting.position.z
       );
-      directionalLight.castShadow = true;
+      directionalLight.castShadow = shadowsConfig.enabled;
       scene.add(directionalLight);
+      keyLight = directionalLight;
       
       const fillLight = new THREE.DirectionalLight(0xffffff, lighting.intensity * 0.3);
       fillLight.position.set(-lighting.position.x, -lighting.position.y, lighting.position.z * 0.5);
       scene.add(fillLight);
+
+      const rimLight = new THREE.DirectionalLight(0xffffff, lighting.intensity * 0.25);
+      rimLight.position.set(lighting.position.x * 0.2, -lighting.position.y, lighting.position.z * 1.2);
+      scene.add(rimLight);
     } else {
       const ambientLight = new THREE.AmbientLight(0xffffff, 1);
       scene.add(ambientLight);
@@ -375,23 +498,27 @@
      
      const group = new THREE.Group();
      
-     for (let i = 0; i < stickCount; i++) {
-       const color = colors[i % colors.length];
-       const material = createMaterial(texture, color);
-     const geometry = createRoundedBox(
-       stickDimensions.width,
-       stickDimensions.height,
-       stickDimensions.depth,
-       stickRoundness,
-       stickBevel
-     );
-       
-       const mesh = new THREE.Mesh(geometry, material);
-       
-       const offset = getStackingOffset(i, stickDimensions, stickOverhang, rotationCenterOffsetX, rotationCenterOffsetY, stickGap);
-       
-       mesh.position.set(offset.x, offset.y, offset.z);
-       mesh.rotation.z = offset.rotationZ;
+      for (let i = 0; i < stickCount; i++) {
+        const color = colors[i % colors.length];
+        const envIntensity = environmentConfig.enabled ? environmentConfig.intensity : 0;
+        const material = createMaterial(texture, color, envIntensity);
+      const stickGeometry = createRoundedBox(
+        stickDimensions.width,
+        stickDimensions.height,
+        stickDimensions.depth,
+        stickRoundness,
+        stickBevel,
+        geometryConfig.quality
+      );
+        
+        const mesh = new THREE.Mesh(stickGeometry, material);
+        mesh.castShadow = shadowsConfig.enabled;
+        mesh.receiveShadow = shadowsConfig.enabled;
+        
+        const offset = getStackingOffset(i, stickDimensions, stickOverhang, rotationCenterOffsetX, rotationCenterOffsetY, stickGap);
+        
+        mesh.position.set(offset.x, offset.y, offset.z);
+        mesh.rotation.z = offset.rotationZ;
       
       group.add(mesh);
     }
@@ -407,6 +534,16 @@
       alpha: true,
       preserveDrawingBuffer: true
     });
+
+    // Color management + tone mapping
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    if (renderingConfig.toneMapping === 'aces') {
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    } else {
+      renderer.toneMapping = THREE.NoToneMapping;
+    }
+    renderer.toneMappingExposure = renderingConfig.exposure;
+    (renderer as any).physicallyCorrectLights = true;
     
     const containerWidth = canvasContainer.clientWidth;
     const containerHeight = canvasContainer.clientHeight;
@@ -415,8 +552,36 @@
     
     renderer.setSize(previewWidth, previewHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.shadowMap.enabled = shadowsConfig.enabled;
+    renderer.shadowMap.type = shadowsConfig.type === 'vsm' ? THREE.VSMShadowMap : THREE.PCFSoftShadowMap;
+
+    if (environmentConfig.enabled) {
+      scene.environment = createProceduralEnvironment(renderer, environmentConfig.style, environmentConfig.rotation);
+    } else {
+      scene.environment = null;
+    }
+
+    if (keyLight && shadowsConfig.enabled) {
+      const map = Math.max(256, Math.min(8192, Math.round(shadowsConfig.mapSize)));
+      keyLight.shadow.mapSize.set(map, map);
+      keyLight.shadow.bias = shadowsConfig.bias;
+      keyLight.shadow.normalBias = shadowsConfig.normalBias;
+
+      // Fit shadow camera to the content.
+      const size = box.getSize(new THREE.Vector3());
+      const pad = Math.max(size.x, size.y) * 0.35 + 0.5;
+      const shadowCam = keyLight.shadow.camera as THREE.OrthographicCamera;
+      shadowCam.left = -size.x / 2 - pad;
+      shadowCam.right = size.x / 2 + pad;
+      shadowCam.top = size.y / 2 + pad;
+      shadowCam.bottom = -size.y / 2 - pad;
+      shadowCam.near = 0.1;
+      shadowCam.far = Math.max(50, size.z + 50);
+      shadowCam.updateProjectionMatrix();
+
+      keyLight.target.position.copy(center);
+      scene.add(keyLight.target);
+    }
     
     canvasContainer.appendChild(renderer.domElement);
     renderer.render(scene, camera);
@@ -484,16 +649,20 @@
   }
 
   function cloneDefaultConfig(): WallpaperConfig {
-     return {
-       ...DEFAULT_CONFIG,
-       colors: [...DEFAULT_CONFIG.colors],
-       lighting: {
-         ...DEFAULT_CONFIG.lighting,
-         position: { ...DEFAULT_CONFIG.lighting.position }
-       },
-       camera: { ...DEFAULT_CONFIG.camera }
-     };
-  }
+      return {
+        ...DEFAULT_CONFIG,
+        colors: [...DEFAULT_CONFIG.colors],
+        lighting: {
+          ...DEFAULT_CONFIG.lighting,
+          position: { ...DEFAULT_CONFIG.lighting.position }
+        },
+        camera: { ...DEFAULT_CONFIG.camera },
+        environment: { ...DEFAULT_CONFIG.environment },
+        shadows: { ...DEFAULT_CONFIG.shadows },
+        rendering: { ...DEFAULT_CONFIG.rendering },
+        geometry: { ...DEFAULT_CONFIG.geometry }
+      };
+   }
 
   function mergeWithLocks(next: WallpaperConfig): WallpaperConfig {
     const current = config;
@@ -504,12 +673,22 @@
         ...next.lighting,
         position: { ...next.lighting.position }
       },
-      camera: { ...next.camera }
+      camera: { ...next.camera },
+      environment: { ...next.environment },
+      shadows: { ...next.shadows },
+      rendering: { ...next.rendering },
+      geometry: { ...next.geometry }
     };
 
     // Resolution is not randomized; always preserve the current values.
     merged.width = current.width;
     merged.height = current.height;
+
+    // Render pipeline settings are not randomized; always preserve the current values.
+    merged.environment = { ...current.environment };
+    merged.shadows = { ...current.shadows };
+    merged.rendering = { ...current.rendering };
+    merged.geometry = { ...current.geometry };
 
      if (locks.colors) merged.colors = [...current.colors];
      if (locks.backgroundColor) merged.backgroundColor = current.backgroundColor;
@@ -567,6 +746,8 @@
       return raw === '1' || raw === 'true' || raw === 'yes';
     };
 
+    const clampNum = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
+
     next.width = num('w', next.width);
     next.height = num('h', next.height);
 
@@ -603,6 +784,32 @@
     next.camera.distance = num('cd', next.camera.distance);
     next.camera.azimuth = num('ca', next.camera.azimuth);
     next.camera.elevation = num('ce', next.camera.elevation);
+
+    // Render pipeline
+    const tm = searchParams.get('tm');
+    if (tm === 'aces' || tm === 'none') {
+      next.rendering.toneMapping = tm;
+    }
+    next.rendering.exposure = clampNum(num('exp', next.rendering.exposure), 0.1, 3.0);
+
+    next.environment.enabled = bool('env', next.environment.enabled);
+    const envStyle = searchParams.get('envs');
+    if (envStyle === 'studio' || envStyle === 'overcast' || envStyle === 'sunset') {
+      next.environment.style = envStyle;
+    }
+    next.environment.intensity = clampNum(num('envi', next.environment.intensity), 0, 5);
+    next.environment.rotation = clampNum(num('envr', next.environment.rotation), 0, 360);
+
+    next.shadows.enabled = bool('sh', next.shadows.enabled);
+    const shType = searchParams.get('sht');
+    if (shType === 'pcfsoft' || shType === 'vsm') {
+      next.shadows.type = shType;
+    }
+    next.shadows.mapSize = Math.round(clampNum(num('shm', next.shadows.mapSize), 256, 8192));
+    next.shadows.bias = num('shb', next.shadows.bias);
+    next.shadows.normalBias = num('shn', next.shadows.normalBias);
+
+    next.geometry.quality = clampNum(num('gq', next.geometry.quality), 0, 1);
 
     const fmt = searchParams.get('fmt');
     if (fmt === 'png' || fmt === 'jpg' || fmt === 'webp' || fmt === 'svg') {
@@ -641,6 +848,20 @@
     p.set('cd', String(config.camera.distance));
     p.set('ca', String(config.camera.azimuth));
     p.set('ce', String(config.camera.elevation));
+
+    // Render pipeline
+    p.set('tm', config.rendering.toneMapping);
+    p.set('exp', String(config.rendering.exposure));
+    p.set('env', config.environment.enabled ? '1' : '0');
+    p.set('envs', config.environment.style);
+    p.set('envi', String(config.environment.intensity));
+    p.set('envr', String(config.environment.rotation));
+    p.set('sh', config.shadows.enabled ? '1' : '0');
+    p.set('sht', config.shadows.type);
+    p.set('shm', String(config.shadows.mapSize));
+    p.set('shb', String(config.shadows.bias));
+    p.set('shn', String(config.shadows.normalBias));
+    p.set('gq', String(config.geometry.quality));
 
     p.set('fmt', exportFormat);
 
@@ -995,6 +1216,80 @@
             <input type="range" bind:value={config.lighting.ambientIntensity} min="0" max="1" step="0.1" />
           </label>
         {/if}
+      </section>
+
+      <!-- Render -->
+      <section class="control-section">
+        <h3>Render</h3>
+
+        <label class="control-row slider">
+          <span class="setting-title">Exposure: {config.rendering.exposure.toFixed(2)}</span>
+          <input type="range" bind:value={config.rendering.exposure} min="0.3" max="2.5" step="0.01" />
+        </label>
+
+        <label class="control-row">
+          <span class="setting-title">Tone Mapping</span>
+          <select bind:value={config.rendering.toneMapping}>
+            <option value="aces">ACES</option>
+            <option value="none">None</option>
+          </select>
+        </label>
+
+        <div style="border-top: 1px solid #333; margin-top: 0.75rem; padding-top: 0.75rem;">
+          <label class="control-row checkbox">
+            <input type="checkbox" bind:checked={config.environment.enabled} />
+            <span class="setting-title">Environment (Reflections)</span>
+          </label>
+          <label class="control-row">
+            <span class="setting-title">Env Style</span>
+            <select bind:value={config.environment.style} disabled={!config.environment.enabled}>
+              <option value="studio">Studio</option>
+              <option value="overcast">Overcast</option>
+              <option value="sunset">Sunset</option>
+            </select>
+          </label>
+          <label class="control-row slider">
+            <span class="setting-title">Env Intensity: {config.environment.intensity.toFixed(2)}</span>
+            <input type="range" bind:value={config.environment.intensity} min="0" max="5" step="0.01" disabled={!config.environment.enabled} />
+          </label>
+          <label class="control-row slider">
+            <span class="setting-title">Env Rotation: {config.environment.rotation.toFixed(0)}°</span>
+            <input type="range" bind:value={config.environment.rotation} min="0" max="360" step="1" disabled={!config.environment.enabled} />
+          </label>
+        </div>
+
+        <div style="border-top: 1px solid #333; margin-top: 0.75rem; padding-top: 0.75rem;">
+          <label class="control-row checkbox">
+            <input type="checkbox" bind:checked={config.shadows.enabled} />
+            <span class="setting-title">Shadows</span>
+          </label>
+          <label class="control-row">
+            <span class="setting-title">Shadow Type</span>
+            <select bind:value={config.shadows.type} disabled={!config.shadows.enabled}>
+              <option value="pcfsoft">PCF Soft</option>
+              <option value="vsm">VSM</option>
+            </select>
+          </label>
+          <label class="control-row slider">
+            <span class="setting-title">Shadow Map: {config.shadows.mapSize}</span>
+            <input type="range" bind:value={config.shadows.mapSize} min="256" max="4096" step="256" disabled={!config.shadows.enabled} />
+          </label>
+          <label class="control-row slider">
+            <span class="setting-title">Shadow Bias: {config.shadows.bias.toFixed(5)}</span>
+            <input type="range" bind:value={config.shadows.bias} min="-0.01" max="0.01" step="0.00001" disabled={!config.shadows.enabled} />
+          </label>
+          <label class="control-row slider">
+            <span class="setting-title">Normal Bias: {config.shadows.normalBias.toFixed(3)}</span>
+            <input type="range" bind:value={config.shadows.normalBias} min="0" max="0.2" step="0.001" disabled={!config.shadows.enabled} />
+          </label>
+        </div>
+
+        <div style="border-top: 1px solid #333; margin-top: 0.75rem; padding-top: 0.75rem;">
+          <label class="control-row slider">
+            <span class="setting-title">Geometry Quality: {config.geometry.quality.toFixed(2)}</span>
+            <input type="range" bind:value={config.geometry.quality} min="0" max="1" step="0.01" />
+          </label>
+        </div>
       </section>
 
       <section class="control-section">

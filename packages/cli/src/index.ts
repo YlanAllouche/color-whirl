@@ -133,7 +133,11 @@ function buildConfig(options: any): WallpaperConfig {
       distance: parseFloat(options.cameraDistance),
       azimuth: parseFloat(options.cameraAzimuth),
       elevation: parseFloat(options.cameraElevation)
-    }
+    },
+    environment: { ...DEFAULT_CONFIG.environment },
+    shadows: { ...DEFAULT_CONFIG.shadows },
+    rendering: { ...DEFAULT_CONFIG.rendering },
+    geometry: { ...DEFAULT_CONFIG.geometry }
   };
   
   return config;
