@@ -257,8 +257,12 @@ function assignColors(cfg: HexGrid2DConfig, cells: Cell[]): void {
   const groupToColor = new Map<number, number>();
   for (const c of cells) {
     if (groupToColor.has(c.groupId)) continue;
-    const u = cellRand01(seed, c.groupId, 0, 5001);
-    groupToColor.set(c.groupId, sampleWeightedIndex01(u, w));
+    if (cfg.hexgrid.coloring.paletteMode === 'cycle') {
+      groupToColor.set(c.groupId, ((c.groupId % n) + n) % n);
+    } else {
+      const u = cellRand01(seed, c.groupId, 0, 5001);
+      groupToColor.set(c.groupId, sampleWeightedIndex01(u, w));
+    }
   }
 
   for (const c of cells) {
