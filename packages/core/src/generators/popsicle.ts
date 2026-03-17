@@ -440,6 +440,17 @@ export function createPopsicleScene(
     const env = createProceduralEnvironment(renderer, style, rot);
     envDisposable = env;
     scene.environment = env.texture;
+
+    let disposed = false;
+    (scene.userData as any).__wmDisposeProceduralEnvironment = () => {
+      if (disposed) return;
+      disposed = true;
+      try {
+        env.dispose();
+      } finally {
+        scene.environment = null;
+      }
+    };
   } else {
     scene.environment = null;
   }
@@ -463,5 +474,7 @@ export function renderPopsicleToCanvas(
     height: config.height,
     bloom: config.bloom
   });
+  (scene.userData as any).__wmDisposeProceduralEnvironment?.();
+  delete (scene.userData as any).__wmDisposeProceduralEnvironment;
   return renderer.domElement;
 }

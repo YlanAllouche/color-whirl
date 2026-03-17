@@ -192,6 +192,11 @@
     }
 
     if (fallbackScene) {
+      try {
+        (fallbackScene.userData as any).__wmDisposeProceduralEnvironment?.();
+      } catch {
+        // Ignore
+      }
       fallbackScene.traverse((obj) => {
         const mesh = obj as any;
         if (mesh.geometry?.dispose) mesh.geometry.dispose();

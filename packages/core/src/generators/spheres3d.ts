@@ -217,6 +217,17 @@ export function createSpheres3DScene(
     const env = createProceduralEnvironment(renderer, style, rot);
     envDisposable = env;
     scene.environment = env.texture;
+
+    let disposed = false;
+    (scene.userData as any).__wmDisposeProceduralEnvironment = () => {
+      if (disposed) return;
+      disposed = true;
+      try {
+        env.dispose();
+      } finally {
+        scene.environment = null;
+      }
+    };
   } else {
     scene.environment = null;
   }
@@ -355,5 +366,7 @@ function lerp(a: number, b: number, t: number): number {
 export function renderSpheres3DToCanvas(config: Spheres3DConfig, canvas?: HTMLCanvasElement): HTMLCanvasElement {
   const { scene, camera, renderer } = createSpheres3DScene(config, { canvas, preserveDrawingBuffer: true, pixelRatio: 1 });
   renderWithOptionalBloom({ renderer, scene, camera, width: config.width, height: config.height, bloom: config.bloom });
+  (scene.userData as any).__wmDisposeProceduralEnvironment?.();
+  delete (scene.userData as any).__wmDisposeProceduralEnvironment;
   return renderer.domElement;
 }
