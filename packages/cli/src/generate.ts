@@ -521,23 +521,25 @@ function generateHTML(config: WallpaperConfig): string {
     
       const stickDimensions = getStickDimensions(width, height, stickThickness, stickSize, stickRatio);
      
-     const group = new THREE.Group();
-     
-      for (let i = 0; i < stickCount; i++) {
-        const color = colors[i % colors.length];
-        const envIntensity = environment && environment.enabled ? Number(environment.intensity) || 0 : 0;
-        const material = createMaterial(texture, color, envIntensity, safeStickOpacity);
-        const stickGeometry = createRoundedBox(
-          stickDimensions.width,
-          stickDimensions.height,
-          stickDimensions.depth,
-          stickRoundness,
-          stickBevel,
-          geometry ? geometry.quality : 0
-        );
-        
+      const group = new THREE.Group();
+
+      const useShadows = !!(shadows && shadows.enabled);
+
+      const stickGeometry = createRoundedBox(
+        stickDimensions.width,
+        stickDimensions.height,
+        stickDimensions.depth,
+        stickRoundness,
+        stickBevel,
+        geometry ? geometry.quality : 0
+      );
+      
+       for (let i = 0; i < stickCount; i++) {
+         const color = colors[i % colors.length];
+         const envIntensity = environment && environment.enabled ? Number(environment.intensity) || 0 : 0;
+         const material = createMaterial(texture, color, envIntensity, safeStickOpacity);
+         
         const mesh = new THREE.Mesh(stickGeometry, material);
-        const useShadows = !!(shadows && shadows.enabled);
         mesh.castShadow = useShadows;
         mesh.receiveShadow = useShadows;
         
@@ -554,6 +556,8 @@ function generateHTML(config: WallpaperConfig): string {
     group.position.sub(center);
     
     scene.add(group);
+
+    // No shadow catcher: keep shadows stick-to-stick only.
     
     const renderer = new THREE.WebGLRenderer({ 
       antialias: true,
@@ -573,7 +577,6 @@ function generateHTML(config: WallpaperConfig): string {
     renderer.toneMappingExposure = rendering ? Number(rendering.exposure) || 1.0 : 1.0;
     renderer.physicallyCorrectLights = true;
 
-    const useShadows = !!(shadows && shadows.enabled);
     renderer.shadowMap.enabled = useShadows;
     const shadowType = shadows && shadows.type === 'vsm' ? 'vsm' : 'pcfsoft';
     renderer.shadowMap.type = shadowType === 'vsm' ? THREE.VSMShadowMap : THREE.PCFSoftShadowMap;
