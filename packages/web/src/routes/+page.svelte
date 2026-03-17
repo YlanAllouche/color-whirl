@@ -27,53 +27,6 @@
   let renderRaf = 0;
   let renderSettleTimer = 0;
   const RENDER_SETTLE_MS = 280;
-
-  // Ensure reactivity for deep mutations (bind:value on nested fields).
-  // The render scheduler reads config later (rAF/timeout), so we create a key
-  // that touches all relevant fields synchronously.
-  let previewRenderKey = $derived((() => {
-    const c = config;
-    return [
-      c.width,
-      c.height,
-      c.colors.join(','),
-      c.texture,
-      c.backgroundColor,
-      c.stickCount,
-      c.stickOverhang,
-      c.rotationCenterOffsetX,
-      c.rotationCenterOffsetY,
-      c.stickGap,
-      c.stickSize,
-      c.stickRatio,
-      c.stickThickness,
-      c.stickRoundness,
-      c.stickBevel,
-      c.stickOpacity,
-      c.camera.distance,
-      c.camera.azimuth,
-      c.camera.elevation,
-      c.lighting.enabled ? 1 : 0,
-      c.lighting.intensity,
-      c.lighting.position.x,
-      c.lighting.position.y,
-      c.lighting.position.z,
-      c.lighting.ambientIntensity,
-      c.environment.enabled ? 1 : 0,
-      c.environment.style,
-      c.environment.intensity,
-      c.environment.rotation,
-      c.shadows.enabled ? 1 : 0,
-      c.shadows.type,
-      c.shadows.mapSize,
-      c.shadows.bias,
-      c.shadows.normalBias,
-      c.rendering.toneMapping,
-      c.rendering.exposure,
-      c.geometry.quality,
-      renderMode
-    ].join('|');
-  })());
   
   // Export format selection
   let exportFormat = $state<'png' | 'jpg' | 'webp' | 'svg'>('png');
@@ -236,16 +189,19 @@
   function applyResolutionPreset(preset: keyof typeof RESOLUTION_PRESETS) {
     const { width, height } = RESOLUTION_PRESETS[preset];
     config = { ...config, width, height };
+    schedulePreviewRender();
   }
   
   function addColor() {
     config = { ...config, colors: [...config.colors, '#ffffff'] };
+    schedulePreviewRender();
   }
   
   function removeColor(index: number) {
     if (config.colors.length > 1) {
       const newColors = config.colors.filter((_, i) => i !== index);
       config = { ...config, colors: newColors };
+      schedulePreviewRender();
     }
   }
   
@@ -331,6 +287,7 @@
   function generateRandomGeneratedColors() {
     // Randomize everything, including a non-preset generated color theme.
     config = mergeWithLocks(generateRandomConfigNoPresets());
+    schedulePreviewRender();
   }
 
   function parseConfigFromUrl(searchParams: URLSearchParams) {
@@ -587,8 +544,47 @@
   
   $effect(() => {
     if (!preview) return;
-    // Touch the key so deep mutations re-run this effect.
-    void previewRenderKey;
+    // Touch all relevant fields so deep mutations re-run this effect.
+    // This is critical because many controls mutate nested properties in-place.
+    const c = config;
+    void c.width;
+    void c.height;
+    void c.colors.join(',');
+    void c.texture;
+    void c.backgroundColor;
+    void c.stickCount;
+    void c.stickOverhang;
+    void c.rotationCenterOffsetX;
+    void c.rotationCenterOffsetY;
+    void c.stickGap;
+    void c.stickSize;
+    void c.stickRatio;
+    void c.stickThickness;
+    void c.stickRoundness;
+    void c.stickBevel;
+    void c.stickOpacity;
+    void c.camera.distance;
+    void c.camera.azimuth;
+    void c.camera.elevation;
+    void c.lighting.enabled;
+    void c.lighting.intensity;
+    void c.lighting.position.x;
+    void c.lighting.position.y;
+    void c.lighting.position.z;
+    void c.lighting.ambientIntensity;
+    void c.environment.enabled;
+    void c.environment.style;
+    void c.environment.intensity;
+    void c.environment.rotation;
+    void c.shadows.enabled;
+    void c.shadows.type;
+    void c.shadows.mapSize;
+    void c.shadows.bias;
+    void c.shadows.normalBias;
+    void c.rendering.toneMapping;
+    void c.rendering.exposure;
+    void c.geometry.quality;
+    void renderMode;
     schedulePreviewRender();
   });
 
