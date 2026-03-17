@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { WallpaperConfig, TextureType } from '../types.js';
+import type { WallpaperConfig, TextureType, EnvironmentStyle } from '../types.js';
 
 interface StickDimensions {
   width: number;
@@ -42,11 +42,17 @@ function getStickDimensions(
   };
 }
 
-function createMaterial(texture: TextureType, color: string, stickOpacity: number): THREE.MeshPhysicalMaterial {
+function createMaterial(
+  texture: TextureType,
+  color: string,
+  envIntensity: number,
+  stickOpacity: number
+): THREE.MeshPhysicalMaterial {
   const baseConfig: THREE.MeshPhysicalMaterialParameters = {
     color: color,
     transparent: stickOpacity < 1,
-    opacity: stickOpacity
+    opacity: stickOpacity,
+    dithering: true
   };
 
   switch (texture) {
@@ -58,6 +64,7 @@ function createMaterial(texture: TextureType, color: string, stickOpacity: numbe
         clearcoat: 1.0,
         clearcoatRoughness: 0.05,
         reflectivity: 1.0,
+        envMapIntensity: envIntensity,
         ior: 1.5,
         transmission: 0.0,
         thickness: 0.1
@@ -65,25 +72,26 @@ function createMaterial(texture: TextureType, color: string, stickOpacity: numbe
     case 'metallic':
       return new THREE.MeshPhysicalMaterial({
         ...baseConfig,
-        roughness: 0.15,
-        metalness: 1.0,
+        roughness: 0.25,
+        metalness: 0.95,
         clearcoat: 0.3,
         clearcoatRoughness: 0.1,
         reflectivity: 1.0,
-        envMapIntensity: 1.5,
+        envMapIntensity: envIntensity * 1.6,
         ior: 2.0
       });
     case 'matte':
     default:
       return new THREE.MeshPhysicalMaterial({
         ...baseConfig,
-        roughness: 0.95,
+        roughness: 0.9,
         metalness: 0.0,
         clearcoat: 0.0,
         sheen: 0.3,
         sheenRoughness: 0.8,
         sheenColor: new THREE.Color(0xffffff),
-        reflectivity: 0.2
+        reflectivity: 0.2,
+        envMapIntensity: envIntensity * 0.35
       });
   }
 }
@@ -93,10 +101,12 @@ function createRoundedBox(
   height: number,
   depth: number,
   roundness: number,
-  bevel: number
+  bevel: number,
+  quality: number
 ): THREE.BufferGeometry {
   const safeRoundness = Math.max(0, Math.min(1, roundness));
   const safeBevel = Math.max(0, Math.min(1, bevel));
+  const q = Math.max(0, Math.min(1, quality));
 
   const maxRadius = Math.min(width, height) / 2;
   const radius = maxRadius * safeRoundness;
@@ -127,20 +137,119 @@ function createRoundedBox(
   const bevelSize = maxBevel * safeBevel;
   const bevelThickness = maxBevel * safeBevel;
 
+  const curveSegments = Math.round(12 + q * 96); // 12..108
+  const bevelSegments = Math.round(2 + q * 24); // 2..26
+
   const extrudeSettings: THREE.ExtrudeGeometryOptions = {
     depth: depth,
     bevelEnabled: safeBevel > 0,
-    bevelSegments: 4,
+    bevelSegments,
     steps: 1,
     bevelSize,
     bevelThickness,
-    curveSegments: 12
+    curveSegments
   };
   
   const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
   geometry.center();
+  geometry.computeVertexNormals();
   
   return geometry;
+}
+
+function clamp01(n: number): number {
+  return Math.max(0, Math.min(1, n));
+}
+
+function createProceduralEnvironment(
+  renderer: THREE.WebGLRenderer,
+  style: EnvironmentStyle,
+  rotationDeg: number
+): { texture: THREE.Texture; dispose: () => void } {
+  const width = 256;
+  const height = 128;
+  const data = new Uint8Array(width * height * 4);
+
+  const rot = ((((rotationDeg % 360) + 360) % 360) / 360) * width;
+
+  const addSoftbox = (u: number, v: number, radius: number, strength: number) => {
+    return (x: number, y: number) => {
+      const dx = x - u;
+      const dy = y - v;
+      const d2 = dx * dx + dy * dy;
+      const r2 = radius * radius;
+      if (d2 >= r2) return 0;
+      const t = 1 - d2 / r2;
+      return strength * t * t;
+    };
+  };
+
+  const spotA = addSoftbox(0.25, 0.22, 0.12, 0.9);
+  const spotB = addSoftbox(0.72, 0.18, 0.16, 0.7);
+  const spotC = addSoftbox(0.52, 0.55, 0.22, 0.45);
+
+  for (let y = 0; y < height; y++) {
+    const v = y / (height - 1);
+    for (let x = 0; x < width; x++) {
+      const xx = (x + rot) % width;
+      const u = xx / (width - 1);
+
+      let r = 0;
+      let g = 0;
+      let b = 0;
+
+      if (style === 'overcast') {
+        const top = 0.78;
+        const bot = 0.46;
+        const t = clamp01(1 - v);
+        const k = bot + (top - bot) * Math.pow(t, 1.4);
+        r = k;
+        g = k;
+        b = k;
+      } else if (style === 'sunset') {
+        const t = clamp01(1 - v);
+        const warm = 0.55 + 0.4 * Math.pow(t, 1.2);
+        r = warm;
+        g = 0.35 + 0.25 * Math.pow(t, 1.1);
+        b = 0.32 + 0.18 * Math.pow(1 - t, 1.7);
+      } else {
+        const t = clamp01(1 - v);
+        const sky = 0.74 * Math.pow(t, 1.6);
+        const floor = 0.06 + 0.05 * (1 - t);
+        const k = floor + sky;
+        r = k;
+        g = k;
+        b = k;
+      }
+
+      const s = spotA(u, v) + spotB(u, v) + spotC(u, v);
+      r = clamp01(r + s);
+      g = clamp01(g + s);
+      b = clamp01(b + s);
+
+      const i = (y * width + x) * 4;
+      data[i + 0] = Math.round(r * 255);
+      data[i + 1] = Math.round(g * 255);
+      data[i + 2] = Math.round(b * 255);
+      data[i + 3] = 255;
+    }
+  }
+
+  const tex = new THREE.DataTexture(data, width, height, THREE.RGBAFormat);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.mapping = THREE.EquirectangularReflectionMapping;
+  tex.needsUpdate = true;
+
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  pmrem.compileEquirectangularShader();
+  const target = pmrem.fromEquirectangular(tex);
+  pmrem.dispose();
+  tex.dispose();
+
+  return {
+    texture: target.texture,
+    dispose: () => target.dispose()
+  };
 }
 
 function degToRad(deg: number): number {
@@ -193,7 +302,10 @@ function getStackingOffset(
   };
 }
 
-export function createPopsicleScene(config: WallpaperConfig): {
+export function createPopsicleScene(
+  config: WallpaperConfig,
+  options?: { canvas?: HTMLCanvasElement; preserveDrawingBuffer?: boolean; pixelRatio?: number }
+): {
   scene: THREE.Scene;
   camera: THREE.OrthographicCamera;
   renderer: THREE.WebGLRenderer;
@@ -216,13 +328,17 @@ export function createPopsicleScene(config: WallpaperConfig): {
     stickBevel,
     stickOpacity,
     lighting,
-    camera: cameraConfig
+    camera: cameraConfig,
+    environment,
+    shadows,
+    rendering,
+    geometry
   } = config;
 
   const safeStickOpacity = clamp(Number.isFinite(stickOpacity) ? stickOpacity : 1.0, 0, 1);
   
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(backgroundColor);
+  scene.background = null;
   
   const aspect = width / height;
   const frustumSize = 10;
@@ -255,8 +371,14 @@ export function createPopsicleScene(config: WallpaperConfig): {
       lighting.position.y,
       lighting.position.z
     );
-    directionalLight.castShadow = true;
+    directionalLight.castShadow = !!shadows?.enabled;
     scene.add(directionalLight);
+    if (shadows?.enabled) {
+      const map = Math.max(256, Math.min(8192, Math.round(Number(shadows.mapSize) || 2048)));
+      directionalLight.shadow.mapSize.set(map, map);
+      directionalLight.shadow.bias = Number(shadows.bias) || 0;
+      directionalLight.shadow.normalBias = Number(shadows.normalBias) || 0;
+    }
     
     const fillLight = new THREE.DirectionalLight(0xffffff, lighting.intensity * 0.3);
     fillLight.position.set(-lighting.position.x, -lighting.position.y, lighting.position.z * 0.5);
@@ -267,45 +389,80 @@ export function createPopsicleScene(config: WallpaperConfig): {
   }
   
   const stickDimensions = getStickDimensions(width, height, stickThickness, stickSize, stickRatio);
-  
+  const geo = createRoundedBox(
+    stickDimensions.width,
+    stickDimensions.height,
+    stickDimensions.depth,
+    stickRoundness,
+    stickBevel,
+    geometry?.quality ?? 0.6
+  );
+
+  const envIntensity = environment?.enabled ? Number(environment.intensity) || 0 : 0;
+  const useShadows = !!shadows?.enabled;
+
   const group = new THREE.Group();
-  
+  const materialCache = new Map<string, THREE.MeshPhysicalMaterial>();
+  const getMat = (hex: string) => {
+    const key = [texture, hex, envIntensity.toFixed(3), safeStickOpacity.toFixed(3)].join(':');
+    const existing = materialCache.get(key);
+    if (existing) return existing;
+    const m = createMaterial(texture, hex, envIntensity, safeStickOpacity);
+    materialCache.set(key, m);
+    return m;
+  };
+
   for (let i = 0; i < stickCount; i++) {
-    const color = colors[i % colors.length];
-    const material = createMaterial(texture, color, safeStickOpacity);
-    const geometry = createRoundedBox(
-      stickDimensions.width,
-      stickDimensions.height,
-      stickDimensions.depth,
-      stickRoundness,
-      stickBevel
-    );
-    
-    const mesh = new THREE.Mesh(geometry, material);
-    
+    const hex = colors[i % colors.length];
+    const mesh = new THREE.Mesh(geo, getMat(hex));
+    mesh.castShadow = useShadows;
+    mesh.receiveShadow = useShadows;
+
     const offset = getStackingOffset(i, stickDimensions, stickOverhang, rotationCenterOffsetX, rotationCenterOffsetY, stickGap);
-    
     mesh.position.set(offset.x, offset.y, offset.z);
     mesh.rotation.z = offset.rotationZ;
-    
     group.add(mesh);
   }
-  
+
   const box = new THREE.Box3().setFromObject(group);
   const center = box.getCenter(new THREE.Vector3());
   group.position.sub(center);
-  
   scene.add(group);
   
-  const renderer = new THREE.WebGLRenderer({ 
+  const renderer = new THREE.WebGLRenderer({
     antialias: true,
     alpha: true,
-    preserveDrawingBuffer: true
+    preserveDrawingBuffer: options?.preserveDrawingBuffer ?? true,
+    canvas: options?.canvas
   });
+
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  const tm = rendering?.toneMapping === 'none' ? 'none' : 'aces';
+  renderer.toneMapping = tm === 'aces' ? THREE.ACESFilmicToneMapping : THREE.NoToneMapping;
+  renderer.toneMappingExposure = Number.isFinite(Number(rendering?.exposure)) ? Number(rendering?.exposure) : 1.0;
+  (renderer as any).physicallyCorrectLights = true;
+
+  renderer.setClearColor(new THREE.Color(backgroundColor), 1);
   renderer.setSize(width, height);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  const dpr = typeof window !== 'undefined' ? window.devicePixelRatio : 1;
+  const pr = Number.isFinite(Number(options?.pixelRatio)) ? Number(options?.pixelRatio) : Math.min(dpr, 2);
+  renderer.setPixelRatio(pr);
+  renderer.shadowMap.enabled = useShadows;
+  renderer.shadowMap.type = shadows?.type === 'vsm' ? THREE.VSMShadowMap : THREE.PCFSoftShadowMap;
+
+  let envDisposable: { dispose: () => void } | null = null;
+  if (environment?.enabled) {
+    const style: EnvironmentStyle = environment.style === 'overcast' || environment.style === 'sunset' ? environment.style : 'studio';
+    const rot = Number(environment.rotation) || 0;
+    const env = createProceduralEnvironment(renderer, style, rot);
+    envDisposable = env;
+    scene.environment = env.texture;
+  } else {
+    scene.environment = null;
+  }
+
+  // No shadow catcher: keep shadows stick-to-stick only.
+  void envDisposable;
   
   return { scene, camera, renderer };
 }
@@ -314,13 +471,7 @@ export function renderPopsicleToCanvas(
   config: WallpaperConfig,
   canvas?: HTMLCanvasElement
 ): HTMLCanvasElement {
-  const { scene, camera, renderer } = createPopsicleScene(config);
-  
-  if (canvas) {
-    renderer.domElement = canvas;
-  }
-  
+  const { scene, camera, renderer } = createPopsicleScene(config, { canvas, preserveDrawingBuffer: true, pixelRatio: 1 });
   renderer.render(scene, camera);
-  
   return renderer.domElement;
 }
