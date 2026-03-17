@@ -3,7 +3,7 @@ import puppeteer from 'puppeteer';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-import { extname, join, normalize, resolve } from 'node:path';
+import { dirname, extname, join, normalize, relative, resolve, sep } from 'node:path';
 
 export interface GenerateResult {
   data: Uint8Array | string;
@@ -78,18 +78,23 @@ async function startRendererServer(): Promise<{ url: string; close: () => Promis
   const coreDistDirUrl = new URL('../../core/dist/', import.meta.url);
   const coreDistDirPath = fileURLToPath(coreDistDirUrl);
 
+  const corePkgDirPath = resolve(join(coreDistDirPath, '..'));
+  const threeBuildDirPath = resolve(join(corePkgDirPath, 'node_modules', 'three', 'build'));
+  const threeExamplesJsmDirPath = resolve(join(corePkgDirPath, 'node_modules', 'three', 'examples', 'jsm'));
+
   const contentTypeByExt: Record<string, string> = {
     '.html': 'text/html; charset=utf-8',
     '.js': 'application/javascript; charset=utf-8',
     '.map': 'application/json; charset=utf-8',
-    '.css': 'text/css; charset=utf-8'
+    '.css': 'text/css; charset=utf-8',
+    '.wasm': 'application/wasm'
   };
 
   const importMapJson = JSON.stringify(
     {
       imports: {
-        three: 'https://unpkg.com/three@0.180.0/build/three.module.js',
-        'three/examples/jsm/': 'https://unpkg.com/three@0.180.0/examples/jsm/'
+        three: '/three/build/three.module.js',
+        'three/examples/jsm/': '/three/examples/jsm/'
       }
     },
     null,
@@ -126,6 +131,23 @@ async function startRendererServer(): Promise<{ url: string; close: () => Promis
   </body>
 </html>`;
 
+  const serveFileFromDir = async (baseDir: string, relPath: string, res: ServerResponse) => {
+    const safeRel = normalize(relPath).replace(/^([/\\])+/, '');
+    const abs = resolve(join(baseDir, safeRel));
+    const relToBase = relative(baseDir, abs);
+    if (relToBase === '..' || relToBase.startsWith(`..${sep}`) || relToBase.includes(`..${sep}`) || relToBase.includes(`${sep}..`)) {
+      res.statusCode = 403;
+      res.end('Forbidden');
+      return;
+    }
+
+    const data = await readFile(abs);
+    const ext = extname(abs);
+    res.statusCode = 200;
+    res.setHeader('Content-Type', contentTypeByExt[ext] || 'application/octet-stream');
+    res.end(data);
+  };
+
   const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     try {
       const url = new URL(req.url || '/', 'http://localhost');
@@ -138,20 +160,19 @@ async function startRendererServer(): Promise<{ url: string; close: () => Promis
 
       if (url.pathname.startsWith('/core/')) {
         const rel = url.pathname.slice('/core/'.length);
-        const safeRel = normalize(rel).replace(/^([/\\])+/, '');
-        const abs = resolve(join(coreDistDirPath, safeRel));
+        await serveFileFromDir(coreDistDirPath, rel, res);
+        return;
+      }
 
-        if (!abs.startsWith(coreDistDirPath)) {
-          res.statusCode = 403;
-          res.end('Forbidden');
-          return;
-        }
+      if (url.pathname.startsWith('/three/build/')) {
+        const rel = url.pathname.slice('/three/build/'.length);
+        await serveFileFromDir(threeBuildDirPath, rel, res);
+        return;
+      }
 
-        const data = await readFile(abs);
-        const ext = extname(abs);
-        res.statusCode = 200;
-        res.setHeader('Content-Type', contentTypeByExt[ext] || 'application/octet-stream');
-        res.end(data);
+      if (url.pathname.startsWith('/three/examples/jsm/')) {
+        const rel = url.pathname.slice('/three/examples/jsm/'.length);
+        await serveFileFromDir(threeExamplesJsmDirPath, rel, res);
         return;
       }
 
