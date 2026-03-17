@@ -51,7 +51,9 @@ export interface GeometryConfig {
 }
 
 export interface WallpaperConfig {
-  type: 'popsickle';
+  type: 'popsicle';
+  /** Stable seed for any randomness in generators */
+  seed: number;
   width: number;
   height: number;
   colors: string[];
@@ -101,7 +103,8 @@ export interface ExportOptions {
 }
 
 export const DEFAULT_CONFIG: WallpaperConfig = {
-  type: 'popsickle',
+  type: 'popsicle',
+  seed: 1,
   width: 1920,
   height: 1080,
   colors: ['#FF6B6B', '#FF8E53', '#FE6B8B', '#FF8E53', '#FFD93D'],
@@ -156,15 +159,28 @@ export const DEFAULT_CONFIG: WallpaperConfig = {
  * Generate a random value using a weighted normal distribution.
  * The distribution is centered around `normal` with a spread based on min/max.
  */
-export function randomWeighted(min: number, max: number, normal: number): number {
+export type RNG = () => number;
+
+export function createRng(seed: number): RNG {
+  // mulberry32
+  let t = (seed >>> 0) || 1;
+  return () => {
+    t += 0x6D2B79F5;
+    let x = Math.imul(t ^ (t >>> 15), 1 | t);
+    x ^= x + Math.imul(x ^ (x >>> 7), 61 | x);
+    return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+export function randomWeighted(rng: RNG, min: number, max: number, normal: number): number {
   // Use a simple weighted distribution: randomly pick between uniform and normal-biased
   // This gives more weight to values near `normal` while still allowing the full range
-  const useNormal = Math.random() < 0.7; // 70% chance to use normal-weighted
+  const useNormal = rng() < 0.7; // 70% chance to use normal-weighted
   
   if (useNormal) {
     // Box-Muller transform for normal distribution centered at normal
-    const u1 = Math.random();
-    const u2 = Math.random();
+    const u1 = Math.max(1e-12, rng());
+    const u2 = rng();
     const z0 = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
     // Normalize the range: spread is (max - min) / 4 to keep values mostly in range
     const spread = (max - min) / 4;
@@ -172,7 +188,7 @@ export function randomWeighted(min: number, max: number, normal: number): number
     return Math.max(min, Math.min(max, value));
   } else {
     // Uniform distribution
-    return min + Math.random() * (max - min);
+    return min + rng() * (max - min);
   }
 }
 
@@ -232,8 +248,15 @@ export interface RandomColorTheme {
  * Produces `count` foreground colors plus a matching background color.
  */
 export function generateRandomColorTheme(count: number = 5): RandomColorTheme {
-  const baseHue = Math.random() * 360;
-  const scheme = Math.random();
+  const seed = Math.floor(Math.random() * 0xffffffff);
+  return generateRandomColorThemeFromSeed(seed, count);
+}
+
+export function generateRandomColorThemeFromSeed(seed: number, count: number = 5): RandomColorTheme {
+  const rng = createRng(seed);
+
+  const baseHue = rng() * 360;
+  const scheme = rng();
 
   // Hue offsets for different harmony schemes.
   let hueOffsets: number[];
@@ -254,19 +277,23 @@ export function generateRandomColorTheme(count: number = 5): RandomColorTheme {
   // Trim/extend to requested count.
   const offsets = Array.from({ length: count }, (_, i) => hueOffsets[i % hueOffsets.length]);
 
-  const saturationBase = randomWeighted(55, 92, 75);
-  const lightnessBase = randomWeighted(45, 68, 56);
+  const saturationBase = randomWeighted(rng, 55, 92, 75);
+  const lightnessBase = randomWeighted(rng, 45, 68, 56);
 
   const colors = offsets.map((off, i) => {
-    const h = baseHue + off + randomWeighted(-6, 6, 0);
-    const s = saturationBase + randomWeighted(-10, 10, 0);
+    const h = baseHue + off + randomWeighted(rng, -6, 6, 0);
+    const s = saturationBase + randomWeighted(rng, -10, 10, 0);
     // Slight stagger to avoid same-looking swatches.
-    const l = lightnessBase + randomWeighted(-10, 10, 0) + (i % 2 === 0 ? 4 : -2);
+    const l = lightnessBase + randomWeighted(rng, -10, 10, 0) + (i % 2 === 0 ? 4 : -2);
     return hslToHex(h, s, l);
   });
 
   // Background: same base hue, low saturation, dark.
-  const backgroundColor = hslToHex(baseHue + randomWeighted(-10, 10, 0), randomWeighted(8, 22, 14), randomWeighted(6, 14, 10));
+  const backgroundColor = hslToHex(
+    baseHue + randomWeighted(rng, -10, 10, 0),
+    randomWeighted(rng, 8, 22, 14),
+    randomWeighted(rng, 6, 14, 10)
+  );
 
   return { colors, backgroundColor };
 }
@@ -275,7 +302,14 @@ export function generateRandomColorTheme(count: number = 5): RandomColorTheme {
  * Generate a random wallpaper configuration, including colors, without using presets.
  */
 export function generateRandomConfigNoPresets(): WallpaperConfig {
-  const theme = generateRandomColorTheme(5);
+  const seed = Math.floor(Math.random() * 0xffffffff) >>> 0;
+  return generateRandomConfigNoPresetsFromSeed(seed);
+}
+
+export function generateRandomConfigNoPresetsFromSeed(seed: number): WallpaperConfig {
+  const rng = createRng(seed);
+
+  const theme = generateRandomColorThemeFromSeed(seed ^ 0x9e3779b9, 5);
 
   const textures: TextureType[] = ['glossy', 'matte', 'metallic'];
 
@@ -284,48 +318,49 @@ export function generateRandomConfigNoPresets(): WallpaperConfig {
   // - Somewhat likely slightly translucent
   // - Extremely unlikely to be very transparent
   const randomStickOpacity = (): number => {
-    const r = Math.random();
+    const r = rng();
     if (r < 0.9) return 1.0;
     // Mostly imperceptible translucency.
-    if (r < 0.995) return clamp(randomWeighted(0.92, 1.0, 0.992), 0, 1);
+    if (r < 0.995) return clamp(randomWeighted(rng, 0.92, 1.0, 0.992), 0, 1);
     // Rare: noticeable translucency.
-    if (r < 0.9995) return clamp(randomWeighted(0.5, 0.92, 0.85), 0, 1);
+    if (r < 0.9995) return clamp(randomWeighted(rng, 0.5, 0.92, 0.85), 0, 1);
     // Extremely rare: quite transparent.
-    return clamp(randomWeighted(0.15, 0.5, 0.35), 0, 1);
+    return clamp(randomWeighted(rng, 0.15, 0.5, 0.35), 0, 1);
   };
-
+  
   return {
-    type: 'popsickle',
+    type: 'popsicle',
+    seed,
     width: DEFAULT_CONFIG.width,
     height: DEFAULT_CONFIG.height,
     colors: [...theme.colors],
-    texture: textures[Math.floor(Math.random() * textures.length)],
+    texture: textures[Math.floor(rng() * textures.length)],
     backgroundColor: theme.backgroundColor,
-    stickCount: Math.round(randomWeighted(1, 200, 40)),
-    stickOverhang: randomWeighted(0, 180, 30),
-    rotationCenterOffsetX: randomWeighted(-100, 100, 0),
-    rotationCenterOffsetY: randomWeighted(-100, 100, 0),
-    stickGap: randomWeighted(0, 5, 0.05),
-    stickSize: randomWeighted(0.25, 2.5, 1.0),
-    stickRatio: randomWeighted(0.75, 12, 3.0),
-    stickThickness: randomWeighted(0.1, 3, 1.0),
-    stickRoundness: randomWeighted(0, 1, 0.15),
-    stickBevel: randomWeighted(0, 1, 0.35),
+    stickCount: Math.round(randomWeighted(rng, 1, 200, 40)),
+    stickOverhang: randomWeighted(rng, 0, 180, 30),
+    rotationCenterOffsetX: randomWeighted(rng, -100, 100, 0),
+    rotationCenterOffsetY: randomWeighted(rng, -100, 100, 0),
+    stickGap: randomWeighted(rng, 0, 5, 0.05),
+    stickSize: randomWeighted(rng, 0.25, 2.5, 1.0),
+    stickRatio: randomWeighted(rng, 0.75, 12, 3.0),
+    stickThickness: randomWeighted(rng, 0.1, 3, 1.0),
+    stickRoundness: randomWeighted(rng, 0, 1, 0.15),
+    stickBevel: randomWeighted(rng, 0, 1, 0.35),
     stickOpacity: randomStickOpacity(),
     lighting: {
-      enabled: Math.random() > 0.2,
-      intensity: randomWeighted(0.5, 3, 1.5),
+      enabled: rng() > 0.2,
+      intensity: randomWeighted(rng, 0.5, 3, 1.5),
       position: {
-        x: randomWeighted(-10, 10, 5),
-        y: randomWeighted(-10, 10, 5),
-        z: randomWeighted(0, 20, 5)
+        x: randomWeighted(rng, -10, 10, 5),
+        y: randomWeighted(rng, -10, 10, 5),
+        z: randomWeighted(rng, 0, 20, 5)
       },
-      ambientIntensity: randomWeighted(0.1, 1, 0.3)
+      ambientIntensity: randomWeighted(rng, 0.1, 1, 0.3)
     },
     camera: {
-      distance: randomWeighted(5, 50, 17.3),
-      azimuth: randomWeighted(0, 360, 45),
-      elevation: randomWeighted(-80, 80, 35.3)
+      distance: randomWeighted(rng, 5, 50, 17.3),
+      azimuth: randomWeighted(rng, 0, 360, 45),
+      elevation: randomWeighted(rng, -80, 80, 35.3)
     },
     // Render pipeline settings are not randomized.
     environment: { ...DEFAULT_CONFIG.environment },
