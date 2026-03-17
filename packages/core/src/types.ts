@@ -279,6 +279,21 @@ export function generateRandomConfigNoPresets(): WallpaperConfig {
 
   const textures: TextureType[] = ['glossy', 'matte', 'metallic'];
 
+  // Opacity distribution:
+  // - Very likely fully opaque (1)
+  // - Somewhat likely slightly translucent
+  // - Extremely unlikely to be very transparent
+  const randomStickOpacity = (): number => {
+    const r = Math.random();
+    if (r < 0.9) return 1.0;
+    // Mostly imperceptible translucency.
+    if (r < 0.995) return clamp(randomWeighted(0.92, 1.0, 0.992), 0, 1);
+    // Rare: noticeable translucency.
+    if (r < 0.9995) return clamp(randomWeighted(0.5, 0.92, 0.85), 0, 1);
+    // Extremely rare: quite transparent.
+    return clamp(randomWeighted(0.15, 0.5, 0.35), 0, 1);
+  };
+
   return {
     type: 'popsickle',
     width: DEFAULT_CONFIG.width,
@@ -296,7 +311,7 @@ export function generateRandomConfigNoPresets(): WallpaperConfig {
     stickThickness: randomWeighted(0.1, 3, 1.0),
     stickRoundness: randomWeighted(0, 1, 0.15),
     stickBevel: randomWeighted(0, 1, 0.35),
-    stickOpacity: DEFAULT_CONFIG.stickOpacity,
+    stickOpacity: randomStickOpacity(),
     lighting: {
       enabled: Math.random() > 0.2,
       intensity: randomWeighted(0.5, 3, 1.5),

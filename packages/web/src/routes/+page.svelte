@@ -1279,22 +1279,41 @@
             <input type="checkbox" bind:checked={config.environment.enabled} />
             <span class="setting-title">Environment (Reflections)</span>
           </label>
-          <label class="control-row">
-            <span class="setting-title">Env Style</span>
-            <select bind:value={config.environment.style} disabled={!config.environment.enabled}>
-              <option value="studio">Studio</option>
-              <option value="overcast">Overcast</option>
-              <option value="sunset">Sunset</option>
-            </select>
-          </label>
           <label class="control-row slider">
             <span class="setting-title">Env Intensity: {config.environment.intensity.toFixed(2)}</span>
             <input type="range" bind:value={config.environment.intensity} min="0" max="5" step="0.01" disabled={!config.environment.enabled} />
           </label>
-          <label class="control-row slider">
-            <span class="setting-title">Env Rotation: {config.environment.rotation.toFixed(0)}°</span>
-            <input type="range" bind:value={config.environment.rotation} min="0" max="360" step="1" disabled={!config.environment.enabled} />
-          </label>
+
+          {#if config.texture !== 'matte'}
+            <label class="control-row slider">
+              <span class="setting-title">Env Rotation: {config.environment.rotation.toFixed(0)}°</span>
+              <input type="range" bind:value={config.environment.rotation} min="0" max="360" step="1" disabled={!config.environment.enabled} />
+            </label>
+            <label class="control-row">
+              <span class="setting-title">Env Style</span>
+              <select bind:value={config.environment.style} disabled={!config.environment.enabled}>
+                <option value="studio">Studio</option>
+                <option value="overcast">Overcast</option>
+                <option value="sunset">Sunset</option>
+              </select>
+            </label>
+          {:else}
+            <details class="control-details">
+              <summary class="control-details-summary">More env options</summary>
+              <label class="control-row slider">
+                <span class="setting-title">Env Rotation: {config.environment.rotation.toFixed(0)}°</span>
+                <input type="range" bind:value={config.environment.rotation} min="0" max="360" step="1" disabled={!config.environment.enabled} />
+              </label>
+              <label class="control-row">
+                <span class="setting-title">Env Style</span>
+                <select bind:value={config.environment.style} disabled={!config.environment.enabled}>
+                  <option value="studio">Studio</option>
+                  <option value="overcast">Overcast</option>
+                  <option value="sunset">Sunset</option>
+                </select>
+              </label>
+            </details>
+          {/if}
         </div>
 
         <div style="border-top: 1px solid #333; margin-top: 0.75rem; padding-top: 0.75rem;">
@@ -1313,21 +1332,28 @@
             <span class="setting-title">Shadow Map: {config.shadows.mapSize}</span>
             <input type="range" bind:value={config.shadows.mapSize} min="256" max="4096" step="256" disabled={!config.shadows.enabled} />
           </label>
-          <label class="control-row slider">
-            <span class="setting-title">Shadow Bias: {config.shadows.bias.toFixed(5)}</span>
-            <input type="range" bind:value={config.shadows.bias} min="-0.01" max="0.01" step="0.00001" disabled={!config.shadows.enabled} />
-          </label>
-          <label class="control-row slider">
-            <span class="setting-title">Normal Bias: {config.shadows.normalBias.toFixed(3)}</span>
-            <input type="range" bind:value={config.shadows.normalBias} min="0" max="0.2" step="0.001" disabled={!config.shadows.enabled} />
-          </label>
+
+          <details class="control-details">
+            <summary class="control-details-summary">Shadow tuning</summary>
+            <label class="control-row slider">
+              <span class="setting-title">Normal Bias: {config.shadows.normalBias.toFixed(3)}</span>
+              <input type="range" bind:value={config.shadows.normalBias} min="0" max="0.2" step="0.001" disabled={!config.shadows.enabled} />
+            </label>
+            <label class="control-row slider">
+              <span class="setting-title">Shadow Bias: {config.shadows.bias.toFixed(5)}</span>
+              <input type="range" bind:value={config.shadows.bias} min="-0.01" max="0.01" step="0.00001" disabled={!config.shadows.enabled} />
+            </label>
+          </details>
         </div>
 
         <div style="border-top: 1px solid #333; margin-top: 0.75rem; padding-top: 0.75rem;">
-          <label class="control-row slider">
-            <span class="setting-title">Geometry Quality: {config.geometry.quality.toFixed(2)}</span>
-            <input type="range" bind:value={config.geometry.quality} min="0" max="1" step="0.01" />
-          </label>
+          <details class="control-details">
+            <summary class="control-details-summary">Quality</summary>
+            <label class="control-row slider">
+              <span class="setting-title">Geometry Quality: {config.geometry.quality.toFixed(2)}</span>
+              <input type="range" bind:value={config.geometry.quality} min="0" max="1" step="0.01" />
+            </label>
+          </details>
         </div>
       </section>
 
@@ -1702,6 +1728,24 @@
   
   .control-row:last-child {
     margin-bottom: 0;
+  }
+
+  .control-details {
+    margin-top: 0.5rem;
+    padding-top: 0.25rem;
+  }
+
+  .control-details-summary {
+    cursor: pointer;
+    user-select: none;
+    font-size: 0.8125rem;
+    color: #b6b6c6;
+    margin-bottom: 0.5rem;
+    outline: none;
+  }
+
+  .control-details[open] .control-details-summary {
+    color: #fff;
   }
   
   .control-row .setting-title {
