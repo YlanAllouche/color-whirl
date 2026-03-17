@@ -915,6 +915,88 @@
       void c.stickBevel;
       void c.stickOpacity;
     }
+    if (c.type === 'spheres3d') {
+      void c.spheres.count;
+      void c.spheres.distribution;
+      void c.spheres.radiusMin;
+      void c.spheres.radiusMax;
+      void c.spheres.spread;
+      void c.spheres.depth;
+      void c.spheres.layers;
+      void c.spheres.paletteMode;
+      void c.spheres.colorWeights.join(',');
+      void c.spheres.opacity;
+    }
+    if (c.type === 'circles2d') {
+      void c.circles.mode;
+      void c.circles.count;
+      void c.circles.rMinPx;
+      void c.circles.rMaxPx;
+      void c.circles.jitter;
+      void c.circles.fillOpacity;
+      void c.circles.stroke.enabled;
+      void c.circles.stroke.widthPx;
+      void c.circles.stroke.color;
+      void c.circles.stroke.opacity;
+      void c.circles.paletteMode;
+      void c.circles.colorWeights.join(',');
+      void c.circles.croissant.enabled;
+      void c.circles.croissant.innerScale;
+      void c.circles.croissant.offset;
+      void c.circles.croissant.angleJitterDeg;
+    }
+    if (c.type === 'triangles2d') {
+      void c.triangles.mode;
+      void c.triangles.density;
+      void c.triangles.scalePx;
+      void c.triangles.jitter;
+      void c.triangles.rotateJitterDeg;
+      void c.triangles.insetPx;
+      void c.triangles.fillOpacity;
+      void c.triangles.stroke.enabled;
+      void c.triangles.stroke.widthPx;
+      void c.triangles.stroke.color;
+      void c.triangles.stroke.opacity;
+      void c.triangles.paletteMode;
+      void c.triangles.colorWeights.join(',');
+      void c.triangles.shading.enabled;
+      void c.triangles.shading.lightDeg;
+      void c.triangles.shading.strength;
+    }
+    if (c.type === 'triangles3d') {
+      void c.prisms.mode;
+      void c.prisms.count;
+      void c.prisms.radius;
+      void c.prisms.height;
+      void c.prisms.spread;
+      void c.prisms.jitter;
+      void c.prisms.paletteMode;
+      void c.prisms.colorWeights.join(',');
+      void c.prisms.opacity;
+    }
+    if (c.type === 'hexgrid2d') {
+      void c.hexgrid.radiusPx;
+      void c.hexgrid.marginPx;
+      void c.hexgrid.overscanPx;
+      void c.hexgrid.fillOpacity;
+      void c.hexgrid.originPx.x;
+      void c.hexgrid.originPx.y;
+      void c.hexgrid.stroke.enabled;
+      void c.hexgrid.stroke.widthPx;
+      void c.hexgrid.stroke.join;
+      void c.hexgrid.stroke.color;
+      void c.hexgrid.stroke.opacity;
+      void c.hexgrid.coloring.paletteMode;
+      void c.hexgrid.coloring.weightsMode;
+      void c.hexgrid.coloring.preset;
+      void c.hexgrid.coloring.weights.join(',');
+      void c.hexgrid.grouping.mode;
+      void c.hexgrid.grouping.strength;
+      void c.hexgrid.grouping.targetGroupCount;
+      void c.hexgrid.effect.kind;
+      void c.hexgrid.effect.amount;
+      void c.hexgrid.effect.frequency;
+    }
     void c.camera.distance;
     void c.camera.azimuth;
     void c.camera.elevation;
