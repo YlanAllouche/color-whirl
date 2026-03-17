@@ -246,6 +246,8 @@ export function createTriangles3DScene(
 
   const geometry = new THREE.CylinderGeometry(1, 1, 1, 3, 1, false);
   geometry.rotateY(Math.PI / 6);
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
   const tmpMat = new THREE.Matrix4();
   const tmpPos = new THREE.Vector3();
   const tmpQuat = new THREE.Quaternion();
@@ -303,7 +305,11 @@ export function createTriangles3DScene(
     tmpMat.compose(tmpPos, tmpQuat, tmpScale);
     perColor[pi].inst.setMatrixAt(slot, tmpMat);
   }
-  for (let pi = 0; pi < nColors; pi++) perColor[pi].inst.instanceMatrix.needsUpdate = true;
+  for (let pi = 0; pi < nColors; pi++) {
+    perColor[pi].inst.instanceMatrix.needsUpdate = true;
+    perColor[pi].inst.computeBoundingBox();
+    perColor[pi].inst.computeBoundingSphere();
+  }
 
   // Outline is supported, but is an extra pass (raster-only).
   if (config.edges.outline.enabled) {
@@ -326,11 +332,14 @@ export function createTriangles3DScene(
         outInst.setMatrixAt(j, tmpMat);
       }
       outInst.instanceMatrix.needsUpdate = true;
+      outInst.computeBoundingBox();
+      outInst.computeBoundingSphere();
       scene.add(outInst);
     }
   }
 
   // Center (after outline)
+  scene.updateWorldMatrix(true, true);
   const box = new THREE.Box3().setFromObject(scene);
   if (!box.isEmpty()) {
     const center = box.getCenter(new THREE.Vector3());

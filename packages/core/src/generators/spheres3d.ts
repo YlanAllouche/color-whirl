@@ -249,6 +249,8 @@ export function createSpheres3DScene(
 
   const seg = Math.round(8 + clamp(config.geometry.quality, 0, 1) * 48);
   const geometry = new THREE.SphereGeometry(1, seg, seg);
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
 
   const perColor: Array<{ idx: number; inst: THREE.InstancedMesh; outline?: THREE.InstancedMesh }> = [];
   for (let pi = 0; pi < nColors; pi++) {
@@ -319,6 +321,8 @@ export function createSpheres3DScene(
   }
   for (let pi = 0; pi < nColors; pi++) {
     perColor[pi].inst.instanceMatrix.needsUpdate = true;
+    perColor[pi].inst.computeBoundingBox();
+    perColor[pi].inst.computeBoundingSphere();
   }
 
   // Outline (optional): approximate via additional instanced meshes.
@@ -342,11 +346,14 @@ export function createSpheres3DScene(
         outInst.setMatrixAt(j, tmpMat);
       }
       outInst.instanceMatrix.needsUpdate = true;
+      outInst.computeBoundingBox();
+      outInst.computeBoundingSphere();
       scene.add(outInst);
     }
   }
 
   // Center (after outline)
+  scene.updateWorldMatrix(true, true);
   const groupBox = new THREE.Box3().setFromObject(scene);
   if (!groupBox.isEmpty()) {
     const center = groupBox.getCenter(new THREE.Vector3());
