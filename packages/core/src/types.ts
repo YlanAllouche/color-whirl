@@ -75,6 +75,21 @@ export interface EdgesConfig {
   outline: OutlineConfig;
 }
 
+export interface EmissionConfig {
+  enabled: boolean;
+  /** Palette index (0-based) */
+  paletteIndex: number;
+  /** 0..20 */
+  intensity: number;
+}
+
+export interface BloomConfig {
+  enabled: boolean;
+  strength: number;
+  radius: number;
+  threshold: number;
+}
+
 export interface CameraConfig {
   /** Distance from origin in scene units */
   distance: number;
@@ -136,6 +151,8 @@ export interface WallpaperConfig {
   textureParams: TextureParams;
   backgroundColor: string;
   edges: EdgesConfig;
+  emission: EmissionConfig;
+  bloom: BloomConfig;
   stickCount: number;
   /** Stick overhang angle per stick in degrees (e.g., each stick rotates 15° from the previous) */
   stickOverhang: number;
@@ -198,6 +215,17 @@ export const DEFAULT_CONFIG: WallpaperConfig = {
     wear: { enabled: false, intensity: 0.35, width: 0.5, noise: 0.6, colorShift: '#ffffff' },
     rimLight: { enabled: false, color: '#ffffff', intensity: 0.6, power: 2.5 },
     outline: { enabled: false, color: '#0b0b10', thickness: 0.03, opacity: 1.0 }
+  },
+  emission: {
+    enabled: false,
+    paletteIndex: 0,
+    intensity: 2.5
+  },
+  bloom: {
+    enabled: false,
+    strength: 0.9,
+    radius: 0.35,
+    threshold: 0.85
   },
   stickCount: 12,
   stickOverhang: 30,
@@ -445,6 +473,8 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number): WallpaperCo
       rimLight: { ...DEFAULT_CONFIG.edges.rimLight },
       outline: { ...DEFAULT_CONFIG.edges.outline }
     },
+    emission: { ...DEFAULT_CONFIG.emission },
+    bloom: { ...DEFAULT_CONFIG.bloom },
     stickCount: Math.round(randomWeighted(rng, 1, 200, 40)),
     stickOverhang: randomWeighted(rng, 0, 180, 30),
     rotationCenterOffsetX: randomWeighted(rng, -100, 100, 0),

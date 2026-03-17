@@ -254,14 +254,30 @@ function applyEdgeMaterialOverrides(m: THREE.Material, cfg: EdgesConfig, envInte
   }
 }
 
-export function createStickMeshMaterial(config: WallpaperConfig, color: string, envIntensity: number, stickOpacity: number): StickMeshMaterial {
+export function createStickMeshMaterial(
+  config: WallpaperConfig,
+  paletteIndex: number,
+  color: string,
+  envIntensity: number,
+  stickOpacity: number
+): StickMeshMaterial {
+  const emit =
+    config.emission.enabled &&
+    Math.round(config.emission.paletteIndex) === Math.round(paletteIndex) &&
+    Number.isFinite(Number(config.emission.intensity)) &&
+    Number(config.emission.intensity) > 0;
+  const emissive = emit
+    ? { enabled: true, intensity: Number(config.emission.intensity), color }
+    : { enabled: false, intensity: 0, color };
+
   const face = createStickMaterial({
     texture: config.texture,
     color,
     envIntensity,
     stickOpacity,
     seed: config.seed,
-    textureParams: config.textureParams
+    textureParams: config.textureParams,
+    emissive
   });
 
   applyRimLight(face, config.edges.rimLight);
@@ -287,8 +303,23 @@ export function createStickMaterial(options: {
   stickOpacity: number;
   seed: number;
   textureParams: TextureParams;
+  emissive?: { enabled: boolean; intensity: number; color: string };
 }): THREE.Material {
-  const { texture, color, envIntensity, stickOpacity, seed, textureParams } = options;
+  const { texture, color, envIntensity, stickOpacity, seed, textureParams, emissive } = options;
+
+  const withEmission = (m: THREE.Material): THREE.Material => {
+    if (!emissive?.enabled) return m;
+    const anyMat: any = m as any;
+    if (anyMat.emissive instanceof THREE.Color) {
+      anyMat.emissive.set(emissive.color);
+    } else if ('emissive' in anyMat) {
+      anyMat.emissive = new THREE.Color(emissive.color);
+    }
+    if (typeof anyMat.emissiveIntensity === 'number') {
+      anyMat.emissiveIntensity = Math.max(0, Number(emissive.intensity) || 0);
+    }
+    return m;
+  };
 
   const basePhysical: THREE.MeshPhysicalMaterialParameters = {
     color,
@@ -305,11 +336,12 @@ export function createStickMaterial(options: {
     });
     m.gradientMap = getToonGradientMap(textureParams.cel.bands);
     if (textureParams.cel.halftone) applyHalftone(m);
-    return m;
+    return withEmission(m);
   }
 
   if (texture === 'mirror') {
-    return new THREE.MeshPhysicalMaterial({
+    return withEmission(
+      new THREE.MeshPhysicalMaterial({
       ...basePhysical,
       roughness: 0.0,
       metalness: 1.0,
@@ -317,7 +349,8 @@ export function createStickMaterial(options: {
       reflectivity: 1.0,
       envMapIntensity: envIntensity * 2.0,
       ior: 2.0
-    });
+      })
+    );
   }
 
   if (texture === 'glass') {
@@ -331,7 +364,8 @@ export function createStickMaterial(options: {
             ? { roughness: 0.14, thickness: 1.8, ior: 1.42 }
             : { roughness: 0.02, thickness: 1.0, ior: 1.5 };
 
-    return new THREE.MeshPhysicalMaterial({
+    return withEmission(
+      new THREE.MeshPhysicalMaterial({
       ...basePhysical,
       transparent: true,
       transmission: 1.0,
@@ -342,7 +376,8 @@ export function createStickMaterial(options: {
       clearcoat: style === 'stylized' ? 0.8 : 0.2,
       clearcoatRoughness: style === 'frosted' ? 0.65 : 0.1,
       envMapIntensity: envIntensity
-    });
+      })
+    );
   }
 
   if (texture === 'drywall') {
@@ -352,7 +387,8 @@ export function createStickMaterial(options: {
     maps.normalMap.repeat.set(scale, scale);
     maps.roughnessMap.repeat.set(scale, scale);
 
-    return new THREE.MeshPhysicalMaterial({
+    return withEmission(
+      new THREE.MeshPhysicalMaterial({
       ...basePhysical,
       roughness: 0.92,
       metalness: 0.0,
@@ -365,12 +401,14 @@ export function createStickMaterial(options: {
       normalMap: maps.normalMap,
       normalScale: new THREE.Vector2(0.15 + amt * 0.75, 0.15 + amt * 0.75),
       roughnessMap: maps.roughnessMap
-    });
+      })
+    );
   }
 
   switch (texture) {
     case 'glossy':
-      return new THREE.MeshPhysicalMaterial({
+      return withEmission(
+        new THREE.MeshPhysicalMaterial({
         ...basePhysical,
         roughness: 0.05,
         metalness: 0.1,
@@ -381,9 +419,11 @@ export function createStickMaterial(options: {
         ior: 1.5,
         transmission: 0.0,
         thickness: 0.1
-      });
+        })
+      );
     case 'metallic':
-      return new THREE.MeshPhysicalMaterial({
+      return withEmission(
+        new THREE.MeshPhysicalMaterial({
         ...basePhysical,
         roughness: 0.25,
         metalness: 0.95,
@@ -392,10 +432,12 @@ export function createStickMaterial(options: {
         reflectivity: 1.0,
         envMapIntensity: envIntensity * 1.6,
         ior: 2.0
-      });
+        })
+      );
     case 'matte':
     default:
-      return new THREE.MeshPhysicalMaterial({
+      return withEmission(
+        new THREE.MeshPhysicalMaterial({
         ...basePhysical,
         roughness: 0.9,
         metalness: 0.0,
@@ -405,6 +447,7 @@ export function createStickMaterial(options: {
         sheenColor: new THREE.Color(0xffffff),
         reflectivity: 0.2,
         envMapIntensity: envIntensity * 0.35
-      });
+        })
+      );
   }
 }

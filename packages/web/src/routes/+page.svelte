@@ -241,6 +241,8 @@
            rimLight: { ...DEFAULT_CONFIG.edges.rimLight },
            outline: { ...DEFAULT_CONFIG.edges.outline }
          },
+         emission: { ...DEFAULT_CONFIG.emission },
+         bloom: { ...DEFAULT_CONFIG.bloom },
          lighting: {
            ...DEFAULT_CONFIG.lighting,
            position: { ...DEFAULT_CONFIG.lighting.position }
@@ -270,6 +272,8 @@
         rimLight: { ...next.edges.rimLight },
         outline: { ...next.edges.outline }
       },
+      emission: { ...next.emission },
+      bloom: { ...next.bloom },
       lighting: {
         ...next.lighting,
         position: { ...next.lighting.position }
@@ -434,6 +438,13 @@
     void c.edges.outline.color;
     void c.edges.outline.thickness;
     void c.edges.outline.opacity;
+    void c.emission.enabled;
+    void c.emission.paletteIndex;
+    void c.emission.intensity;
+    void c.bloom.enabled;
+    void c.bloom.strength;
+    void c.bloom.radius;
+    void c.bloom.threshold;
     void c.stickCount;
     void c.stickOverhang;
     void c.rotationCenterOffsetX;
@@ -472,8 +483,16 @@
   });
 
   $effect(() => {
-    if ((config.texture === 'cel' || config.edges.outline.enabled) && renderMode === 'path') {
+    if ((config.texture === 'cel' || config.edges.outline.enabled || config.bloom.enabled) && renderMode === 'path') {
       renderMode = 'raster';
+    }
+  });
+
+  $effect(() => {
+    const maxIndex = Math.max(0, config.colors.length - 1);
+    const next = Math.max(0, Math.min(maxIndex, Math.round(Number(config.emission.paletteIndex) || 0)));
+    if (config.emission.paletteIndex !== next) {
+      config.emission.paletteIndex = next;
     }
   });
 
@@ -690,6 +709,29 @@
            <input type="color" bind:value={config.backgroundColor} />
          </label>
        </section>
+
+      <!-- Emission -->
+      <section class="control-section">
+        <h3>Emission</h3>
+        <label class="control-row checkbox">
+          <input type="checkbox" bind:checked={config.emission.enabled} />
+          <span class="setting-title">Enable</span>
+        </label>
+
+        <label class="control-row">
+          <span class="setting-title">Palette Index</span>
+          <select bind:value={config.emission.paletteIndex} disabled={!config.emission.enabled}>
+            {#each config.colors as c, i}
+              <option value={i}>{i}: {c}</option>
+            {/each}
+          </select>
+        </label>
+
+        <label class="control-row slider">
+          <span class="setting-title">Intensity: {config.emission.intensity.toFixed(2)}</span>
+          <input type="range" bind:value={config.emission.intensity} min="0" max="20" step="0.05" disabled={!config.emission.enabled} />
+        </label>
+      </section>
 
       <!-- Edges -->
       <section class="control-section">
@@ -933,9 +975,29 @@
           <span class="setting-title">Mode</span>
           <select bind:value={renderMode} title="Raster is instant; Path traced refines progressively">
             <option value="raster">Raster</option>
-            <option value="path" disabled={config.texture === 'cel' || config.edges.outline.enabled}>Path traced</option>
+            <option value="path" disabled={config.texture === 'cel' || config.edges.outline.enabled || config.bloom.enabled}>Path traced</option>
           </select>
         </label>
+
+        <details class="control-details">
+          <summary class="control-details-summary">Bloom</summary>
+          <label class="control-row checkbox">
+            <input type="checkbox" bind:checked={config.bloom.enabled} />
+            <span class="setting-title">Enable bloom</span>
+          </label>
+          <label class="control-row slider">
+            <span class="setting-title">Strength: {config.bloom.strength.toFixed(2)}</span>
+            <input type="range" bind:value={config.bloom.strength} min="0" max="3" step="0.01" disabled={!config.bloom.enabled} />
+          </label>
+          <label class="control-row slider">
+            <span class="setting-title">Radius: {config.bloom.radius.toFixed(2)}</span>
+            <input type="range" bind:value={config.bloom.radius} min="0" max="1" step="0.01" disabled={!config.bloom.enabled} />
+          </label>
+          <label class="control-row slider">
+            <span class="setting-title">Threshold: {config.bloom.threshold.toFixed(2)}</span>
+            <input type="range" bind:value={config.bloom.threshold} min="0" max="1" step="0.01" disabled={!config.bloom.enabled} />
+          </label>
+        </details>
 
         <div style="border-top: 1px solid #333; margin-top: 0.75rem; padding-top: 0.75rem;">
           <label class="control-row checkbox">

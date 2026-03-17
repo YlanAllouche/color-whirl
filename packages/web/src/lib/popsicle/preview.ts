@@ -1,4 +1,7 @@
 import * as THREE from 'three';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { createStickMeshMaterial } from '@wallpaper-maker/core';
 import type { WallpaperConfig, EnvironmentStyle, ShadowType, TextureType } from '@wallpaper-maker/core';
 
@@ -171,11 +174,12 @@ function textureParamsKey(config: WallpaperConfig): string {
 
 function createMaterialForColor(
   config: WallpaperConfig,
+  paletteIndex: number,
   color: string,
   envIntensity: number,
   stickOpacity: number
 ): THREE.Material | THREE.Material[] {
-  return createStickMeshMaterial(config, color, envIntensity, stickOpacity);
+  return createStickMeshMaterial(config, paletteIndex, color, envIntensity, stickOpacity);
 }
 
 function createProceduralEquirectDataTexture(style: EnvironmentStyle): THREE.DataTexture {
@@ -332,6 +336,10 @@ export class PopsiclePreview {
   private renderer: THREE.WebGLRenderer;
   private mode: PreviewRenderMode = 'raster';
 
+  private composer: EffectComposer | null = null;
+  private renderPass: RenderPass | null = null;
+  private bloomPass: UnrealBloomPass | null = null;
+
   // Raster state
   private scene: THREE.Scene;
   private camera: THREE.OrthographicCamera;
@@ -449,6 +457,10 @@ export class PopsiclePreview {
     this.outlineMaterial?.dispose();
     this.outlineMaterial = null;
     this.envCache.dispose();
+    this.composer?.dispose();
+    this.composer = null;
+    this.renderPass = null;
+    this.bloomPass = null;
     this.renderer.dispose();
     this.container.innerHTML = '';
   }
@@ -595,26 +607,28 @@ export class PopsiclePreview {
 
     const envIntensity = effective.environment.enabled ? effective.environment.intensity : 0;
     const edgesKey = JSON.stringify(effective.edges);
+    const emissionKey = JSON.stringify(effective.emission);
     const matBaseKey = [
       effective.texture,
       textureParamsKey(effective),
       edgesKey,
+      emissionKey,
       envIntensity.toFixed(3),
       safeStickOpacity.toFixed(3),
       String(effective.seed)
     ].join(':');
-    const getMaterial = (hex: string) => {
-      const k = [matBaseKey, hex].join(':');
+    const getMaterial = (paletteIndex: number, hex: string) => {
+      const k = [matBaseKey, String(paletteIndex), hex].join(':');
       const existing = this.stickMaterialCache.get(k);
       if (existing) return existing;
-      const m = createMaterialForColor(effective, hex, envIntensity, safeStickOpacity);
+      const m = createMaterialForColor(effective, paletteIndex, hex, envIntensity, safeStickOpacity);
       this.stickMaterialCache.set(k, m);
       return m;
     };
 
     // Ensure mesh pool
     while (this.stickMeshes.length < effective.stickCount) {
-      const mesh = new THREE.Mesh(this.stickGeometry, getMaterial('#ffffff'));
+      const mesh = new THREE.Mesh(this.stickGeometry, getMaterial(0, '#ffffff'));
       this.sticksGroup.add(mesh);
       this.stickMeshes.push(mesh);
     }
@@ -628,8 +642,9 @@ export class PopsiclePreview {
 
       mesh.visible = true;
       mesh.geometry = this.stickGeometry;
-      const hex = effective.colors[i % effective.colors.length] ?? '#ffffff';
-      mesh.material = getMaterial(hex);
+      const paletteIndex = i % effective.colors.length;
+      const hex = effective.colors[paletteIndex] ?? '#ffffff';
+      mesh.material = getMaterial(paletteIndex, hex);
       mesh.castShadow = useShadows;
       mesh.receiveShadow = useShadows;
 
@@ -717,7 +732,30 @@ export class PopsiclePreview {
       this.scene.add(this.keyLight.target);
     }
 
-    this.renderer.render(this.scene, this.camera);
+    if (effective.bloom.enabled) {
+      if (!this.composer) {
+        this.composer = new EffectComposer(this.renderer);
+        this.renderPass = new RenderPass(this.scene, this.camera);
+        this.bloomPass = new UnrealBloomPass(
+          new THREE.Vector2(previewWidth, previewHeight),
+          effective.bloom.strength,
+          effective.bloom.radius,
+          effective.bloom.threshold
+        );
+        this.composer.addPass(this.renderPass);
+        this.composer.addPass(this.bloomPass);
+      }
+
+      this.renderPass!.scene = this.scene;
+      this.renderPass!.camera = this.camera;
+      this.bloomPass!.strength = effective.bloom.strength;
+      this.bloomPass!.radius = effective.bloom.radius;
+      this.bloomPass!.threshold = effective.bloom.threshold;
+      this.composer.setSize(previewWidth, previewHeight);
+      this.composer.render();
+    } else {
+      this.renderer.render(this.scene, this.camera);
+    }
   }
 
   private getPreviewSize(aspect: number, quality: PreviewQuality): { previewWidth: number; previewHeight: number } {
@@ -759,6 +797,8 @@ export class PopsiclePreview {
         rimLight: { ...config.edges.rimLight },
         outline: { ...config.edges.outline }
       },
+      emission: { ...config.emission },
+      bloom: { ...config.bloom },
       lighting: {
         ...config.lighting,
         position: { ...config.lighting.position }
@@ -990,11 +1030,13 @@ export class PopsiclePreview {
 
     const envIntensity = config.environment.enabled ? config.environment.intensity : 0;
     const materialCache = new Map<string, THREE.Material | THREE.Material[]>();
-    const getMat = (hex: string) => {
+    const getMat = (paletteIndex: number, hex: string) => {
       const k = [
         config.texture,
         textureParamsKey(config),
         JSON.stringify(config.edges),
+        JSON.stringify(config.emission),
+        String(paletteIndex),
         hex,
         envIntensity.toFixed(3),
         safeStickOpacity.toFixed(3),
@@ -1002,7 +1044,7 @@ export class PopsiclePreview {
       ].join(':');
       const existing = materialCache.get(k);
       if (existing) return existing;
-      const m = createMaterialForColor(config, hex, envIntensity, safeStickOpacity);
+      const m = createMaterialForColor(config, paletteIndex, hex, envIntensity, safeStickOpacity);
       materialCache.set(k, m);
       return m;
     };
@@ -1016,8 +1058,9 @@ export class PopsiclePreview {
         config.rotationCenterOffsetY,
         config.stickGap
       );
-      const hex = config.colors[i % config.colors.length] ?? '#ffffff';
-      const mesh = new THREE.Mesh(geometry, getMat(hex));
+      const paletteIndex = i % config.colors.length;
+      const hex = config.colors[paletteIndex] ?? '#ffffff';
+      const mesh = new THREE.Mesh(geometry, getMat(paletteIndex, hex));
       mesh.position.set(o.x - bounds.center.x, o.y - bounds.center.y, o.z - bounds.center.z);
       mesh.rotation.z = o.rotationZ;
       scene.add(mesh);
@@ -1134,11 +1177,13 @@ export async function renderRasterToCanvas(config: WallpaperConfig): Promise<HTM
         depthWrite: false
       })
     : null;
-  const getMat = (hex: string) => {
+  const getMat = (paletteIndex: number, hex: string) => {
     const k = [
       config.texture,
       textureParamsKey(config),
       JSON.stringify(config.edges),
+      JSON.stringify(config.emission),
+      String(paletteIndex),
       hex,
       envIntensity.toFixed(3),
       safeStickOpacity.toFixed(3),
@@ -1146,7 +1191,7 @@ export async function renderRasterToCanvas(config: WallpaperConfig): Promise<HTM
     ].join(':');
     const existing = materialCache.get(k);
     if (existing) return existing;
-    const m = createMaterialForColor(config, hex, envIntensity, safeStickOpacity);
+    const m = createMaterialForColor(config, paletteIndex, hex, envIntensity, safeStickOpacity);
     materialCache.set(k, m);
     return m;
   };
@@ -1160,8 +1205,9 @@ export async function renderRasterToCanvas(config: WallpaperConfig): Promise<HTM
       config.rotationCenterOffsetY,
       config.stickGap
     );
-    const hex = config.colors[i % config.colors.length] ?? '#ffffff';
-    const mesh = new THREE.Mesh(geometry, getMat(hex));
+    const paletteIndex = i % config.colors.length;
+    const hex = config.colors[paletteIndex] ?? '#ffffff';
+    const mesh = new THREE.Mesh(geometry, getMat(paletteIndex, hex));
     mesh.castShadow = useShadows;
     mesh.receiveShadow = useShadows;
     mesh.position.set(o.x - bounds.center.x, o.y - bounds.center.y, o.z - bounds.center.z);
@@ -1181,7 +1227,22 @@ export async function renderRasterToCanvas(config: WallpaperConfig): Promise<HTM
 
   // No shadow catcher: keep shadows stick-to-stick only.
 
-  renderer.render(scene, camera);
+  if (config.bloom.enabled) {
+    const composer = new EffectComposer(renderer);
+    composer.addPass(new RenderPass(scene, camera));
+    composer.addPass(
+      new UnrealBloomPass(
+        new THREE.Vector2(config.width, config.height),
+        config.bloom.strength,
+        config.bloom.radius,
+        config.bloom.threshold
+      )
+    );
+    composer.render();
+    composer.dispose();
+  } else {
+    renderer.render(scene, camera);
+  }
 
   // Cleanup: keep canvas pixels intact.
   envCache.dispose();

@@ -153,7 +153,9 @@ function buildConfigAndFormat(options: any): { config: WallpaperConfig; format: 
            rimLight: { ...DEFAULT_CONFIG.edges.rimLight },
            outline: { ...DEFAULT_CONFIG.edges.outline }
          },
-        stickCount: parseInt(options.count, 10),
+         emission: { ...DEFAULT_CONFIG.emission },
+         bloom: { ...DEFAULT_CONFIG.bloom },
+         stickCount: parseInt(options.count, 10),
        stickOverhang: parseFloat(options.stickOverhang),
         rotationCenterOffsetX: parseFloat(options.rotationCenterOffsetX),
         rotationCenterOffsetY: parseFloat(options.rotationCenterOffsetY),

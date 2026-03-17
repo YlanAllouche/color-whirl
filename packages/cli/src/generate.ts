@@ -109,6 +109,10 @@ async function startRendererServer(): Promise<{ url: string; close: () => Promis
     <canvas id="c"></canvas>
     <script type="module">
       import { createPopsicleScene, decodeAppStateFromBase64Url } from '/core/index.js';
+      import { EffectComposer } from 'https://unpkg.com/three@0.180.0/examples/jsm/postprocessing/EffectComposer.js';
+      import { RenderPass } from 'https://unpkg.com/three@0.180.0/examples/jsm/postprocessing/RenderPass.js';
+      import { UnrealBloomPass } from 'https://unpkg.com/three@0.180.0/examples/jsm/postprocessing/UnrealBloomPass.js';
+      import { Vector2 } from 'three';
 
       const sp = new URLSearchParams(location.search);
       const cfg = sp.get('cfg');
@@ -121,7 +125,23 @@ async function startRendererServer(): Promise<{ url: string; close: () => Promis
       const { scene, camera, renderer } = createPopsicleScene(config, { canvas, preserveDrawingBuffer: true, pixelRatio: 1 });
       renderer.setSize(config.width, config.height, false);
       renderer.setPixelRatio(1);
-      renderer.render(scene, camera);
+
+      if (config.bloom && config.bloom.enabled) {
+        const composer = new EffectComposer(renderer);
+        composer.addPass(new RenderPass(scene, camera));
+        composer.addPass(
+          new UnrealBloomPass(
+            new Vector2(config.width, config.height),
+            config.bloom.strength,
+            config.bloom.radius,
+            config.bloom.threshold
+          )
+        );
+        composer.render();
+        composer.dispose();
+      } else {
+        renderer.render(scene, camera);
+      }
       globalThis.wallpaperRendered = true;
     </script>
   </body>

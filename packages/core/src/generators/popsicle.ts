@@ -350,11 +350,12 @@ export function createPopsicleScene(
 
   const group = new THREE.Group();
   const materialCache = new Map<string, THREE.Material | THREE.Material[]>();
-  const materialParamsKey = JSON.stringify({ t: config.textureParams, e: config.edges });
-  const getMat = (hex: string) => {
+  const materialParamsKey = JSON.stringify({ t: config.textureParams, e: config.edges, em: config.emission });
+  const getMat = (paletteIndex: number, hex: string) => {
     const key = [
       texture,
       materialParamsKey,
+      String(paletteIndex),
       hex,
       envIntensity.toFixed(3),
       safeStickOpacity.toFixed(3),
@@ -362,14 +363,15 @@ export function createPopsicleScene(
     ].join(':');
     const existing = materialCache.get(key);
     if (existing) return existing;
-    const m = createStickMeshMaterial(config, hex, envIntensity, safeStickOpacity);
+    const m = createStickMeshMaterial(config, paletteIndex, hex, envIntensity, safeStickOpacity);
     materialCache.set(key, m);
     return m;
   };
 
   for (let i = 0; i < stickCount; i++) {
-    const hex = colors[i % colors.length];
-    const mesh = new THREE.Mesh(geo, getMat(hex));
+    const paletteIndex = i % colors.length;
+    const hex = colors[paletteIndex];
+    const mesh = new THREE.Mesh(geo, getMat(paletteIndex, hex));
     mesh.castShadow = useShadows;
     mesh.receiveShadow = useShadows;
 
