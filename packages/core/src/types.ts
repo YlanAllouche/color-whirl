@@ -19,6 +19,62 @@ export interface TextureParams {
   };
 }
 
+export interface RimLightConfig {
+  enabled: boolean;
+  color: string;
+  /** 0..5 */
+  intensity: number;
+  /** 0.5..8 */
+  power: number;
+}
+
+export interface OutlineConfig {
+  enabled: boolean;
+  color: string;
+  /** 0..0.2 (scale factor, not pixels) */
+  thickness: number;
+  /** 0..1 */
+  opacity: number;
+}
+
+export interface EdgeTintConfig {
+  enabled: boolean;
+  color: string;
+  /** 0..1 */
+  amount: number;
+}
+
+export interface EdgeMaterialConfig {
+  enabled: boolean;
+  /** 0..1 */
+  roughness: number;
+  /** 0..1 */
+  metalness: number;
+  /** 0..1 */
+  clearcoat: number;
+  /** 0..3 */
+  envIntensityMult: number;
+}
+
+export interface EdgeWearConfig {
+  enabled: boolean;
+  /** 0..1 */
+  intensity: number;
+  /** 0..1 */
+  width: number;
+  /** 0..1 */
+  noise: number;
+  colorShift: string;
+}
+
+export interface EdgesConfig {
+  tint: EdgeTintConfig;
+  material: EdgeMaterialConfig;
+  wear: EdgeWearConfig;
+  rimLight: RimLightConfig;
+  outline: OutlineConfig;
+}
+
 export interface CameraConfig {
   /** Distance from origin in scene units */
   distance: number;
@@ -79,6 +135,7 @@ export interface WallpaperConfig {
   texture: TextureType;
   textureParams: TextureParams;
   backgroundColor: string;
+  edges: EdgesConfig;
   stickCount: number;
   /** Stick overhang angle per stick in degrees (e.g., each stick rotates 15° from the previous) */
   stickOverhang: number;
@@ -135,6 +192,13 @@ export const DEFAULT_CONFIG: WallpaperConfig = {
     cel: { bands: 4, halftone: false }
   },
   backgroundColor: '#1a1a2e',
+  edges: {
+    tint: { enabled: false, color: '#ffffff', amount: 0.25 },
+    material: { enabled: false, roughness: 0.35, metalness: 0.0, clearcoat: 0.0, envIntensityMult: 1.0 },
+    wear: { enabled: false, intensity: 0.35, width: 0.5, noise: 0.6, colorShift: '#ffffff' },
+    rimLight: { enabled: false, color: '#ffffff', intensity: 0.6, power: 2.5 },
+    outline: { enabled: false, color: '#0b0b10', thickness: 0.03, opacity: 1.0 }
+  },
   stickCount: 12,
   stickOverhang: 30,
   rotationCenterOffsetX: 0,
@@ -374,6 +438,13 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number): WallpaperCo
       }
     },
     backgroundColor: theme.backgroundColor,
+    edges: {
+      tint: { ...DEFAULT_CONFIG.edges.tint },
+      material: { ...DEFAULT_CONFIG.edges.material },
+      wear: { ...DEFAULT_CONFIG.edges.wear },
+      rimLight: { ...DEFAULT_CONFIG.edges.rimLight },
+      outline: { ...DEFAULT_CONFIG.edges.outline }
+    },
     stickCount: Math.round(randomWeighted(rng, 1, 200, 40)),
     stickOverhang: randomWeighted(rng, 0, 180, 30),
     rotationCenterOffsetX: randomWeighted(rng, -100, 100, 0),

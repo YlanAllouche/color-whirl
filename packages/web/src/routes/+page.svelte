@@ -234,6 +234,13 @@
            glass: { ...DEFAULT_CONFIG.textureParams.glass },
            cel: { ...DEFAULT_CONFIG.textureParams.cel }
          },
+         edges: {
+           tint: { ...DEFAULT_CONFIG.edges.tint },
+           material: { ...DEFAULT_CONFIG.edges.material },
+           wear: { ...DEFAULT_CONFIG.edges.wear },
+           rimLight: { ...DEFAULT_CONFIG.edges.rimLight },
+           outline: { ...DEFAULT_CONFIG.edges.outline }
+         },
          lighting: {
            ...DEFAULT_CONFIG.lighting,
            position: { ...DEFAULT_CONFIG.lighting.position }
@@ -255,6 +262,13 @@
         drywall: { ...next.textureParams.drywall },
         glass: { ...next.textureParams.glass },
         cel: { ...next.textureParams.cel }
+      },
+      edges: {
+        tint: { ...next.edges.tint },
+        material: { ...next.edges.material },
+        wear: { ...next.edges.wear },
+        rimLight: { ...next.edges.rimLight },
+        outline: { ...next.edges.outline }
       },
       lighting: {
         ...next.lighting,
@@ -399,6 +413,27 @@
     void c.textureParams.cel.bands;
     void c.textureParams.cel.halftone;
     void c.backgroundColor;
+    void c.edges.tint.enabled;
+    void c.edges.tint.color;
+    void c.edges.tint.amount;
+    void c.edges.material.enabled;
+    void c.edges.material.roughness;
+    void c.edges.material.metalness;
+    void c.edges.material.clearcoat;
+    void c.edges.material.envIntensityMult;
+    void c.edges.wear.enabled;
+    void c.edges.wear.intensity;
+    void c.edges.wear.width;
+    void c.edges.wear.noise;
+    void c.edges.wear.colorShift;
+    void c.edges.rimLight.enabled;
+    void c.edges.rimLight.color;
+    void c.edges.rimLight.intensity;
+    void c.edges.rimLight.power;
+    void c.edges.outline.enabled;
+    void c.edges.outline.color;
+    void c.edges.outline.thickness;
+    void c.edges.outline.opacity;
     void c.stickCount;
     void c.stickOverhang;
     void c.rotationCenterOffsetX;
@@ -437,7 +472,7 @@
   });
 
   $effect(() => {
-    if (config.texture === 'cel' && renderMode === 'path') {
+    if ((config.texture === 'cel' || config.edges.outline.enabled) && renderMode === 'path') {
       renderMode = 'raster';
     }
   });
@@ -655,7 +690,116 @@
            <input type="color" bind:value={config.backgroundColor} />
          </label>
        </section>
-      
+
+      <!-- Edges -->
+      <section class="control-section">
+        <h3>Edges</h3>
+
+        <details class="control-details">
+          <summary class="control-details-summary">Rim light</summary>
+          <label class="control-row checkbox">
+            <input type="checkbox" bind:checked={config.edges.rimLight.enabled} />
+            <span class="setting-title">Enable</span>
+          </label>
+          <label class="control-row">
+            <span class="setting-title">Color</span>
+            <input type="color" bind:value={config.edges.rimLight.color} disabled={!config.edges.rimLight.enabled} />
+          </label>
+          <label class="control-row slider">
+            <span class="setting-title">Intensity: {config.edges.rimLight.intensity.toFixed(2)}</span>
+            <input type="range" bind:value={config.edges.rimLight.intensity} min="0" max="5" step="0.01" disabled={!config.edges.rimLight.enabled} />
+          </label>
+          <label class="control-row slider">
+            <span class="setting-title">Power: {config.edges.rimLight.power.toFixed(2)}</span>
+            <input type="range" bind:value={config.edges.rimLight.power} min="0.5" max="8" step="0.05" disabled={!config.edges.rimLight.enabled} />
+          </label>
+        </details>
+
+        <details class="control-details">
+          <summary class="control-details-summary">Edge tint</summary>
+          <label class="control-row checkbox">
+            <input type="checkbox" bind:checked={config.edges.tint.enabled} />
+            <span class="setting-title">Enable</span>
+          </label>
+          <label class="control-row">
+            <span class="setting-title">Tint</span>
+            <input type="color" bind:value={config.edges.tint.color} disabled={!config.edges.tint.enabled} />
+          </label>
+          <label class="control-row slider">
+            <span class="setting-title">Amount: {config.edges.tint.amount.toFixed(2)}</span>
+            <input type="range" bind:value={config.edges.tint.amount} min="0" max="1" step="0.01" disabled={!config.edges.tint.enabled} />
+          </label>
+        </details>
+
+        <details class="control-details">
+          <summary class="control-details-summary">Edge material</summary>
+          <label class="control-row checkbox">
+            <input type="checkbox" bind:checked={config.edges.material.enabled} />
+            <span class="setting-title">Enable</span>
+          </label>
+          <label class="control-row slider">
+            <span class="setting-title">Roughness: {config.edges.material.roughness.toFixed(2)}</span>
+            <input type="range" bind:value={config.edges.material.roughness} min="0" max="1" step="0.01" disabled={!config.edges.material.enabled} />
+          </label>
+          <label class="control-row slider">
+            <span class="setting-title">Metalness: {config.edges.material.metalness.toFixed(2)}</span>
+            <input type="range" bind:value={config.edges.material.metalness} min="0" max="1" step="0.01" disabled={!config.edges.material.enabled} />
+          </label>
+          <label class="control-row slider">
+            <span class="setting-title">Clearcoat: {config.edges.material.clearcoat.toFixed(2)}</span>
+            <input type="range" bind:value={config.edges.material.clearcoat} min="0" max="1" step="0.01" disabled={!config.edges.material.enabled} />
+          </label>
+          <label class="control-row slider">
+            <span class="setting-title">Env mult: {config.edges.material.envIntensityMult.toFixed(2)}</span>
+            <input type="range" bind:value={config.edges.material.envIntensityMult} min="0" max="3" step="0.01" disabled={!config.edges.material.enabled} />
+          </label>
+        </details>
+
+        <details class="control-details">
+          <summary class="control-details-summary">Edge wear</summary>
+          <label class="control-row checkbox">
+            <input type="checkbox" bind:checked={config.edges.wear.enabled} />
+            <span class="setting-title">Enable</span>
+          </label>
+          <label class="control-row">
+            <span class="setting-title">Shift</span>
+            <input type="color" bind:value={config.edges.wear.colorShift} disabled={!config.edges.wear.enabled} />
+          </label>
+          <label class="control-row slider">
+            <span class="setting-title">Intensity: {config.edges.wear.intensity.toFixed(2)}</span>
+            <input type="range" bind:value={config.edges.wear.intensity} min="0" max="1" step="0.01" disabled={!config.edges.wear.enabled} />
+          </label>
+          <label class="control-row slider">
+            <span class="setting-title">Width: {config.edges.wear.width.toFixed(2)}</span>
+            <input type="range" bind:value={config.edges.wear.width} min="0" max="1" step="0.01" disabled={!config.edges.wear.enabled} />
+          </label>
+          <label class="control-row slider">
+            <span class="setting-title">Noise: {config.edges.wear.noise.toFixed(2)}</span>
+            <input type="range" bind:value={config.edges.wear.noise} min="0" max="1" step="0.01" disabled={!config.edges.wear.enabled} />
+          </label>
+        </details>
+
+        <details class="control-details">
+          <summary class="control-details-summary">Outline</summary>
+          <label class="control-row checkbox">
+            <input type="checkbox" bind:checked={config.edges.outline.enabled} />
+            <span class="setting-title">Enable</span>
+          </label>
+          <label class="control-row">
+            <span class="setting-title">Color</span>
+            <input type="color" bind:value={config.edges.outline.color} disabled={!config.edges.outline.enabled} />
+          </label>
+          <label class="control-row slider">
+            <span class="setting-title">Thickness: {config.edges.outline.thickness.toFixed(3)}</span>
+            <input type="range" bind:value={config.edges.outline.thickness} min="0" max="0.12" step="0.001" disabled={!config.edges.outline.enabled} />
+          </label>
+          <label class="control-row slider">
+            <span class="setting-title">Opacity: {config.edges.outline.opacity.toFixed(2)}</span>
+            <input type="range" bind:value={config.edges.outline.opacity} min="0" max="1" step="0.01" disabled={!config.edges.outline.enabled} />
+          </label>
+        </details>
+      </section>
+       
        <!-- Stick Settings -->
         <section class="control-section">
           <h3>Stick Settings</h3>
@@ -789,7 +933,7 @@
           <span class="setting-title">Mode</span>
           <select bind:value={renderMode} title="Raster is instant; Path traced refines progressively">
             <option value="raster">Raster</option>
-            <option value="path" disabled={config.texture === 'cel'}>Path traced</option>
+            <option value="path" disabled={config.texture === 'cel' || config.edges.outline.enabled}>Path traced</option>
           </select>
         </label>
 

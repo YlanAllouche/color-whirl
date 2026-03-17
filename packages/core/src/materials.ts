@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { TextureParams, TextureType, GlassStyle } from './types.js';
+import type { EdgesConfig, RimLightConfig, EdgeWearConfig, TextureParams, TextureType, GlassStyle, WallpaperConfig } from './types.js';
 import { createRng } from './types.js';
 
 type DrywallMaps = { normalMap: THREE.DataTexture; roughnessMap: THREE.DataTexture };
@@ -152,14 +152,132 @@ function createDrywallMaps(seed: number, grainAmount: number): DrywallMaps {
 }
 
 function applyHalftone(material: THREE.Material): void {
-  material.onBeforeCompile = (shader) => {
-    shader.fragmentShader = shader.fragmentShader.replace(
-      '#include <dithering_fragment>',
-      `#include <dithering_fragment>\n\n// Halftone overlay\nfloat ht = 0.0;\nvec2 p = gl_FragCoord.xy * 0.065;\nfloat a = sin(p.x) * sin(p.y);\nht = smoothstep(0.25, 0.75, a);\ngl_FragColor.rgb *= mix(1.0, 0.86, ht);`
-    );
+  chainOnBeforeCompile(
+    material,
+    (shader) => {
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <dithering_fragment>',
+        `#include <dithering_fragment>\n\n// Halftone overlay\nfloat ht = 0.0;\nvec2 p = gl_FragCoord.xy * 0.065;\nfloat a = sin(p.x) * sin(p.y);\nht = smoothstep(0.25, 0.75, a);\ngl_FragColor.rgb *= mix(1.0, 0.86, ht);`
+      );
+    },
+    'halftone-v1'
+  );
+}
+
+function chainOnBeforeCompile(
+  material: THREE.Material,
+  fn: (shader: any) => void,
+  keyPart: string
+): void {
+  const prev = material.onBeforeCompile;
+  material.onBeforeCompile = (shader: any, renderer: any) => {
+    (prev as any)?.(shader, renderer);
+    fn(shader);
   };
-  (material as any).customProgramCacheKey = () => 'halftone-v1';
+
+  const prevKey = (material as any).customProgramCacheKey;
+  (material as any).customProgramCacheKey = () => {
+    const a = typeof prevKey === 'function' ? String(prevKey()) : '';
+    return a ? `${a}|${keyPart}` : keyPart;
+  };
   material.needsUpdate = true;
+}
+
+function applyRimLight(material: THREE.Material, cfg: RimLightConfig): void {
+  if (!cfg.enabled) return;
+  const rimColor = new THREE.Color(cfg.color);
+  const intensity = clamp(cfg.intensity, 0, 5);
+  const power = clamp(cfg.power, 0.5, 8);
+
+  chainOnBeforeCompile(
+    material,
+    (shader) => {
+      shader.uniforms.rimColor = { value: rimColor };
+      shader.uniforms.rimIntensity = { value: intensity };
+      shader.uniforms.rimPower = { value: power };
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <dithering_fragment>',
+        `#include <dithering_fragment>\n\n// Rim light\nvec3 rimN = normalize(normal);\nvec3 rimV = normalize(vViewPosition);\nfloat rimDot = clamp(dot(rimN, rimV), 0.0, 1.0);\nfloat rim = pow(1.0 - rimDot, rimPower) * rimIntensity;\ngl_FragColor.rgb += rimColor * rim;`
+      );
+    },
+    `rim-v1:${rimColor.getHexString()}:${intensity.toFixed(3)}:${power.toFixed(3)}`
+  );
+}
+
+function applyEdgeWear(material: THREE.Material, cfg: EdgeWearConfig): void {
+  if (!cfg.enabled) return;
+  const intensity = clamp(cfg.intensity, 0, 1);
+  const width = clamp(cfg.width, 0, 1);
+  const noise = clamp(cfg.noise, 0, 1);
+  const wearColor = new THREE.Color(cfg.colorShift);
+
+  chainOnBeforeCompile(
+    material,
+    (shader) => {
+      shader.uniforms.wearColor = { value: wearColor };
+      shader.uniforms.wearIntensity = { value: intensity };
+      shader.uniforms.wearWidth = { value: width };
+      shader.uniforms.wearNoise = { value: noise };
+
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <dithering_fragment>',
+        `#include <dithering_fragment>\n\n// Edge wear (view-dependent)\nvec3 wearN = normalize(normal);\nvec3 wearV = normalize(vViewPosition);\nfloat wearDot = clamp(dot(wearN, wearV), 0.0, 1.0);\nfloat wearEdge = pow(1.0 - wearDot, 2.0);\nfloat wearMask = smoothstep(1.0 - wearWidth, 1.0, wearEdge) * wearIntensity;\nfloat wearRand = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);\nwearMask *= mix(1.0, wearRand, wearNoise);\ngl_FragColor.rgb = mix(gl_FragColor.rgb, wearColor, clamp(wearMask, 0.0, 1.0));`
+      );
+    },
+    `wear-v1:${wearColor.getHexString()}:${intensity.toFixed(3)}:${width.toFixed(3)}:${noise.toFixed(3)}`
+  );
+}
+
+export type StickMeshMaterial = THREE.Material | THREE.Material[];
+
+function canHaveColor(m: THREE.Material): m is THREE.Material & { color: THREE.Color } {
+  return (m as any).color instanceof THREE.Color;
+}
+
+function applyEdgeTint(m: THREE.Material, tintColor: string, amount: number): void {
+  if (!canHaveColor(m)) return;
+  const a = clamp(amount, 0, 1);
+  const base = (m as any).color as THREE.Color;
+  const next = base.clone().lerp(new THREE.Color(tintColor), a);
+  base.copy(next);
+}
+
+function applyEdgeMaterialOverrides(m: THREE.Material, cfg: EdgesConfig, envIntensity: number): void {
+  if (!cfg.material.enabled) return;
+  const anyMat: any = m as any;
+  if (typeof anyMat.roughness === 'number') anyMat.roughness = clamp(cfg.material.roughness, 0, 1);
+  if (typeof anyMat.metalness === 'number') anyMat.metalness = clamp(cfg.material.metalness, 0, 1);
+  if (typeof anyMat.clearcoat === 'number') anyMat.clearcoat = clamp(cfg.material.clearcoat, 0, 1);
+  if (typeof anyMat.envMapIntensity === 'number') {
+    const mult = clamp(cfg.material.envIntensityMult, 0, 3);
+    anyMat.envMapIntensity = envIntensity * mult;
+  }
+}
+
+export function createStickMeshMaterial(config: WallpaperConfig, color: string, envIntensity: number, stickOpacity: number): StickMeshMaterial {
+  const face = createStickMaterial({
+    texture: config.texture,
+    color,
+    envIntensity,
+    stickOpacity,
+    seed: config.seed,
+    textureParams: config.textureParams
+  });
+
+  applyRimLight(face, config.edges.rimLight);
+
+  const needsEdgeMat = config.edges.tint.enabled || config.edges.material.enabled || config.edges.wear.enabled;
+  if (!needsEdgeMat) return face;
+
+  const edge = face.clone();
+  applyRimLight(edge, config.edges.rimLight);
+  if (config.edges.tint.enabled) {
+    applyEdgeTint(edge, config.edges.tint.color, config.edges.tint.amount);
+  }
+  applyEdgeMaterialOverrides(edge, config.edges, envIntensity);
+  applyEdgeWear(edge, config.edges.wear);
+
+  return [face, edge];
 }
 
 export function createStickMaterial(options: {

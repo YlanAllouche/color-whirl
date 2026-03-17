@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { WallpaperConfig, EnvironmentStyle } from '../types.js';
-import { createStickMaterial } from '../materials.js';
+import { createStickMeshMaterial } from '../materials.js';
 
 interface StickDimensions {
   width: number;
@@ -349,19 +349,20 @@ export function createPopsicleScene(
   const useShadows = !!shadows?.enabled;
 
   const group = new THREE.Group();
-  const materialCache = new Map<string, THREE.Material>();
+  const materialCache = new Map<string, THREE.Material | THREE.Material[]>();
+  const materialParamsKey = JSON.stringify({ t: config.textureParams, e: config.edges });
   const getMat = (hex: string) => {
-    const key = [texture, hex, envIntensity.toFixed(3), safeStickOpacity.toFixed(3), String(config.seed)].join(':');
+    const key = [
+      texture,
+      materialParamsKey,
+      hex,
+      envIntensity.toFixed(3),
+      safeStickOpacity.toFixed(3),
+      String(config.seed)
+    ].join(':');
     const existing = materialCache.get(key);
     if (existing) return existing;
-    const m = createStickMaterial({
-      texture,
-      color: hex,
-      envIntensity,
-      stickOpacity: safeStickOpacity,
-      seed: config.seed,
-      textureParams: config.textureParams
-    });
+    const m = createStickMeshMaterial(config, hex, envIntensity, safeStickOpacity);
     materialCache.set(key, m);
     return m;
   };
@@ -381,6 +382,31 @@ export function createPopsicleScene(
   const box = new THREE.Box3().setFromObject(group);
   const center = box.getCenter(new THREE.Vector3());
   group.position.sub(center);
+
+  if (config.edges.outline.enabled) {
+    const oc = config.edges.outline;
+    const outlineMat = new THREE.MeshBasicMaterial({
+      color: new THREE.Color(oc.color),
+      side: THREE.BackSide,
+      transparent: oc.opacity < 1,
+      opacity: clamp(Number(oc.opacity) || 1, 0, 1),
+      depthWrite: false
+    });
+    const thickness = Math.max(0, Math.min(0.2, Number(oc.thickness) || 0));
+    const outlineGroup = new THREE.Group();
+    for (const child of group.children) {
+      if (!(child as any).isMesh) continue;
+      const mesh = child as THREE.Mesh;
+      const o = new THREE.Mesh(mesh.geometry, outlineMat);
+      o.position.copy(mesh.position);
+      o.rotation.copy(mesh.rotation);
+      o.scale.setScalar(1 + thickness);
+      o.castShadow = false;
+      o.receiveShadow = false;
+      outlineGroup.add(o);
+    }
+    group.add(outlineGroup);
+  }
   scene.add(group);
   
   const renderer = new THREE.WebGLRenderer({

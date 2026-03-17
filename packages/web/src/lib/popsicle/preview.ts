@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createStickMaterial } from '@wallpaper-maker/core';
+import { createStickMeshMaterial } from '@wallpaper-maker/core';
 import type { WallpaperConfig, EnvironmentStyle, ShadowType, TextureType } from '@wallpaper-maker/core';
 
 type PreviewQuality = 'interactive' | 'final';
@@ -15,6 +15,15 @@ type Bounds = {
 
 function clamp(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, n));
+}
+
+function disposeMaterial(m: THREE.Material | THREE.Material[] | null | undefined): void {
+  if (!m) return;
+  if (Array.isArray(m)) {
+    for (const x of m) x.dispose();
+    return;
+  }
+  m.dispose();
 }
 
 function degToRad(deg: number): number {
@@ -165,15 +174,8 @@ function createMaterialForColor(
   color: string,
   envIntensity: number,
   stickOpacity: number
-): THREE.Material {
-  return createStickMaterial({
-    texture: config.texture,
-    color,
-    envIntensity,
-    stickOpacity,
-    seed: config.seed,
-    textureParams: config.textureParams
-  });
+): THREE.Material | THREE.Material[] {
+  return createStickMeshMaterial(config, color, envIntensity, stickOpacity);
 }
 
 function createProceduralEquirectDataTexture(style: EnvironmentStyle): THREE.DataTexture {
@@ -334,8 +336,11 @@ export class PopsiclePreview {
   private scene: THREE.Scene;
   private camera: THREE.OrthographicCamera;
   private sticksGroup!: THREE.Group;
+  private outlineGroup!: THREE.Group;
+  private outlineMeshes: THREE.Mesh[] = [];
+  private outlineMaterial: THREE.MeshBasicMaterial | null = null;
   private stickMeshes: THREE.Mesh[] = [];
-  private stickMaterialCache = new Map<string, THREE.Material>();
+  private stickMaterialCache = new Map<string, THREE.Material | THREE.Material[]>();
   private stickGeometry: THREE.BufferGeometry | null = null;
   private envCache = new EnvironmentCache();
 
@@ -371,6 +376,10 @@ export class PopsiclePreview {
     // Use renderer clear color for the solid background.
     this.scene.background = null;
 
+    this.outlineGroup = new THREE.Group();
+    this.outlineGroup.renderOrder = -1;
+    this.scene.add(this.outlineGroup);
+   
     this.sticksGroup = new THREE.Group();
     this.scene.add(this.sticksGroup);
 
@@ -422,14 +431,23 @@ export class PopsiclePreview {
 
     this.stickGeometry?.dispose();
     this.stickGeometry = null;
-    for (const m of this.stickMaterialCache.values()) m.dispose();
+    for (const m of this.stickMaterialCache.values()) disposeMaterial(m);
     this.stickMaterialCache.clear();
     for (const mesh of this.stickMeshes) {
       mesh.geometry?.dispose?.();
-      (mesh.material as any)?.dispose?.();
+      disposeMaterial(mesh.material as any);
     }
     this.stickMeshes = [];
     this.sticksGroup.clear();
+
+    for (const mesh of this.outlineMeshes) {
+      mesh.geometry?.dispose?.();
+      disposeMaterial(mesh.material as any);
+    }
+    this.outlineMeshes = [];
+    this.outlineGroup.clear();
+    this.outlineMaterial?.dispose();
+    this.outlineMaterial = null;
     this.envCache.dispose();
     this.renderer.dispose();
     this.container.innerHTML = '';
@@ -576,9 +594,11 @@ export class PopsiclePreview {
     }
 
     const envIntensity = effective.environment.enabled ? effective.environment.intensity : 0;
+    const edgesKey = JSON.stringify(effective.edges);
     const matBaseKey = [
       effective.texture,
       textureParamsKey(effective),
+      edgesKey,
       envIntensity.toFixed(3),
       safeStickOpacity.toFixed(3),
       String(effective.seed)
@@ -624,6 +644,57 @@ export class PopsiclePreview {
 
       mesh.position.set(o.x - bounds.center.x, o.y - bounds.center.y, o.z - bounds.center.z);
       mesh.rotation.set(0, 0, o.rotationZ);
+    }
+
+    // Outline (inverted hull)
+    const outlineEnabled = effective.edges.outline.enabled;
+    this.outlineGroup.visible = outlineEnabled;
+    if (outlineEnabled) {
+      const oc = effective.edges.outline;
+      const opacity = clamp(Number(oc.opacity) || 1, 0, 1);
+      const thickness = Math.max(0, Math.min(0.2, Number(oc.thickness) || 0));
+      const colorHex = new THREE.Color(oc.color).getHex();
+
+      const needsNewMat =
+        !this.outlineMaterial ||
+        this.outlineMaterial.color.getHex() !== colorHex ||
+        this.outlineMaterial.opacity !== opacity ||
+        this.outlineMaterial.transparent !== (opacity < 1);
+
+      if (needsNewMat) {
+        this.outlineMaterial?.dispose();
+        this.outlineMaterial = new THREE.MeshBasicMaterial({
+          color: new THREE.Color(oc.color),
+          side: THREE.BackSide,
+          transparent: opacity < 1,
+          opacity,
+          depthWrite: false
+        });
+      }
+
+      while (this.outlineMeshes.length < effective.stickCount) {
+        const om = new THREE.Mesh(this.stickGeometry!, this.outlineMaterial!);
+        om.castShadow = false;
+        om.receiveShadow = false;
+        this.outlineGroup.add(om);
+        this.outlineMeshes.push(om);
+      }
+
+      for (let i = 0; i < this.outlineMeshes.length; i++) {
+        const om = this.outlineMeshes[i];
+        if (i >= effective.stickCount) {
+          om.visible = false;
+          continue;
+        }
+
+        const sm = this.stickMeshes[i];
+        om.visible = sm.visible;
+        om.geometry = this.stickGeometry;
+        om.material = this.outlineMaterial!;
+        om.position.copy(sm.position);
+        om.rotation.copy(sm.rotation);
+        om.scale.setScalar(1 + thickness);
+      }
     }
 
     // Shadow camera + catcher
@@ -680,6 +751,13 @@ export class PopsiclePreview {
         drywall: { ...config.textureParams.drywall },
         glass: { ...config.textureParams.glass },
         cel: { ...config.textureParams.cel }
+      },
+      edges: {
+        tint: { ...config.edges.tint },
+        material: { ...config.edges.material },
+        wear: { ...config.edges.wear },
+        rimLight: { ...config.edges.rimLight },
+        outline: { ...config.edges.outline }
       },
       lighting: {
         ...config.lighting,
@@ -911,11 +989,12 @@ export class PopsiclePreview {
     );
 
     const envIntensity = config.environment.enabled ? config.environment.intensity : 0;
-    const materialCache = new Map<string, THREE.Material>();
+    const materialCache = new Map<string, THREE.Material | THREE.Material[]>();
     const getMat = (hex: string) => {
       const k = [
         config.texture,
         textureParamsKey(config),
+        JSON.stringify(config.edges),
         hex,
         envIntensity.toFixed(3),
         safeStickOpacity.toFixed(3),
@@ -1041,11 +1120,25 @@ export async function renderRasterToCanvas(config: WallpaperConfig): Promise<HTM
   if (keyLight) keyLight.castShadow = useShadows;
 
   const envIntensity = config.environment.enabled ? config.environment.intensity : 0;
-  const materialCache = new Map<string, THREE.Material>();
+  const materialCache = new Map<string, THREE.Material | THREE.Material[]>();
+  const outlineEnabled = config.edges.outline.enabled;
+  const outlineCfg = config.edges.outline;
+  const outlineOpacity = clamp(Number(outlineCfg.opacity) || 1, 0, 1);
+  const outlineThickness = Math.max(0, Math.min(0.2, Number(outlineCfg.thickness) || 0));
+  const outlineMat = outlineEnabled
+    ? new THREE.MeshBasicMaterial({
+        color: new THREE.Color(outlineCfg.color),
+        side: THREE.BackSide,
+        transparent: outlineOpacity < 1,
+        opacity: outlineOpacity,
+        depthWrite: false
+      })
+    : null;
   const getMat = (hex: string) => {
     const k = [
       config.texture,
       textureParamsKey(config),
+      JSON.stringify(config.edges),
       hex,
       envIntensity.toFixed(3),
       safeStickOpacity.toFixed(3),
@@ -1074,6 +1167,16 @@ export async function renderRasterToCanvas(config: WallpaperConfig): Promise<HTM
     mesh.position.set(o.x - bounds.center.x, o.y - bounds.center.y, o.z - bounds.center.z);
     mesh.rotation.set(0, 0, o.rotationZ);
     scene.add(mesh);
+
+    if (outlineMat) {
+      const om = new THREE.Mesh(geometry, outlineMat);
+      om.castShadow = false;
+      om.receiveShadow = false;
+      om.position.copy(mesh.position);
+      om.rotation.copy(mesh.rotation);
+      om.scale.setScalar(1 + outlineThickness);
+      scene.add(om);
+    }
   }
 
   // No shadow catcher: keep shadows stick-to-stick only.
@@ -1085,7 +1188,8 @@ export async function renderRasterToCanvas(config: WallpaperConfig): Promise<HTM
   renderer.dispose();
 
   geometry.dispose();
-  for (const m of materialCache.values()) m.dispose();
+  for (const m of materialCache.values()) disposeMaterial(m);
+  outlineMat?.dispose();
 
   return renderer.domElement;
 }
