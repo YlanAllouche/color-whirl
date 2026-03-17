@@ -1,28 +1,22 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { createPopsicleScene, type WallpaperConfig } from '@wallpaper-maker/core';
+  import { renderWallpaperToCanvas, type WallpaperConfig } from '@wallpaper-maker/core';
   
   let { config }: { config: WallpaperConfig } = $props();
   
   let canvasContainer: HTMLDivElement;
-  let renderer: THREE.WebGLRenderer | null = null;
-  let animationId: number;
+  let canvas: HTMLCanvasElement | null = null;
   
   function render() {
     if (!canvasContainer) return;
-    
-    // Clean up previous renderer
-    if (renderer) {
-      renderer.dispose();
+
+    const next = renderWallpaperToCanvas(config, canvas ?? undefined);
+    canvas = next;
+
+    if (!next.parentElement) {
       canvasContainer.innerHTML = '';
+      canvasContainer.appendChild(next);
     }
-    
-    const { scene, camera, renderer: newRenderer } = createPopsicleScene(config);
-    renderer = newRenderer;
-    
-    canvasContainer.appendChild(renderer.domElement);
-    
-    renderer.render(scene, camera);
   }
   
   $effect(() => {
@@ -34,9 +28,8 @@
   });
   
   onDestroy(() => {
-    if (renderer) {
-      renderer.dispose();
-    }
+    // Canvas renderers don't need explicit disposal here.
+    canvas = null;
   });
 </script>
 

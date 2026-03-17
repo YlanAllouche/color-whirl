@@ -5,6 +5,8 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { createStickMeshMaterial } from '@wallpaper-maker/core';
 import type { WallpaperConfig, EnvironmentStyle, ShadowType, TextureType } from '@wallpaper-maker/core';
 
+type PopsicleConfig = Extract<WallpaperConfig, { type: 'popsicle' }>;
+
 type PreviewQuality = 'interactive' | 'final';
 export type PreviewRenderMode = 'raster' | 'path';
 
@@ -156,7 +158,7 @@ function createRoundedBox(
   return geometry;
 }
 
-function textureParamsKey(config: WallpaperConfig): string {
+function textureParamsKey(config: PopsicleConfig): string {
   const t = config.texture;
   if (t === 'drywall') {
     const p = config.textureParams.drywall;
@@ -173,7 +175,7 @@ function textureParamsKey(config: WallpaperConfig): string {
 }
 
 function createMaterialForColor(
-  config: WallpaperConfig,
+  config: PopsicleConfig,
   paletteIndex: number,
   color: string,
   envIntensity: number,
@@ -282,7 +284,7 @@ class EnvironmentCache {
   }
 }
 
-function applyToneMapping(renderer: THREE.WebGLRenderer, config: WallpaperConfig): void {
+function applyToneMapping(renderer: THREE.WebGLRenderer, config: PopsicleConfig): void {
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   if (config.rendering.toneMapping === 'aces') {
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -469,7 +471,7 @@ export class PopsiclePreview {
     // Render size is set during renderOnce based on current config.
   }
 
-  renderOnce(config: WallpaperConfig, quality: PreviewQuality): void {
+  renderOnce(config: PopsicleConfig, quality: PreviewQuality): void {
     if (this.mode === 'path') {
       void this.renderOncePath(config, quality);
       return;
@@ -480,7 +482,7 @@ export class PopsiclePreview {
 
   // ---------------------- Raster ----------------------
 
-  private renderOnceRaster(config: WallpaperConfig, quality: PreviewQuality): void {
+  private renderOnceRaster(config: PopsicleConfig, quality: PreviewQuality): void {
     const effective = this.applyQualityOverrides(config, quality);
 
     // Camera
@@ -778,11 +780,11 @@ export class PopsiclePreview {
     return { previewWidth, previewHeight };
   }
 
-  private applyQualityOverrides(config: WallpaperConfig, quality: PreviewQuality): WallpaperConfig {
+  private applyQualityOverrides(config: PopsicleConfig, quality: PreviewQuality): PopsicleConfig {
     if (quality === 'final') return config;
 
     // Interactive mode: keep framing but reduce expensive features.
-    const next: WallpaperConfig = {
+    const next: PopsicleConfig = {
       ...config,
       colors: [...config.colors],
       textureParams: {
@@ -867,7 +869,7 @@ export class PopsiclePreview {
     this.pathTracingLoopId = requestAnimationFrame(loop);
   }
 
-  private getPathConfigKey(config: WallpaperConfig): string {
+  private getPathConfigKey(config: PopsicleConfig): string {
     // Keep it stable and cheap.
     const keyObj = {
       w: config.width,
@@ -895,7 +897,7 @@ export class PopsiclePreview {
     return JSON.stringify(keyObj);
   }
 
-  private async renderOncePath(config: WallpaperConfig, quality: PreviewQuality): Promise<void> {
+  private async renderOncePath(config: PopsicleConfig, quality: PreviewQuality): Promise<void> {
     const token = ++this.pathRenderToken;
     if (!this.pathInitPromise) this.pathInitPromise = this.initPathTracer();
     await this.pathInitPromise;
@@ -956,7 +958,7 @@ export class PopsiclePreview {
     }
   }
 
-  private buildPathCamera(config: WallpaperConfig): THREE.PerspectiveCamera {
+  private buildPathCamera(config: PopsicleConfig): THREE.PerspectiveCamera {
     const aspect = config.width / config.height;
     const frustumSize = 10;
     const zoom = cameraZoomFromDistance(config.camera.distance);
@@ -977,7 +979,7 @@ export class PopsiclePreview {
     return camera;
   }
 
-  private buildPathScene(config: WallpaperConfig): THREE.Scene {
+  private buildPathScene(config: PopsicleConfig): THREE.Scene {
     const scene = new THREE.Scene();
     scene.background = null;
 
@@ -1070,7 +1072,7 @@ export class PopsiclePreview {
   }
 }
 
-export async function renderRasterToCanvas(config: WallpaperConfig): Promise<HTMLCanvasElement> {
+export async function renderRasterToCanvas(config: PopsicleConfig): Promise<HTMLCanvasElement> {
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, preserveDrawingBuffer: true });
   renderer.setPixelRatio(1);
   renderer.setSize(config.width, config.height, false);

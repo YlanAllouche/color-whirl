@@ -13,10 +13,13 @@
     exportToJPG,
     exportToWebP,
     exportToSVG,
-    downloadFile
+    downloadFile,
+    renderWallpaperToCanvas
   } from '@wallpaper-maker/core';
 
   import { PopsiclePreview, renderRasterToCanvas, type PreviewRenderMode } from '$lib/popsicle/preview';
+
+  type PopsicleConfig = Extract<WallpaperConfig, { type: 'popsicle' }>;
 
   import { COLOR_PRESETS, COLOR_PRESET_GROUPS, type ColorPreset } from '$lib/color-presets';
 
@@ -26,6 +29,7 @@
   
   let canvasContainer: HTMLDivElement;
   let preview: PopsiclePreview | null = null;
+  let fallbackCanvas: HTMLCanvasElement | null = null;
   let renderMode = $state<PreviewRenderMode>('raster');
 
   let renderRaf = 0;
@@ -149,16 +153,33 @@
   // Derived values
   let aspectRatio = $derived(config.width / config.height);
 
+  function renderNonPopsicleOnce() {
+    if (!canvasContainer) return;
+    const next = renderWallpaperToCanvas(config, fallbackCanvas ?? undefined);
+    fallbackCanvas = next;
+    if (!next.parentElement) {
+      canvasContainer.innerHTML = '';
+      canvasContainer.appendChild(next);
+    }
+  }
+
   function schedulePreviewRender() {
-    if (!preview) return;
     if (renderRaf) cancelAnimationFrame(renderRaf);
     renderRaf = requestAnimationFrame(() => {
-      preview?.renderOnce(config, 'interactive');
+      if (config.type === 'popsicle') {
+        preview?.renderOnce(config as PopsicleConfig, 'interactive');
+      } else {
+        renderNonPopsicleOnce();
+      }
     });
 
     if (renderSettleTimer) window.clearTimeout(renderSettleTimer);
     renderSettleTimer = window.setTimeout(() => {
-      preview?.renderOnce(config, 'final');
+      if (config.type === 'popsicle') {
+        preview?.renderOnce(config as PopsicleConfig, 'final');
+      } else {
+        renderNonPopsicleOnce();
+      }
     }, RENDER_SETTLE_MS);
   }
   
@@ -175,7 +196,10 @@
         return;
       }
 
-      const canvas = await renderRasterToCanvas(config);
+      const canvas =
+        config.type === 'popsicle'
+          ? await renderRasterToCanvas(config as PopsicleConfig)
+          : renderWallpaperToCanvas(config);
       let result;
       
       switch (exportFormat) {
@@ -300,17 +324,19 @@
 
      if (locks.texture) merged.texture = current.texture;
 
-    if (locks.stickCount) merged.stickCount = current.stickCount;
-    if (locks.stickOverhang) merged.stickOverhang = current.stickOverhang;
-    if (locks.rotationCenterOffsetX) merged.rotationCenterOffsetX = current.rotationCenterOffsetX;
-    if (locks.rotationCenterOffsetY) merged.rotationCenterOffsetY = current.rotationCenterOffsetY;
-    if (locks.stickGap) merged.stickGap = current.stickGap;
-    if (locks.stickSize) merged.stickSize = current.stickSize;
-    if (locks.stickRatio) merged.stickRatio = current.stickRatio;
-     if (locks.stickThickness) merged.stickThickness = current.stickThickness;
-     if (locks.stickRoundness) merged.stickRoundness = current.stickRoundness;
-     if (locks.stickBevel) merged.stickBevel = current.stickBevel;
-     if (locks.stickOpacity) merged.stickOpacity = current.stickOpacity;
+    if (current.type === 'popsicle' && merged.type === 'popsicle') {
+      if (locks.stickCount) merged.stickCount = current.stickCount;
+      if (locks.stickOverhang) merged.stickOverhang = current.stickOverhang;
+      if (locks.rotationCenterOffsetX) merged.rotationCenterOffsetX = current.rotationCenterOffsetX;
+      if (locks.rotationCenterOffsetY) merged.rotationCenterOffsetY = current.rotationCenterOffsetY;
+      if (locks.stickGap) merged.stickGap = current.stickGap;
+      if (locks.stickSize) merged.stickSize = current.stickSize;
+      if (locks.stickRatio) merged.stickRatio = current.stickRatio;
+      if (locks.stickThickness) merged.stickThickness = current.stickThickness;
+      if (locks.stickRoundness) merged.stickRoundness = current.stickRoundness;
+      if (locks.stickBevel) merged.stickBevel = current.stickBevel;
+      if (locks.stickOpacity) merged.stickOpacity = current.stickOpacity;
+    }
 
     if (locks.cameraDistance) merged.camera.distance = current.camera.distance;
     if (locks.cameraAzimuth) merged.camera.azimuth = current.camera.azimuth;
@@ -329,7 +355,7 @@
   function generateRandomGeneratedColors() {
     // Randomize everything, including a non-preset generated color theme.
     const seed = randomSeedU32();
-    config = mergeWithLocks(generateRandomConfigNoPresetsFromSeed(seed));
+    config = mergeWithLocks(generateRandomConfigNoPresetsFromSeed(seed, config.type));
     schedulePreviewRender();
   }
 
@@ -402,10 +428,11 @@
   });
   
   $effect(() => {
-    if (!preview) return;
+    if (!canvasContainer) return;
     // Touch all relevant fields so deep mutations re-run this effect.
     // This is critical because many controls mutate nested properties in-place.
     const c = config;
+    void c.type;
     void c.width;
     void c.height;
     void c.seed;
@@ -445,17 +472,19 @@
     void c.bloom.strength;
     void c.bloom.radius;
     void c.bloom.threshold;
-    void c.stickCount;
-    void c.stickOverhang;
-    void c.rotationCenterOffsetX;
-    void c.rotationCenterOffsetY;
-    void c.stickGap;
-    void c.stickSize;
-    void c.stickRatio;
-    void c.stickThickness;
-    void c.stickRoundness;
-    void c.stickBevel;
-    void c.stickOpacity;
+    if (c.type === 'popsicle') {
+      void c.stickCount;
+      void c.stickOverhang;
+      void c.rotationCenterOffsetX;
+      void c.rotationCenterOffsetY;
+      void c.stickGap;
+      void c.stickSize;
+      void c.stickRatio;
+      void c.stickThickness;
+      void c.stickRoundness;
+      void c.stickBevel;
+      void c.stickOpacity;
+    }
     void c.camera.distance;
     void c.camera.azimuth;
     void c.camera.elevation;
@@ -483,6 +512,11 @@
   });
 
   $effect(() => {
+    if (config.type !== 'popsicle' && renderMode === 'path') {
+      renderMode = 'raster';
+      return;
+    }
+
     if ((config.texture === 'cel' || config.edges.outline.enabled || config.bloom.enabled) && renderMode === 'path') {
       renderMode = 'raster';
     }
@@ -498,6 +532,7 @@
 
   $effect(() => {
     if (!preview) return;
+    if (config.type !== 'popsicle') return;
     preview.setMode(renderMode);
     schedulePreviewRender();
   });
@@ -529,8 +564,17 @@
     urlSyncEnabled = true;
 
     preview?.dispose();
-    preview = new PopsiclePreview(canvasContainer);
-    preview.setMode(renderMode);
+    preview = null;
+    fallbackCanvas = null;
+
+    if (config.type === 'popsicle') {
+      preview = new PopsiclePreview(canvasContainer);
+      preview.setMode(renderMode);
+    } else {
+      renderMode = 'raster';
+      renderNonPopsicleOnce();
+    }
+
     schedulePreviewRender();
     
     const resizeObserver = new ResizeObserver(() => {
@@ -842,9 +886,10 @@
         </details>
       </section>
        
-       <!-- Stick Settings -->
-        <section class="control-section">
-          <h3>Stick Settings</h3>
+       {#if config.type === 'popsicle'}
+        <!-- Stick Settings -->
+         <section class="control-section">
+           <h3>Stick Settings</h3>
           <label class="control-row slider">
            <button type="button" class="setting-title" class:locked={locks.stickCount} onclick={() => toggleLock('stickCount')} title="Click to lock/unlock for randomize">Count: {config.stickCount}</button>
             <input type="range" bind:value={config.stickCount} min="1" max="200" />
@@ -892,8 +937,9 @@
                <button type="button" class="setting-title" class:locked={locks.rotationCenterOffsetY} onclick={() => toggleLock('rotationCenterOffsetY')} title="Click to lock/unlock for randomize">Rotation Center Y: {config.rotationCenterOffsetY.toFixed(0)}%</button>
                <input type="range" bind:value={config.rotationCenterOffsetY} min="-100" max="100" step="5" />
              </label>
-           </div>
-        </section>
+            </div>
+         </section>
+       {/if}
       
       <!-- Camera View -->
       <section class="control-section">
@@ -975,7 +1021,7 @@
           <span class="setting-title">Mode</span>
           <select bind:value={renderMode} title="Raster is instant; Path traced refines progressively">
             <option value="raster">Raster</option>
-            <option value="path" disabled={config.texture === 'cel' || config.edges.outline.enabled || config.bloom.enabled}>Path traced</option>
+            <option value="path" disabled={config.type !== 'popsicle' || config.texture === 'cel' || config.edges.outline.enabled || config.bloom.enabled}>Path traced</option>
           </select>
         </label>
 
