@@ -61,6 +61,9 @@ importers:
       three:
         specifier: ^0.180.0
         version: 0.180.0
+      three-gpu-pathtracer:
+        specifier: ^0.0.24
+        version: 0.0.24(three-mesh-bvh@0.9.8)(three@0.180.0)(xatlas-web@0.1.0)
     devDependencies:
       '@sveltejs/adapter-auto':
         specifier: ^3.0.0

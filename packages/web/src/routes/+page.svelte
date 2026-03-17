@@ -1,6 +1,5 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import * as THREE from 'three';
   import { 
     DEFAULT_CONFIG, 
     type WallpaperConfig,
@@ -13,6 +12,8 @@
     downloadFile
   } from '@wallpaper-maker/core';
 
+  import { PopsiclePreview, renderRasterToCanvas, type PreviewRenderMode } from '$lib/popsicle/preview';
+
   import { COLOR_PRESETS, COLOR_PRESET_GROUPS, type ColorPreset } from '$lib/color-presets';
 
   
@@ -20,9 +21,59 @@
   let config = $state<WallpaperConfig>(cloneDefaultConfig());
   
   let canvasContainer: HTMLDivElement;
-  let renderer: THREE.WebGLRenderer | null = null;
-  let scene: THREE.Scene | null = null;
-  let camera: THREE.OrthographicCamera | null = null;
+  let preview: PopsiclePreview | null = null;
+  let renderMode = $state<PreviewRenderMode>('raster');
+
+  let renderRaf = 0;
+  let renderSettleTimer = 0;
+  const RENDER_SETTLE_MS = 280;
+
+  // Ensure reactivity for deep mutations (bind:value on nested fields).
+  // The render scheduler reads config later (rAF/timeout), so we create a key
+  // that touches all relevant fields synchronously.
+  let previewRenderKey = $derived((() => {
+    const c = config;
+    return [
+      c.width,
+      c.height,
+      c.colors.join(','),
+      c.texture,
+      c.backgroundColor,
+      c.stickCount,
+      c.stickOverhang,
+      c.rotationCenterOffsetX,
+      c.rotationCenterOffsetY,
+      c.stickGap,
+      c.stickSize,
+      c.stickRatio,
+      c.stickThickness,
+      c.stickRoundness,
+      c.stickBevel,
+      c.stickOpacity,
+      c.camera.distance,
+      c.camera.azimuth,
+      c.camera.elevation,
+      c.lighting.enabled ? 1 : 0,
+      c.lighting.intensity,
+      c.lighting.position.x,
+      c.lighting.position.y,
+      c.lighting.position.z,
+      c.lighting.ambientIntensity,
+      c.environment.enabled ? 1 : 0,
+      c.environment.style,
+      c.environment.intensity,
+      c.environment.rotation,
+      c.shadows.enabled ? 1 : 0,
+      c.shadows.type,
+      c.shadows.mapSize,
+      c.shadows.bias,
+      c.shadows.normalBias,
+      c.rendering.toneMapping,
+      c.rendering.exposure,
+      c.geometry.quality,
+      renderMode
+    ].join('|');
+  })());
   
   // Export format selection
   let exportFormat = $state<'png' | 'jpg' | 'webp' | 'svg'>('png');
@@ -106,6 +157,8 @@
       colors: [...preset.colors],
       backgroundColor: preset.backgroundColor
     };
+
+    schedulePreviewRender();
   }
 
   function applySelectedColorPreset() {
@@ -128,485 +181,34 @@
   
   // Derived values
   let aspectRatio = $derived(config.width / config.height);
-  
-  function createRoundedBox(
-    width: number,
-    height: number,
-    depth: number,
-    roundness: number,
-    bevel: number,
-    geometryQuality: number
-  ): THREE.BufferGeometry {
-    const safeRoundness = Math.max(0, Math.min(1, roundness));
-    const safeBevel = Math.max(0, Math.min(1, bevel));
-    const q = Math.max(0, Math.min(1, geometryQuality));
 
-    const maxRadius = Math.min(width, height) / 2;
-    const radius = maxRadius * safeRoundness;
-
-    const shape = new THREE.Shape();
-    const x = -width / 2;
-    const y = -height / 2;
-
-    if (radius <= 0) {
-      shape.moveTo(x, y);
-      shape.lineTo(x + width, y);
-      shape.lineTo(x + width, y + height);
-      shape.lineTo(x, y + height);
-      shape.closePath();
-    } else {
-      shape.moveTo(x + radius, y);
-      shape.lineTo(x + width - radius, y);
-      shape.quadraticCurveTo(x + width, y, x + width, y + radius);
-      shape.lineTo(x + width, y + height - radius);
-      shape.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-      shape.lineTo(x + radius, y + height);
-      shape.quadraticCurveTo(x, y + height, x, y + height - radius);
-      shape.lineTo(x, y + radius);
-      shape.quadraticCurveTo(x, y, x + radius, y);
-    }
-    
-    const maxBevel = Math.min(width, height) * 0.15;
-    const bevelSize = maxBevel * safeBevel;
-    const bevelThickness = maxBevel * safeBevel;
-
-    const curveSegments = Math.round(18 + q * 102); // 18..120
-    const bevelSegments = Math.round(4 + q * 28); // 4..32
-
-    const extrudeSettings: THREE.ExtrudeGeometryOptions = {
-      depth: depth,
-      bevelEnabled: safeBevel > 0,
-      bevelSegments,
-      steps: 1,
-      bevelSize,
-      bevelThickness,
-      curveSegments
-    };
-    
-    const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
-    geometry.center();
-    geometry.computeVertexNormals();
-    
-    return geometry;
-  }
-  
-  function createMaterial(
-    texture: string,
-    color: string,
-    envIntensity: number,
-    stickOpacity: number
-  ): THREE.MeshPhysicalMaterial {
-    const baseConfig: THREE.MeshPhysicalMaterialParameters = {
-      color: color,
-      transparent: stickOpacity < 1,
-      opacity: stickOpacity,
-      dithering: true
-    };
-
-    switch (texture) {
-      case 'glossy':
-        return new THREE.MeshPhysicalMaterial({
-          ...baseConfig,
-          roughness: 0.05,
-          metalness: 0.1,
-          clearcoat: 1.0,
-          clearcoatRoughness: 0.05,
-          reflectivity: 1.0,
-          envMapIntensity: envIntensity,
-          ior: 1.5,
-          transmission: 0.0,
-          thickness: 0.1
-        });
-      case 'metallic':
-        return new THREE.MeshPhysicalMaterial({
-          ...baseConfig,
-          roughness: 0.25,
-          metalness: 0.95,
-          clearcoat: 0.3,
-          clearcoatRoughness: 0.1,
-          reflectivity: 1.0,
-          envMapIntensity: envIntensity * 1.6,
-          ior: 2.0
-        });
-      case 'matte':
-      default:
-        return new THREE.MeshPhysicalMaterial({
-          ...baseConfig,
-          roughness: 0.95,
-          metalness: 0.0,
-          clearcoat: 0.0,
-          sheen: 0.3,
-          sheenRoughness: 0.8,
-          sheenColor: new THREE.Color(0xffffff),
-          reflectivity: 0.2,
-          envMapIntensity: envIntensity * 0.35
-        });
-    }
-  }
-  
-   function clamp(n: number, min: number, max: number): number {
-     return Math.max(min, Math.min(max, n));
-   }
-
-   function getStickDimensions(
-     canvasWidth: number,
-     canvasHeight: number,
-     stickThickness: number,
-     stickSize: number,
-     stickRatio: number
-   ) {
-     const aspect = canvasWidth / canvasHeight;
-     const baseSize = 8;
-
-     const rawSize = Number(stickSize);
-     const rawRatio = Number(stickRatio);
-     const safeSize = clamp(Number.isFinite(rawSize) ? rawSize : 1.0, 0.01, 100);
-     const safeRatio = clamp(Number.isFinite(rawRatio) ? rawRatio : 3.0, 0.05, 100);
-
-     const baseWidth = baseSize * aspect * 0.15 * safeSize;
-     const baseHeight = baseSize * 0.8 * safeSize;
-     const area = baseWidth * baseHeight;
-
-     const width = Math.sqrt(area / safeRatio);
-     const height = Math.sqrt(area * safeRatio);
-
-     return {
-       width,
-       height,
-       depth: baseSize * aspect * 0.02 * stickThickness * safeSize
-     };
-   }
-  
-  function degToRad(deg: number): number {
-    return (deg * Math.PI) / 180;
-  }
-
-  let envRenderTarget: THREE.WebGLRenderTarget | null = null;
-
-  function clamp01(n: number): number {
-    return Math.max(0, Math.min(1, n));
-  }
-
-  function createProceduralEnvironment(
-    renderer: THREE.WebGLRenderer,
-    style: 'studio' | 'overcast' | 'sunset',
-    rotationDeg: number
-  ): THREE.Texture {
-    const width = 256;
-    const height = 128;
-    const data = new Uint8Array(width * height * 4);
-
-    const rot = ((((rotationDeg % 360) + 360) % 360) / 360) * width;
-
-    const addSoftbox = (u: number, v: number, radius: number, strength: number) => {
-      return (x: number, y: number) => {
-        const dx = x - u;
-        const dy = y - v;
-        const d2 = dx * dx + dy * dy;
-        const r2 = radius * radius;
-        if (d2 >= r2) return 0;
-        const t = 1 - d2 / r2;
-        return strength * t * t;
-      };
-    };
-
-    const spotA = addSoftbox(0.25, 0.22, 0.12, 0.9);
-    const spotB = addSoftbox(0.72, 0.18, 0.16, 0.7);
-    const spotC = addSoftbox(0.52, 0.55, 0.22, 0.45);
-
-    for (let y = 0; y < height; y++) {
-      const v = y / (height - 1);
-      for (let x = 0; x < width; x++) {
-        const xx = (x + rot) % width;
-        const u = xx / (width - 1);
-
-        // Base gradients
-        let r = 0;
-        let g = 0;
-        let b = 0;
-
-        if (style === 'overcast') {
-          const top = 0.78;
-          const bot = 0.46;
-          const t = clamp01(1 - v);
-          const k = bot + (top - bot) * Math.pow(t, 1.4);
-          r = k;
-          g = k;
-          b = k;
-        } else if (style === 'sunset') {
-          const t = clamp01(1 - v);
-          const warm = 0.55 + 0.4 * Math.pow(t, 1.2);
-          r = warm;
-          g = 0.35 + 0.25 * Math.pow(t, 1.1);
-          b = 0.32 + 0.18 * Math.pow(1 - t, 1.7);
-        } else {
-          // studio
-          const t = clamp01(1 - v);
-          const sky = 0.74 * Math.pow(t, 1.6);
-          const floor = 0.06 + 0.05 * (1 - t);
-          const k = floor + sky;
-          r = k;
-          g = k;
-          b = k;
-        }
-
-        // Softbox highlights
-        const s = spotA(u, v) + spotB(u, v) + spotC(u, v);
-        r = clamp01(r + s);
-        g = clamp01(g + s);
-        b = clamp01(b + s);
-
-        const i = (y * width + x) * 4;
-        data[i + 0] = Math.round(r * 255);
-        data[i + 1] = Math.round(g * 255);
-        data[i + 2] = Math.round(b * 255);
-        data[i + 3] = 255;
-      }
-    }
-
-    const tex = new THREE.DataTexture(data, width, height, THREE.RGBAFormat);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    tex.mapping = THREE.EquirectangularReflectionMapping;
-    tex.needsUpdate = true;
-
-    const pmrem = new THREE.PMREMGenerator(renderer);
-    pmrem.compileEquirectangularShader();
-    envRenderTarget?.dispose();
-    envRenderTarget = pmrem.fromEquirectangular(tex);
-    pmrem.dispose();
-    tex.dispose();
-
-    return envRenderTarget.texture;
-  }
-
-   function getStackingOffset(
-     index: number,
-     stickDimensions: { width: number; height: number; depth: number },
-     stickOverhang: number,
-     rotationCenterOffsetX: number,
-     rotationCenterOffsetY: number,
-     stickGap: number
-   ) {
-     // Helix with configurable overhang angle and rotation center offset
-     const rotationAngle = index * degToRad(stickOverhang);
-     
-     const offsetXPercent = rotationCenterOffsetX / 100;
-     const offsetYPercent = rotationCenterOffsetY / 100;
-     
-     const pivotX = offsetXPercent * (stickDimensions.width / 2);
-     const pivotY = offsetYPercent * (stickDimensions.height / 2);
-     
-     const cos = Math.cos(rotationAngle);
-     const sin = Math.sin(rotationAngle);
-     
-     const offsetX = pivotX * (1 - cos) + pivotY * sin;
-     const offsetY = pivotY * (1 - cos) - pivotX * sin;
-     
-     return {
-       x: offsetX,
-       y: offsetY,
-       z: index * (stickDimensions.depth + stickGap),
-       rotationZ: rotationAngle
-     };
-   }
-  
-   function renderScene() {
-    if (!canvasContainer) return;
-    
-    if (renderer) {
-      renderer.dispose();
-      canvasContainer.innerHTML = '';
-      envRenderTarget?.dispose();
-      envRenderTarget = null;
-    }
-    
-       const { 
-         width, 
-         height, 
-         colors, 
-         texture, 
-         backgroundColor, 
-         stickCount, 
-         stickOverhang,
-         rotationCenterOffsetX,
-         rotationCenterOffsetY,
-         stickGap,
-         stickSize,
-         stickRatio,
-           stickThickness,
-           stickRoundness,
-           stickBevel,
-           stickOpacity,
-           lighting,
-           camera: cameraConfig,
-           environment: environmentConfig,
-           shadows: shadowsConfig,
-           rendering: renderingConfig,
-           geometry: geometryConfig
-         } = config;
-
-        const safeStickOpacity = clamp(Number.isFinite(Number(stickOpacity)) ? Number(stickOpacity) : 1.0, 0, 1);
-    
-    scene = new THREE.Scene();
-    scene.background = new THREE.Color(backgroundColor);
-    
-    const aspect = width / height;
-    const frustumSize = 10;
-    camera = new THREE.OrthographicCamera(
-      frustumSize * aspect / -2,
-      frustumSize * aspect / 2,
-      frustumSize / 2,
-      frustumSize / -2,
-      0.1,
-      1000
-    );
-    
-    const azimuthRad = (cameraConfig.azimuth * Math.PI) / 180;
-    const elevationRad = (cameraConfig.elevation * Math.PI) / 180;
-    camera.position.set(
-      cameraConfig.distance * Math.cos(elevationRad) * Math.sin(azimuthRad),
-      cameraConfig.distance * Math.sin(elevationRad),
-      cameraConfig.distance * Math.cos(elevationRad) * Math.cos(azimuthRad)
-    );
-    // Orthographic cameras don't change size with distance; convert distance to zoom.
-    camera.zoom = 17.3 / Math.max(0.1, cameraConfig.distance);
-    camera.updateProjectionMatrix();
-    camera.lookAt(0, 0, 0);
-    
-    let keyLight: THREE.DirectionalLight | null = null;
-
-    if (lighting.enabled) {
-      const ambientLight = new THREE.AmbientLight(0xffffff, lighting.ambientIntensity);
-      scene.add(ambientLight);
-
-      const hemi = new THREE.HemisphereLight(0xffffff, 0x0b0b10, Math.max(0.0, lighting.ambientIntensity * 0.55));
-      scene.add(hemi);
-      
-      const directionalLight = new THREE.DirectionalLight(0xffffff, lighting.intensity);
-      directionalLight.position.set(
-        lighting.position.x,
-        lighting.position.y,
-        lighting.position.z
-      );
-      directionalLight.castShadow = shadowsConfig.enabled;
-      scene.add(directionalLight);
-      keyLight = directionalLight;
-      
-      const fillLight = new THREE.DirectionalLight(0xffffff, lighting.intensity * 0.3);
-      fillLight.position.set(-lighting.position.x, -lighting.position.y, lighting.position.z * 0.5);
-      scene.add(fillLight);
-
-      const rimLight = new THREE.DirectionalLight(0xffffff, lighting.intensity * 0.25);
-      rimLight.position.set(lighting.position.x * 0.2, -lighting.position.y, lighting.position.z * 1.2);
-      scene.add(rimLight);
-    } else {
-      const ambientLight = new THREE.AmbientLight(0xffffff, 1);
-      scene.add(ambientLight);
-    }
-    
-     const stickDimensions = getStickDimensions(width, height, stickThickness, stickSize, stickRatio);
-     
-     const group = new THREE.Group();
-     
-       for (let i = 0; i < stickCount; i++) {
-         const color = colors[i % colors.length];
-         const envIntensity = environmentConfig.enabled ? environmentConfig.intensity : 0;
-         const material = createMaterial(texture, color, envIntensity, safeStickOpacity);
-       const stickGeometry = createRoundedBox(
-         stickDimensions.width,
-         stickDimensions.height,
-         stickDimensions.depth,
-         stickRoundness,
-        stickBevel,
-        geometryConfig.quality
-      );
-        
-        const mesh = new THREE.Mesh(stickGeometry, material);
-        mesh.castShadow = shadowsConfig.enabled;
-        mesh.receiveShadow = shadowsConfig.enabled;
-        
-        const offset = getStackingOffset(i, stickDimensions, stickOverhang, rotationCenterOffsetX, rotationCenterOffsetY, stickGap);
-        
-        mesh.position.set(offset.x, offset.y, offset.z);
-        mesh.rotation.z = offset.rotationZ;
-      
-      group.add(mesh);
-    }
-    
-    const box = new THREE.Box3().setFromObject(group);
-    const center = box.getCenter(new THREE.Vector3());
-    group.position.sub(center);
-    
-    scene.add(group);
-    
-    renderer = new THREE.WebGLRenderer({ 
-      antialias: true,
-      alpha: true,
-      preserveDrawingBuffer: true
+  function schedulePreviewRender() {
+    if (!preview) return;
+    if (renderRaf) cancelAnimationFrame(renderRaf);
+    renderRaf = requestAnimationFrame(() => {
+      preview?.renderOnce(config, 'interactive');
     });
 
-    // Color management + tone mapping
-    renderer.outputColorSpace = THREE.SRGBColorSpace;
-    if (renderingConfig.toneMapping === 'aces') {
-      renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    } else {
-      renderer.toneMapping = THREE.NoToneMapping;
-    }
-    renderer.toneMappingExposure = renderingConfig.exposure;
-    (renderer as any).physicallyCorrectLights = true;
-    
-    const containerWidth = canvasContainer.clientWidth;
-    const containerHeight = canvasContainer.clientHeight;
-    const previewWidth = Math.min(containerWidth, containerHeight * aspect);
-    const previewHeight = previewWidth / aspect;
-    
-    renderer.setSize(previewWidth, previewHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.shadowMap.enabled = shadowsConfig.enabled;
-    renderer.shadowMap.type = shadowsConfig.type === 'vsm' ? THREE.VSMShadowMap : THREE.PCFSoftShadowMap;
-
-    if (environmentConfig.enabled) {
-      scene.environment = createProceduralEnvironment(renderer, environmentConfig.style, environmentConfig.rotation);
-    } else {
-      scene.environment = null;
-    }
-
-    if (keyLight && shadowsConfig.enabled) {
-      const map = Math.max(256, Math.min(8192, Math.round(shadowsConfig.mapSize)));
-      keyLight.shadow.mapSize.set(map, map);
-      keyLight.shadow.bias = shadowsConfig.bias;
-      keyLight.shadow.normalBias = shadowsConfig.normalBias;
-
-      // Fit shadow camera to the content.
-      const size = box.getSize(new THREE.Vector3());
-      const pad = Math.max(size.x, size.y) * 0.35 + 0.5;
-      const shadowCam = keyLight.shadow.camera as THREE.OrthographicCamera;
-      shadowCam.left = -size.x / 2 - pad;
-      shadowCam.right = size.x / 2 + pad;
-      shadowCam.top = size.y / 2 + pad;
-      shadowCam.bottom = -size.y / 2 - pad;
-      shadowCam.near = 0.1;
-      shadowCam.far = Math.max(50, size.z + 50);
-      shadowCam.updateProjectionMatrix();
-
-      keyLight.target.position.copy(center);
-      scene.add(keyLight.target);
-    }
-    
-    canvasContainer.appendChild(renderer.domElement);
-    renderer.render(scene, camera);
+    if (renderSettleTimer) window.clearTimeout(renderSettleTimer);
+    renderSettleTimer = window.setTimeout(() => {
+      preview?.renderOnce(config, 'final');
+    }, RENDER_SETTLE_MS);
   }
   
+  // 3D rendering is handled by PopsiclePreview.
+  
   async function handleExport() {
-    if (!renderer || !scene || !camera) return;
-    
     isExporting = true;
     
     try {
-      renderer.setSize(config.width, config.height);
-      renderer.render(scene, camera);
-      
-      const canvas = renderer.domElement;
+      if (exportFormat === 'svg') {
+        const result = await exportToSVG(config);
+        const filename = `wallpaper-${Date.now()}.svg`;
+        downloadFile(result.data, filename, result.mimeType);
+        return;
+      }
+
+      const canvas = await renderRasterToCanvas(config);
       let result;
       
       switch (exportFormat) {
@@ -619,15 +221,10 @@
         case 'webp':
           result = await exportToWebP(canvas, { format: 'webp', quality: 0.95 });
           break;
-        case 'svg':
-          result = await exportToSVG(config);
-          break;
       }
       
       const filename = `wallpaper-${Date.now()}.${exportFormat}`;
       downloadFile(result.data, filename, result.mimeType);
-      
-      renderScene();
     } catch (error) {
       console.error('Export failed:', error);
       alert('Export failed. Please try again.');
@@ -989,7 +586,16 @@
   });
   
   $effect(() => {
-    renderScene();
+    if (!preview) return;
+    // Touch the key so deep mutations re-run this effect.
+    void previewRenderKey;
+    schedulePreviewRender();
+  });
+
+  $effect(() => {
+    if (!preview) return;
+    preview.setMode(renderMode);
+    schedulePreviewRender();
   });
   
   onMount(() => {
@@ -1008,10 +614,14 @@
     }
 
     urlSyncEnabled = true;
-    renderScene();
+
+    preview?.dispose();
+    preview = new PopsiclePreview(canvasContainer);
+    preview.setMode(renderMode);
+    schedulePreviewRender();
     
     const resizeObserver = new ResizeObserver(() => {
-      renderScene();
+      schedulePreviewRender();
     });
     
     if (canvasContainer) {
@@ -1020,6 +630,10 @@
     
     return () => {
       resizeObserver.disconnect();
+      if (renderRaf) cancelAnimationFrame(renderRaf);
+      if (renderSettleTimer) window.clearTimeout(renderSettleTimer);
+      preview?.dispose();
+      preview = null;
     };
   });
 </script>
@@ -1029,7 +643,7 @@
 </svelte:head>
 
 <div class="app">
-  <aside class="sidebar">
+  <aside class="sidebar" oninput={schedulePreviewRender} onchange={schedulePreviewRender}>
     <div class="sidebar-header">
       <h1>ColorWhirl</h1>
     </div>
@@ -1274,6 +888,14 @@
           </select>
         </label>
 
+        <label class="control-row">
+          <span class="setting-title">Mode</span>
+          <select bind:value={renderMode} title="Raster is instant; Path traced refines progressively">
+            <option value="raster">Raster</option>
+            <option value="path">Path traced</option>
+          </select>
+        </label>
+
         <div style="border-top: 1px solid #333; margin-top: 0.75rem; padding-top: 0.75rem;">
           <label class="control-row checkbox">
             <input type="checkbox" bind:checked={config.environment.enabled} />
@@ -1368,7 +990,7 @@
   </aside>
   
   <main class="preview-area">
-    <div bind:this={canvasContainer} class="canvas-container"></div>
+    <div bind:this={canvasContainer} class="canvas-container" style={`background: ${config.backgroundColor}`}></div>
   </main>
 </div>
 
