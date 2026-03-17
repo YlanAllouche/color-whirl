@@ -242,7 +242,7 @@ export function createSpheres3DScene(
   const perColor: Array<{ idx: number; inst: THREE.InstancedMesh; outline?: THREE.InstancedMesh }> = [];
   for (let pi = 0; pi < nColors; pi++) {
     const mat = createSurfaceMaterial(config, pi, colors[pi], envIntensity, opacity);
-    const inst = new THREE.InstancedMesh(geometry, mat, 0);
+    const inst = new THREE.InstancedMesh(geometry, mat, count);
     inst.castShadow = useShadows;
     inst.receiveShadow = useShadows;
     perColor.push({ idx: pi, inst });
@@ -337,8 +337,10 @@ export function createSpheres3DScene(
 
   // Center (after outline)
   const groupBox = new THREE.Box3().setFromObject(scene);
-  const center = groupBox.getCenter(new THREE.Vector3());
-  scene.position.sub(center);
+  if (!groupBox.isEmpty()) {
+    const center = groupBox.getCenter(new THREE.Vector3());
+    scene.position.sub(center);
+  }
 
   // Avoid unused warning
   void envDisposable;

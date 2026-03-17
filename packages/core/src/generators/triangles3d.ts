@@ -244,7 +244,7 @@ export function createTriangles3DScene(
   const perColor: Array<{ inst: THREE.InstancedMesh; count: number }> = [];
   for (let pi = 0; pi < nColors; pi++) {
     const mat = createSurfaceMaterial(config, pi, colors[pi], envIntensity, opacity);
-    const inst = new THREE.InstancedMesh(geometry, mat, 0);
+    const inst = new THREE.InstancedMesh(geometry, mat, count);
     inst.castShadow = useShadows;
     inst.receiveShadow = useShadows;
     perColor.push({ inst, count: 0 });
@@ -321,8 +321,10 @@ export function createTriangles3DScene(
 
   // Center (after outline)
   const box = new THREE.Box3().setFromObject(scene);
-  const center = box.getCenter(new THREE.Vector3());
-  scene.position.sub(center);
+  if (!box.isEmpty()) {
+    const center = box.getCenter(new THREE.Vector3());
+    scene.position.sub(center);
+  }
 
   void envDisposable;
   return { scene, camera, renderer };
