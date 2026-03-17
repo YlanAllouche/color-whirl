@@ -24,7 +24,7 @@
     renderWallpaperToCanvas
   } from '@wallpaper-maker/core';
 
-  import { PopsiclePreview, renderRasterToCanvas, type PreviewRenderMode } from '$lib/popsicle/preview';
+  import { PopsiclePreview, type PreviewRenderMode } from '$lib/popsicle/preview';
 
   type PopsicleConfig = Extract<WallpaperConfig, { type: 'popsicle' }>;
 
@@ -313,10 +313,7 @@
         return;
       }
 
-      const canvas =
-        config.type === 'popsicle'
-          ? await renderRasterToCanvas(config as PopsicleConfig)
-          : renderWallpaperToCanvas(config);
+      const canvas = renderWallpaperToCanvas(config);
       let result;
       
       switch (exportFormat) {
