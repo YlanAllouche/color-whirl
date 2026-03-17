@@ -181,12 +181,12 @@ function generateHTML(config: WallpaperConfig): string {
   <script type="importmap">
   {
     "imports": {
-      "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
-    }
-  }
-  </script>
-  <script type="module">
-    import * as THREE from 'three';
+       "three": "https://unpkg.com/three@0.180.0/build/three.module.js"
+     }
+   }
+   </script>
+   <script type="module">
+     import * as THREE from 'three';
     
     const config = ${configJson};
     
@@ -217,30 +217,38 @@ function generateHTML(config: WallpaperConfig): string {
       };
     }
     
-    function createMaterial(texture, color) {
+    function createMaterial(texture, color, envIntensity) {
       const baseConfig = {
         color: color,
         transparent: true,
-        opacity: 0.95
+        opacity: 0.95,
+        dithering: true
       };
 
       switch (texture) {
         case 'glossy':
           return new THREE.MeshPhysicalMaterial({
             ...baseConfig,
-            roughness: 0.1,
-            metalness: 0.0,
+            roughness: 0.05,
+            metalness: 0.1,
             clearcoat: 1.0,
-            clearcoatRoughness: 0.1,
-            reflectivity: 1.0
+            clearcoatRoughness: 0.05,
+            reflectivity: 1.0,
+            envMapIntensity: envIntensity,
+            ior: 1.5,
+            transmission: 0.0,
+            thickness: 0.1
           });
         case 'metallic':
           return new THREE.MeshPhysicalMaterial({
             ...baseConfig,
-            roughness: 0.3,
-            metalness: 0.8,
-            clearcoat: 0.5,
-            clearcoatRoughness: 0.2
+            roughness: 0.25,
+            metalness: 0.95,
+            clearcoat: 0.3,
+            clearcoatRoughness: 0.1,
+            reflectivity: 1.0,
+            envMapIntensity: envIntensity * 1.6,
+            ior: 2.0
           });
         case 'matte':
         default:
@@ -248,14 +256,20 @@ function generateHTML(config: WallpaperConfig): string {
             ...baseConfig,
             roughness: 0.9,
             metalness: 0.0,
-            clearcoat: 0.0
+            clearcoat: 0.0,
+            sheen: 0.3,
+            sheenRoughness: 0.8,
+            sheenColor: new THREE.Color(0xffffff),
+            reflectivity: 0.2,
+            envMapIntensity: envIntensity * 0.35
           });
       }
     }
     
-    function createRoundedBox(width, height, depth, roundness, bevel) {
+    function createRoundedBox(width, height, depth, roundness, bevel, geometryQuality) {
       const safeRoundness = Math.max(0, Math.min(1, roundness));
       const safeBevel = Math.max(0, Math.min(1, bevel));
+      const q = Math.max(0, Math.min(1, Number(geometryQuality) || 0));
       const maxRadius = Math.min(width, height) / 2;
       const radius = maxRadius * safeRoundness;
 
@@ -285,20 +299,111 @@ function generateHTML(config: WallpaperConfig): string {
       const bevelSize = maxBevel * safeBevel;
       const bevelThickness = maxBevel * safeBevel;
 
+      const curveSegments = Math.round(18 + q * 102); // 18..120
+      const bevelSegments = Math.round(4 + q * 28); // 4..32
+
       const extrudeSettings = {
         depth: depth,
         bevelEnabled: safeBevel > 0,
-        bevelSegments: 4,
+        bevelSegments,
         steps: 1,
         bevelSize,
         bevelThickness,
-        curveSegments: 12
+        curveSegments
       };
       
       const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
       geometry.center();
+      geometry.computeVertexNormals();
       
        return geometry;
+     }
+
+     function clamp01(n) {
+       return Math.max(0, Math.min(1, n));
+     }
+
+     let envRenderTarget = null;
+
+     function createProceduralEnvironment(renderer, style, rotationDeg) {
+       const width = 256;
+       const height = 128;
+       const data = new Uint8Array(width * height * 4);
+
+       const rot = ((((rotationDeg % 360) + 360) % 360) / 360) * width;
+
+       function addSoftbox(u, v, radius, strength) {
+         return function(x, y) {
+           const dx = x - u;
+           const dy = y - v;
+           const d2 = dx * dx + dy * dy;
+           const r2 = radius * radius;
+           if (d2 >= r2) return 0;
+           const t = 1 - d2 / r2;
+           return strength * t * t;
+         };
+       }
+
+       const spotA = addSoftbox(0.25, 0.22, 0.12, 0.9);
+       const spotB = addSoftbox(0.72, 0.18, 0.16, 0.7);
+       const spotC = addSoftbox(0.52, 0.55, 0.22, 0.45);
+
+       for (let y = 0; y < height; y++) {
+         const v = y / (height - 1);
+         for (let x = 0; x < width; x++) {
+           const xx = (x + rot) % width;
+           const u = xx / (width - 1);
+
+           let r = 0;
+           let g = 0;
+           let b = 0;
+
+           if (style === 'overcast') {
+             const top = 0.78;
+             const bot = 0.46;
+             const t = clamp01(1 - v);
+             const k = bot + (top - bot) * Math.pow(t, 1.4);
+             r = k; g = k; b = k;
+           } else if (style === 'sunset') {
+             const t = clamp01(1 - v);
+             const warm = 0.55 + 0.4 * Math.pow(t, 1.2);
+             r = warm;
+             g = 0.35 + 0.25 * Math.pow(t, 1.1);
+             b = 0.32 + 0.18 * Math.pow(1 - t, 1.7);
+           } else {
+             const t = clamp01(1 - v);
+             const sky = 0.74 * Math.pow(t, 1.6);
+             const floor = 0.06 + 0.05 * (1 - t);
+             const k = floor + sky;
+             r = k; g = k; b = k;
+           }
+
+           const s = spotA(u, v) + spotB(u, v) + spotC(u, v);
+           r = clamp01(r + s);
+           g = clamp01(g + s);
+           b = clamp01(b + s);
+
+           const i = (y * width + x) * 4;
+           data[i + 0] = Math.round(r * 255);
+           data[i + 1] = Math.round(g * 255);
+           data[i + 2] = Math.round(b * 255);
+           data[i + 3] = 255;
+         }
+       }
+
+       const tex = new THREE.DataTexture(data, width, height, THREE.RGBAFormat);
+       tex.colorSpace = THREE.SRGBColorSpace;
+       tex.mapping = THREE.EquirectangularReflectionMapping;
+       tex.needsUpdate = true;
+
+       const pmrem = new THREE.PMREMGenerator(renderer);
+       pmrem.compileEquirectangularShader();
+       if (envRenderTarget) envRenderTarget.dispose();
+       envRenderTarget = pmrem.fromEquirectangular(tex);
+       pmrem.dispose();
+       tex.dispose();
+
+       return envRenderTarget.texture;
      }
      
      function degToRad(deg) {
@@ -346,7 +451,11 @@ function generateHTML(config: WallpaperConfig): string {
         stickRoundness,
         stickBevel,
         lighting,
-        camera: cameraConfig
+        camera: cameraConfig,
+        environment,
+        shadows,
+        rendering,
+        geometry
       } = config;
     
     const scene = new THREE.Scene();
@@ -374,9 +483,14 @@ function generateHTML(config: WallpaperConfig): string {
     camera.updateProjectionMatrix();
     camera.lookAt(0, 0, 0);
     
+    let keyLight = null;
+
     if (lighting.enabled) {
       const ambientLight = new THREE.AmbientLight(0xffffff, lighting.ambientIntensity);
       scene.add(ambientLight);
+
+      const hemi = new THREE.HemisphereLight(0xffffff, 0x0b0b10, Math.max(0.0, lighting.ambientIntensity * 0.55));
+      scene.add(hemi);
       
       const directionalLight = new THREE.DirectionalLight(0xffffff, lighting.intensity);
       directionalLight.position.set(
@@ -384,12 +498,17 @@ function generateHTML(config: WallpaperConfig): string {
         lighting.position.y,
         lighting.position.z
       );
-      directionalLight.castShadow = true;
+      directionalLight.castShadow = !!(shadows && shadows.enabled);
       scene.add(directionalLight);
+      keyLight = directionalLight;
       
       const fillLight = new THREE.DirectionalLight(0xffffff, lighting.intensity * 0.3);
       fillLight.position.set(-lighting.position.x, -lighting.position.y, lighting.position.z * 0.5);
       scene.add(fillLight);
+
+      const rimLight = new THREE.DirectionalLight(0xffffff, lighting.intensity * 0.25);
+      rimLight.position.set(lighting.position.x * 0.2, -lighting.position.y, lighting.position.z * 1.2);
+      scene.add(rimLight);
     } else {
       const ambientLight = new THREE.AmbientLight(0xffffff, 1);
       scene.add(ambientLight);
@@ -399,18 +518,23 @@ function generateHTML(config: WallpaperConfig): string {
      
      const group = new THREE.Group();
      
-     for (let i = 0; i < stickCount; i++) {
-       const color = colors[i % colors.length];
-       const material = createMaterial(texture, color);
-       const geometry = createRoundedBox(
-         stickDimensions.width,
-         stickDimensions.height,
-         stickDimensions.depth,
-         stickRoundness,
-         stickBevel
-       );
-       
-        const mesh = new THREE.Mesh(geometry, material);
+      for (let i = 0; i < stickCount; i++) {
+        const color = colors[i % colors.length];
+        const envIntensity = environment && environment.enabled ? Number(environment.intensity) || 0 : 0;
+        const material = createMaterial(texture, color, envIntensity);
+        const stickGeometry = createRoundedBox(
+          stickDimensions.width,
+          stickDimensions.height,
+          stickDimensions.depth,
+          stickRoundness,
+          stickBevel,
+          geometry ? geometry.quality : 0
+        );
+        
+        const mesh = new THREE.Mesh(stickGeometry, material);
+        const useShadows = !!(shadows && shadows.enabled);
+        mesh.castShadow = useShadows;
+        mesh.receiveShadow = useShadows;
         
         const offset = getStackingOffset(i, stickDimensions, stickOverhang, rotationCenterOffsetX, rotationCenterOffsetY, stickGap);
         
@@ -433,8 +557,50 @@ function generateHTML(config: WallpaperConfig): string {
     });
     renderer.setSize(width, height);
     renderer.setPixelRatio(1);
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    const tm = rendering && rendering.toneMapping === 'none' ? 'none' : 'aces';
+    if (tm === 'aces') {
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    } else {
+      renderer.toneMapping = THREE.NoToneMapping;
+    }
+    renderer.toneMappingExposure = rendering ? Number(rendering.exposure) || 1.0 : 1.0;
+    renderer.physicallyCorrectLights = true;
+
+    const useShadows = !!(shadows && shadows.enabled);
+    renderer.shadowMap.enabled = useShadows;
+    const shadowType = shadows && shadows.type === 'vsm' ? 'vsm' : 'pcfsoft';
+    renderer.shadowMap.type = shadowType === 'vsm' ? THREE.VSMShadowMap : THREE.PCFSoftShadowMap;
+
+    if (environment && environment.enabled) {
+      const style = environment.style === 'overcast' || environment.style === 'sunset' ? environment.style : 'studio';
+      const rot = Number(environment.rotation) || 0;
+      scene.environment = createProceduralEnvironment(renderer, style, rot);
+    } else {
+      scene.environment = null;
+    }
+
+    if (keyLight && useShadows) {
+      const map = Math.max(256, Math.min(8192, Math.round(Number(shadows.mapSize) || 2048)));
+      keyLight.shadow.mapSize.set(map, map);
+      keyLight.shadow.bias = Number(shadows.bias) || 0;
+      keyLight.shadow.normalBias = Number(shadows.normalBias) || 0;
+
+      const size = box.getSize(new THREE.Vector3());
+      const pad = Math.max(size.x, size.y) * 0.35 + 0.5;
+      const shadowCam = keyLight.shadow.camera;
+      shadowCam.left = -size.x / 2 - pad;
+      shadowCam.right = size.x / 2 + pad;
+      shadowCam.top = size.y / 2 + pad;
+      shadowCam.bottom = -size.y / 2 - pad;
+      shadowCam.near = 0.1;
+      shadowCam.far = Math.max(50, size.z + 50);
+      shadowCam.updateProjectionMatrix();
+
+      keyLight.target.position.copy(center);
+      scene.add(keyLight.target);
+    }
     
     document.body.appendChild(renderer.domElement);
     

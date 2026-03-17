@@ -906,6 +906,27 @@
       parts.push('--ambient', String(config.lighting.ambientIntensity));
     }
 
+    parts.push('--tone-mapping', config.rendering.toneMapping);
+    parts.push('--exposure', String(config.rendering.exposure));
+    if (config.environment.enabled) {
+      parts.push('--environment');
+    } else {
+      parts.push('--no-environment');
+    }
+    parts.push('--env-style', config.environment.style);
+    parts.push('--env-intensity', String(config.environment.intensity));
+    parts.push('--env-rotation', String(config.environment.rotation));
+    if (config.shadows.enabled) {
+      parts.push('--shadows');
+    } else {
+      parts.push('--no-shadows');
+    }
+    parts.push('--shadow-type', config.shadows.type);
+    parts.push('--shadow-map-size', String(config.shadows.mapSize));
+    parts.push('--shadow-bias', String(config.shadows.bias));
+    parts.push('--shadow-normal-bias', String(config.shadows.normalBias));
+    parts.push('--geometry-quality', String(config.geometry.quality));
+
     parts.push('--format', exportFormat);
     return parts.join(' ');
   }

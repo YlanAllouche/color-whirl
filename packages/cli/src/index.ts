@@ -51,6 +51,20 @@ program
   .option('--light-y <number>', 'Light Y position', '5')
   .option('--light-z <number>', 'Light Z position', '5')
   .option('--ambient <number>', 'Ambient light intensity', '0.3')
+  .option('--tone-mapping <type>', 'Tone mapping (aces, none)', DEFAULT_CONFIG.rendering.toneMapping)
+  .option('--exposure <number>', 'Exposure', String(DEFAULT_CONFIG.rendering.exposure))
+  .option('--environment', 'Enable environment reflections', DEFAULT_CONFIG.environment.enabled)
+  .option('--no-environment', 'Disable environment reflections')
+  .option('--env-style <style>', 'Environment style (studio, overcast, sunset)', DEFAULT_CONFIG.environment.style)
+  .option('--env-intensity <number>', 'Environment intensity', String(DEFAULT_CONFIG.environment.intensity))
+  .option('--env-rotation <degrees>', 'Environment rotation (0-360)', String(DEFAULT_CONFIG.environment.rotation))
+  .option('--shadows', 'Enable shadows', DEFAULT_CONFIG.shadows.enabled)
+  .option('--no-shadows', 'Disable shadows')
+  .option('--shadow-type <type>', 'Shadow type (pcfsoft, vsm)', DEFAULT_CONFIG.shadows.type)
+  .option('--shadow-map-size <number>', 'Shadow map size', String(DEFAULT_CONFIG.shadows.mapSize))
+  .option('--shadow-bias <number>', 'Shadow bias', String(DEFAULT_CONFIG.shadows.bias))
+  .option('--shadow-normal-bias <number>', 'Shadow normal bias', String(DEFAULT_CONFIG.shadows.normalBias))
+  .option('--geometry-quality <number>', 'Geometry quality (0-1)', String(DEFAULT_CONFIG.geometry.quality))
   .action(async (options) => {
     try {
       const config = buildConfig(options);
@@ -102,13 +116,17 @@ function buildConfig(options: any): WallpaperConfig {
      colors = options.colors.split(',').map((c: string) => c.trim());
    }
   
-    const config: WallpaperConfig = {
-      type: options.type as 'popsickle',
-      width,
-      height,
-      colors,
-      texture: options.texture as TextureType,
-      backgroundColor: options.background || backgroundColor,
+     const toneMapping = String(options.toneMapping ?? DEFAULT_CONFIG.rendering.toneMapping);
+     const envStyle = String(options.envStyle ?? DEFAULT_CONFIG.environment.style);
+     const shadowType = String(options.shadowType ?? DEFAULT_CONFIG.shadows.type);
+
+     const config: WallpaperConfig = {
+       type: options.type as 'popsickle',
+       width,
+       height,
+       colors,
+       texture: options.texture as TextureType,
+       backgroundColor: options.background || backgroundColor,
       stickCount: parseInt(options.count, 10),
      stickOverhang: parseFloat(options.stickOverhang),
       rotationCenterOffsetX: parseFloat(options.rotationCenterOffsetX),
@@ -129,16 +147,32 @@ function buildConfig(options: any): WallpaperConfig {
       },
       ambientIntensity: parseFloat(options.ambient)
     },
-    camera: {
-      distance: parseFloat(options.cameraDistance),
-      azimuth: parseFloat(options.cameraAzimuth),
-      elevation: parseFloat(options.cameraElevation)
-    },
-    environment: { ...DEFAULT_CONFIG.environment },
-    shadows: { ...DEFAULT_CONFIG.shadows },
-    rendering: { ...DEFAULT_CONFIG.rendering },
-    geometry: { ...DEFAULT_CONFIG.geometry }
-  };
+     camera: {
+       distance: parseFloat(options.cameraDistance),
+       azimuth: parseFloat(options.cameraAzimuth),
+       elevation: parseFloat(options.cameraElevation)
+      },
+      rendering: {
+        toneMapping: toneMapping === 'none' ? 'none' : 'aces',
+        exposure: Number.isFinite(parseFloat(options.exposure)) ? parseFloat(options.exposure) : DEFAULT_CONFIG.rendering.exposure
+      },
+      environment: {
+        enabled: Boolean(options.environment),
+        intensity: Number.isFinite(parseFloat(options.envIntensity)) ? parseFloat(options.envIntensity) : DEFAULT_CONFIG.environment.intensity,
+        rotation: Number.isFinite(parseFloat(options.envRotation)) ? parseFloat(options.envRotation) : DEFAULT_CONFIG.environment.rotation,
+        style: envStyle === 'overcast' || envStyle === 'sunset' ? envStyle : 'studio'
+      },
+      shadows: {
+        enabled: Boolean(options.shadows),
+        type: shadowType === 'vsm' ? 'vsm' : 'pcfsoft',
+        mapSize: Number.isFinite(parseInt(options.shadowMapSize, 10)) ? parseInt(options.shadowMapSize, 10) : DEFAULT_CONFIG.shadows.mapSize,
+        bias: Number.isFinite(parseFloat(options.shadowBias)) ? parseFloat(options.shadowBias) : DEFAULT_CONFIG.shadows.bias,
+        normalBias: Number.isFinite(parseFloat(options.shadowNormalBias)) ? parseFloat(options.shadowNormalBias) : DEFAULT_CONFIG.shadows.normalBias
+      },
+      geometry: {
+        quality: Number.isFinite(parseFloat(options.geometryQuality)) ? parseFloat(options.geometryQuality) : DEFAULT_CONFIG.geometry.quality
+      }
+     };
   
   return config;
 }
