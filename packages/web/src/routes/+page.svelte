@@ -5,6 +5,10 @@
     type WallpaperConfig,
     RESOLUTION_PRESETS,
     generateRandomConfigNoPresets,
+    generateRandomConfigNoPresetsFromSeed,
+    encodeAppStateToBase64Url,
+    decodeAppStateFromBase64Url,
+    type WallpaperAppStateV1,
     exportToPNG,
     exportToJPG,
     exportToWebP,
@@ -35,6 +39,16 @@
   // URL sync + CLI preview
   let urlSyncEnabled = $state(false);
   let cliCommand = $state('');
+
+  function randomSeedU32(): number {
+    try {
+      const a = new Uint32Array(1);
+      crypto.getRandomValues(a);
+      return (a[0] >>> 0) || 1;
+    } catch {
+      return (Math.floor(Math.random() * 0xffffffff) >>> 0) || 1;
+    }
+  }
 
   type LockState = {
     colors: boolean;
@@ -286,153 +300,18 @@
 
   function generateRandomGeneratedColors() {
     // Randomize everything, including a non-preset generated color theme.
-    config = mergeWithLocks(generateRandomConfigNoPresets());
+    const seed = randomSeedU32();
+    config = mergeWithLocks(generateRandomConfigNoPresetsFromSeed(seed));
     schedulePreviewRender();
   }
 
-  function parseConfigFromUrl(searchParams: URLSearchParams) {
-    const next = cloneDefaultConfig();
-
-    const num = (key: string, fallback: number) => {
-      const raw = searchParams.get(key);
-      if (raw === null) return fallback;
-      const n = Number(raw);
-      return Number.isFinite(n) ? n : fallback;
+  function getAppState(): WallpaperAppStateV1 {
+    return {
+      v: 1,
+      c: config,
+      f: exportFormat,
+      m: renderMode
     };
-
-    const str = (key: string, fallback: string) => {
-      const raw = searchParams.get(key);
-      return raw === null ? fallback : raw;
-    };
-
-    const bool = (key: string, fallback: boolean) => {
-      const raw = searchParams.get(key);
-      if (raw === null) return fallback;
-      return raw === '1' || raw === 'true' || raw === 'yes';
-    };
-
-    const clampNum = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
-
-    next.width = num('w', next.width);
-    next.height = num('h', next.height);
-
-    const colorsRaw = searchParams.get('colors');
-    if (colorsRaw) {
-      const parsed = colorsRaw
-        .split(',')
-        .map((c) => c.trim())
-        .filter(Boolean);
-      if (parsed.length > 0) next.colors = parsed;
-    }
-
-     next.texture = str('tex', next.texture) as any;
-     next.backgroundColor = str('bg', next.backgroundColor);
-
-     next.stickCount = Math.round(num('count', next.stickCount));
-     next.stickOverhang = num('overhang', next.stickOverhang);
-     next.rotationCenterOffsetX = num('rotx', next.rotationCenterOffsetX);
-     next.rotationCenterOffsetY = num('roty', next.rotationCenterOffsetY);
-     next.stickGap = num('gap', next.stickGap);
-     next.stickSize = num('size', next.stickSize);
-     next.stickRatio = num('ratio', next.stickRatio);
-     next.stickThickness = num('thick', next.stickThickness);
-     next.stickRoundness = num('round', next.stickRoundness);
-     next.stickBevel = num('bevel', next.stickBevel);
-     next.stickOpacity = clampNum(num('so', next.stickOpacity), 0, 1);
-
-    next.lighting.enabled = bool('light', next.lighting.enabled);
-    next.lighting.intensity = num('li', next.lighting.intensity);
-    next.lighting.position.x = num('lx', next.lighting.position.x);
-    next.lighting.position.y = num('ly', next.lighting.position.y);
-    next.lighting.position.z = num('lz', next.lighting.position.z);
-    next.lighting.ambientIntensity = num('amb', next.lighting.ambientIntensity);
-
-    next.camera.distance = num('cd', next.camera.distance);
-    next.camera.azimuth = num('ca', next.camera.azimuth);
-    next.camera.elevation = num('ce', next.camera.elevation);
-
-    // Render pipeline
-    const tm = searchParams.get('tm');
-    if (tm === 'aces' || tm === 'none') {
-      next.rendering.toneMapping = tm;
-    }
-    next.rendering.exposure = clampNum(num('exp', next.rendering.exposure), 0.1, 3.0);
-
-    next.environment.enabled = bool('env', next.environment.enabled);
-    const envStyle = searchParams.get('envs');
-    if (envStyle === 'studio' || envStyle === 'overcast' || envStyle === 'sunset') {
-      next.environment.style = envStyle;
-    }
-    next.environment.intensity = clampNum(num('envi', next.environment.intensity), 0, 5);
-    next.environment.rotation = clampNum(num('envr', next.environment.rotation), 0, 360);
-
-    next.shadows.enabled = bool('sh', next.shadows.enabled);
-    const shType = searchParams.get('sht');
-    if (shType === 'pcfsoft' || shType === 'vsm') {
-      next.shadows.type = shType;
-    }
-    next.shadows.mapSize = Math.round(clampNum(num('shm', next.shadows.mapSize), 256, 8192));
-    next.shadows.bias = num('shb', next.shadows.bias);
-    next.shadows.normalBias = num('shn', next.shadows.normalBias);
-
-    next.geometry.quality = clampNum(num('gq', next.geometry.quality), 0, 1);
-
-    const fmt = searchParams.get('fmt');
-    if (fmt === 'png' || fmt === 'jpg' || fmt === 'webp' || fmt === 'svg') {
-      exportFormat = fmt;
-    }
-
-    config = next;
-  }
-
-  function buildUrlSearchParams(): URLSearchParams {
-    const p = new URLSearchParams();
-
-     p.set('w', String(config.width));
-     p.set('h', String(config.height));
-      p.set('colors', config.colors.join(','));
-      p.set('tex', config.texture);
-      p.set('bg', config.backgroundColor);
-      p.set('count', String(config.stickCount));
-     p.set('overhang', String(config.stickOverhang));
-     p.set('rotx', String(config.rotationCenterOffsetX));
-     p.set('roty', String(config.rotationCenterOffsetY));
-      p.set('gap', String(config.stickGap));
-      p.set('size', String(config.stickSize));
-      p.set('ratio', String(config.stickRatio));
-       p.set('thick', String(config.stickThickness));
-       p.set('round', String(config.stickRoundness));
-       p.set('bevel', String(config.stickBevel));
-       p.set('so', String(config.stickOpacity));
-
-    p.set('light', config.lighting.enabled ? '1' : '0');
-    p.set('li', String(config.lighting.intensity));
-    p.set('lx', String(config.lighting.position.x));
-    p.set('ly', String(config.lighting.position.y));
-    p.set('lz', String(config.lighting.position.z));
-    p.set('amb', String(config.lighting.ambientIntensity));
-
-    p.set('cd', String(config.camera.distance));
-    p.set('ca', String(config.camera.azimuth));
-    p.set('ce', String(config.camera.elevation));
-
-    // Render pipeline
-    p.set('tm', config.rendering.toneMapping);
-    p.set('exp', String(config.rendering.exposure));
-    p.set('env', config.environment.enabled ? '1' : '0');
-    p.set('envs', config.environment.style);
-    p.set('envi', String(config.environment.intensity));
-    p.set('envr', String(config.environment.rotation));
-    p.set('sh', config.shadows.enabled ? '1' : '0');
-    p.set('sht', config.shadows.type);
-    p.set('shm', String(config.shadows.mapSize));
-    p.set('shb', String(config.shadows.bias));
-    p.set('shn', String(config.shadows.normalBias));
-    p.set('gq', String(config.geometry.quality));
-
-    p.set('fmt', exportFormat);
-
-    return p;
   }
 
   function quoteCliArg(value: string): string {
@@ -442,60 +321,12 @@
   }
 
   function buildCliCommandString(): string {
+    const state = getAppState();
+    const cfg = encodeAppStateToBase64Url(state);
+
     const parts: string[] = [];
     parts.push('pnpm', 'cli', 'generate');
-    parts.push('--width', String(config.width));
-    parts.push('--height', String(config.height));
-     parts.push('--colors', quoteCliArg(config.colors.join(',')));
-     parts.push('--texture', config.texture);
-     parts.push('--background', config.backgroundColor);
-     parts.push('--count', String(config.stickCount));
-     parts.push('--stick-overhang', String(config.stickOverhang));
-     parts.push('--rotation-center-offset-x', String(config.rotationCenterOffsetX));
-     parts.push('--rotation-center-offset-y', String(config.rotationCenterOffsetY));
-      parts.push('--gap', String(config.stickGap));
-      parts.push('--size', String(config.stickSize));
-      parts.push('--ratio', String(config.stickRatio));
-      parts.push('--thickness', String(config.stickThickness));
-      parts.push('--roundness', String(config.stickRoundness));
-      parts.push('--bevel', String(config.stickBevel));
-      parts.push('--stick-opacity', String(config.stickOpacity));
-    parts.push('--camera-distance', String(config.camera.distance));
-    parts.push('--camera-azimuth', String(config.camera.azimuth));
-    parts.push('--camera-elevation', String(config.camera.elevation));
-
-    if (!config.lighting.enabled) {
-      parts.push('--no-lighting');
-    } else {
-      parts.push('--light-intensity', String(config.lighting.intensity));
-      parts.push('--light-x', String(config.lighting.position.x));
-      parts.push('--light-y', String(config.lighting.position.y));
-      parts.push('--light-z', String(config.lighting.position.z));
-      parts.push('--ambient', String(config.lighting.ambientIntensity));
-    }
-
-    parts.push('--tone-mapping', config.rendering.toneMapping);
-    parts.push('--exposure', String(config.rendering.exposure));
-    if (config.environment.enabled) {
-      parts.push('--environment');
-    } else {
-      parts.push('--no-environment');
-    }
-    parts.push('--env-style', config.environment.style);
-    parts.push('--env-intensity', String(config.environment.intensity));
-    parts.push('--env-rotation', String(config.environment.rotation));
-    if (config.shadows.enabled) {
-      parts.push('--shadows');
-    } else {
-      parts.push('--no-shadows');
-    }
-    parts.push('--shadow-type', config.shadows.type);
-    parts.push('--shadow-map-size', String(config.shadows.mapSize));
-    parts.push('--shadow-bias', String(config.shadows.bias));
-    parts.push('--shadow-normal-bias', String(config.shadows.normalBias));
-    parts.push('--geometry-quality', String(config.geometry.quality));
-
-    parts.push('--format', exportFormat);
+    parts.push('--cfg', quoteCliArg(cfg));
     return parts.join(' ');
   }
 
@@ -525,15 +356,15 @@
     if (!urlSyncEnabled) return;
     if (typeof window === 'undefined') return;
 
-    const params = buildUrlSearchParams();
+    const cfg = encodeAppStateToBase64Url(getAppState());
     const url = new URL(window.location.href);
-    const next = params.toString();
-    if (url.searchParams.toString() === next) return;
+    if (url.searchParams.get('cfg') === cfg && url.searchParams.size === 1) return;
 
     // Debounce URL updates to avoid spamming history.
     const handle = window.setTimeout(() => {
       const u = new URL(window.location.href);
-      u.search = next;
+      u.search = '';
+      u.searchParams.set('cfg', cfg);
       history.replaceState({}, '', u);
     }, 120);
 
@@ -549,6 +380,7 @@
     const c = config;
     void c.width;
     void c.height;
+    void c.seed;
     void c.colors.join(',');
     void c.texture;
     void c.backgroundColor;
@@ -585,6 +417,7 @@
     void c.rendering.exposure;
     void c.geometry.quality;
     void renderMode;
+    void exportFormat;
     schedulePreviewRender();
   });
 
@@ -599,7 +432,16 @@
     
     try {
       if (hasUrlParams) {
-        parseConfigFromUrl(new URLSearchParams(window.location.search));
+        const sp = new URLSearchParams(window.location.search);
+        const cfg = sp.get('cfg');
+        if (cfg) {
+          const state = decodeAppStateFromBase64Url(cfg);
+          config = state.c;
+          exportFormat = state.f;
+          renderMode = state.m;
+        } else {
+          config = generateRandomConfigNoPresets();
+        }
       } else {
         // Use fully random configuration when no URL parameters are present
         config = generateRandomConfigNoPresets();

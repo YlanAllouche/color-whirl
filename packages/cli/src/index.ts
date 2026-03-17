@@ -6,7 +6,10 @@ import {
   DEFAULT_CONFIG,
   RESOLUTION_PRESETS,
   ResolutionPreset,
-  TextureType
+  TextureType,
+  decodeAppStateFromBase64Url,
+  type WallpaperAppStateV1,
+  type ExportFormat
 } from '@wallpaper-maker/core';
 import { generateWallpaper } from './generate.js';
 import { writeFile } from 'fs/promises';
@@ -22,13 +25,14 @@ program
 program
   .command('generate')
   .description('Generate a wallpaper')
-  .option('-t, --type <type>', 'Wallpaper type', 'popsickle')
+  .option('--cfg <cfg>', 'Base64url encoded web/cli config state')
+  .option('-t, --type <type>', 'Wallpaper type', 'popsicle')
   .option('-W, --width <width>', 'Image width in pixels')
   .option('-H, --height <height>', 'Image height in pixels')
   .option('-r, --resolution <preset>', 'Use a preset resolution (1080p, 1440p, 4k, mobile, square, ultrawide)')
   .option('-c, --colors <colors>', 'Comma-separated hex colors (e.g., "#ff0000,#00ff00")')
-   .option('-T, --texture <texture>', 'Texture type (glossy, matte, metallic)', 'glossy')
-   .option('-b, --background <color>', 'Background color (hex)', '#1a1a2e')
+    .option('-T, --texture <texture>', 'Texture type (glossy, matte, metallic)', 'glossy')
+    .option('-b, --background <color>', 'Background color (hex)', '#1a1a2e')
    .option('-n, --count <number>', 'Number of sticks', '12')
     .option('--stick-overhang <degrees>', 'Stick overhang angle per stick in degrees', '30')
     .option('--rotation-center-offset-x <percent>', 'Rotation center X offset as percentage (-100 to 100)', '0')
@@ -43,7 +47,7 @@ program
   .option('--camera-distance <number>', 'Camera distance', '17.3')
   .option('--camera-azimuth <number>', 'Camera azimuth in degrees', '45')
   .option('--camera-elevation <number>', 'Camera elevation in degrees', '35.3')
-  .option('-f, --format <format>', 'Output format (png, jpg, webp, svg)', 'png')
+  .option('-f, --format <format>', 'Output format (png, jpg, webp, svg)')
   .option('-o, --output <path>', 'Output file path')
   .option('--lighting', 'Enable lighting', true)
   .option('--no-lighting', 'Disable lighting')
@@ -68,15 +72,15 @@ program
   .option('--geometry-quality <number>', 'Geometry quality (0-1)', String(DEFAULT_CONFIG.geometry.quality))
   .action(async (options) => {
     try {
-      const config = buildConfig(options);
+      const { config, format } = buildConfigAndFormat(options);
       console.log('Generating wallpaper...');
       console.log(`Type: ${config.type}`);
       console.log(`Resolution: ${config.width}x${config.height}`);
       console.log(`Colors: ${config.colors.join(', ')}`);
       
-      const result = await generateWallpaper(config, options.format);
+      const result = await generateWallpaper(config, format);
       
-      const outputPath = options.output || `wallpaper-${Date.now()}.${options.format}`;
+      const outputPath = options.output || `wallpaper-${Date.now()}.${format}`;
       const resolvedPath = resolve(outputPath);
       
       if (typeof result.data === 'string') {
@@ -92,7 +96,14 @@ program
     }
   });
 
-function buildConfig(options: any): WallpaperConfig {
+function buildConfigAndFormat(options: any): { config: WallpaperConfig; format: ExportFormat } {
+  if (options.cfg) {
+    const state = decodeAppStateFromBase64Url(String(options.cfg)) as WallpaperAppStateV1;
+    const cfg = state.c;
+    const fmt = (options.format ?? state.f ?? 'png') as ExportFormat;
+    return { config: cfg, format: fmt };
+  }
+
   let width = DEFAULT_CONFIG.width;
   let height = DEFAULT_CONFIG.height;
   
@@ -126,13 +137,14 @@ function buildConfig(options: any): WallpaperConfig {
         ? Math.max(0, Math.min(1, stickOpacityRaw))
         : DEFAULT_CONFIG.stickOpacity;
 
-      const config: WallpaperConfig = {
-        type: options.type as 'popsickle',
-        width,
-        height,
-        colors,
-        texture: options.texture as TextureType,
-        backgroundColor: options.background || backgroundColor,
+       const config: WallpaperConfig = {
+         type: options.type as 'popsicle',
+         seed: DEFAULT_CONFIG.seed,
+         width,
+         height,
+         colors,
+         texture: options.texture as TextureType,
+         backgroundColor: options.background || backgroundColor,
        stickCount: parseInt(options.count, 10),
       stickOverhang: parseFloat(options.stickOverhang),
        rotationCenterOffsetX: parseFloat(options.rotationCenterOffsetX),
@@ -176,12 +188,13 @@ function buildConfig(options: any): WallpaperConfig {
         bias: Number.isFinite(parseFloat(options.shadowBias)) ? parseFloat(options.shadowBias) : DEFAULT_CONFIG.shadows.bias,
         normalBias: Number.isFinite(parseFloat(options.shadowNormalBias)) ? parseFloat(options.shadowNormalBias) : DEFAULT_CONFIG.shadows.normalBias
       },
-      geometry: {
-        quality: Number.isFinite(parseFloat(options.geometryQuality)) ? parseFloat(options.geometryQuality) : DEFAULT_CONFIG.geometry.quality
-      }
-     };
+       geometry: {
+         quality: Number.isFinite(parseFloat(options.geometryQuality)) ? parseFloat(options.geometryQuality) : DEFAULT_CONFIG.geometry.quality
+       }
+      };
   
-  return config;
+  const format = (options.format ?? 'png') as ExportFormat;
+  return { config, format };
 }
 
 program.parse();
