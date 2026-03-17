@@ -2,7 +2,9 @@
   import { onMount } from 'svelte';
   import { 
     DEFAULT_CONFIG, 
+    DEFAULT_CONFIG_BY_TYPE,
     type WallpaperConfig,
+    type WallpaperType,
     RESOLUTION_PRESETS,
     generateRandomConfigNoPresets,
     generateRandomConfigNoPresetsFromSeed,
@@ -352,6 +354,239 @@
     return merged;
   }
 
+  function cloneConfigDeep(src: WallpaperConfig): WallpaperConfig {
+    switch (src.type) {
+      case 'popsicle':
+        return {
+          ...src,
+          colors: [...src.colors],
+          textureParams: {
+            drywall: { ...src.textureParams.drywall },
+            glass: { ...src.textureParams.glass },
+            cel: { ...src.textureParams.cel }
+          },
+          edges: {
+            tint: { ...src.edges.tint },
+            material: { ...src.edges.material },
+            wear: { ...src.edges.wear },
+            rimLight: { ...src.edges.rimLight },
+            outline: { ...src.edges.outline }
+          },
+          emission: { ...src.emission },
+          bloom: { ...src.bloom },
+          lighting: {
+            ...src.lighting,
+            position: { ...src.lighting.position }
+          },
+          camera: { ...src.camera },
+          environment: { ...src.environment },
+          shadows: { ...src.shadows },
+          rendering: { ...src.rendering },
+          geometry: { ...src.geometry }
+        };
+      case 'spheres3d':
+        return {
+          ...src,
+          colors: [...src.colors],
+          textureParams: {
+            drywall: { ...src.textureParams.drywall },
+            glass: { ...src.textureParams.glass },
+            cel: { ...src.textureParams.cel }
+          },
+          edges: {
+            tint: { ...src.edges.tint },
+            material: { ...src.edges.material },
+            wear: { ...src.edges.wear },
+            rimLight: { ...src.edges.rimLight },
+            outline: { ...src.edges.outline }
+          },
+          emission: { ...src.emission },
+          bloom: { ...src.bloom },
+          lighting: {
+            ...src.lighting,
+            position: { ...src.lighting.position }
+          },
+          camera: { ...src.camera },
+          environment: { ...src.environment },
+          shadows: { ...src.shadows },
+          rendering: { ...src.rendering },
+          geometry: { ...src.geometry },
+          spheres: { ...src.spheres, colorWeights: [...src.spheres.colorWeights] }
+        };
+      case 'circles2d':
+        return {
+          ...src,
+          colors: [...src.colors],
+          textureParams: {
+            drywall: { ...src.textureParams.drywall },
+            glass: { ...src.textureParams.glass },
+            cel: { ...src.textureParams.cel }
+          },
+          edges: {
+            tint: { ...src.edges.tint },
+            material: { ...src.edges.material },
+            wear: { ...src.edges.wear },
+            rimLight: { ...src.edges.rimLight },
+            outline: { ...src.edges.outline }
+          },
+          emission: { ...src.emission },
+          bloom: { ...src.bloom },
+          lighting: {
+            ...src.lighting,
+            position: { ...src.lighting.position }
+          },
+          camera: { ...src.camera },
+          environment: { ...src.environment },
+          shadows: { ...src.shadows },
+          rendering: { ...src.rendering },
+          geometry: { ...src.geometry },
+          circles: {
+            ...src.circles,
+            stroke: { ...src.circles.stroke },
+            colorWeights: [...src.circles.colorWeights],
+            croissant: { ...src.circles.croissant }
+          }
+        };
+      case 'triangles2d':
+        return {
+          ...src,
+          colors: [...src.colors],
+          textureParams: {
+            drywall: { ...src.textureParams.drywall },
+            glass: { ...src.textureParams.glass },
+            cel: { ...src.textureParams.cel }
+          },
+          edges: {
+            tint: { ...src.edges.tint },
+            material: { ...src.edges.material },
+            wear: { ...src.edges.wear },
+            rimLight: { ...src.edges.rimLight },
+            outline: { ...src.edges.outline }
+          },
+          emission: { ...src.emission },
+          bloom: { ...src.bloom },
+          lighting: {
+            ...src.lighting,
+            position: { ...src.lighting.position }
+          },
+          camera: { ...src.camera },
+          environment: { ...src.environment },
+          shadows: { ...src.shadows },
+          rendering: { ...src.rendering },
+          geometry: { ...src.geometry },
+          triangles: {
+            ...src.triangles,
+            stroke: { ...src.triangles.stroke },
+            colorWeights: [...src.triangles.colorWeights],
+            shading: { ...src.triangles.shading }
+          }
+        };
+      case 'triangles3d':
+        return {
+          ...src,
+          colors: [...src.colors],
+          textureParams: {
+            drywall: { ...src.textureParams.drywall },
+            glass: { ...src.textureParams.glass },
+            cel: { ...src.textureParams.cel }
+          },
+          edges: {
+            tint: { ...src.edges.tint },
+            material: { ...src.edges.material },
+            wear: { ...src.edges.wear },
+            rimLight: { ...src.edges.rimLight },
+            outline: { ...src.edges.outline }
+          },
+          emission: { ...src.emission },
+          bloom: { ...src.bloom },
+          lighting: {
+            ...src.lighting,
+            position: { ...src.lighting.position }
+          },
+          camera: { ...src.camera },
+          environment: { ...src.environment },
+          shadows: { ...src.shadows },
+          rendering: { ...src.rendering },
+          geometry: { ...src.geometry },
+          prisms: { ...src.prisms, colorWeights: [...src.prisms.colorWeights] }
+        };
+      case 'hexgrid2d':
+        return {
+          ...src,
+          colors: [...src.colors],
+          textureParams: {
+            drywall: { ...src.textureParams.drywall },
+            glass: { ...src.textureParams.glass },
+            cel: { ...src.textureParams.cel }
+          },
+          edges: {
+            tint: { ...src.edges.tint },
+            material: { ...src.edges.material },
+            wear: { ...src.edges.wear },
+            rimLight: { ...src.edges.rimLight },
+            outline: { ...src.edges.outline }
+          },
+          emission: { ...src.emission },
+          bloom: { ...src.bloom },
+          lighting: {
+            ...src.lighting,
+            position: { ...src.lighting.position }
+          },
+          camera: { ...src.camera },
+          environment: { ...src.environment },
+          shadows: { ...src.shadows },
+          rendering: { ...src.rendering },
+          geometry: { ...src.geometry },
+          hexgrid: {
+            ...src.hexgrid,
+            originPx: { ...src.hexgrid.originPx },
+            stroke: { ...src.hexgrid.stroke },
+            coloring: { ...src.hexgrid.coloring, weights: [...src.hexgrid.coloring.weights] },
+            effect: { ...src.hexgrid.effect },
+            grouping: { ...src.hexgrid.grouping }
+          }
+        };
+    }
+  }
+
+  function switchType(nextType: WallpaperType) {
+    if (nextType === config.type) return;
+
+    const current = config;
+    const next = cloneConfigDeep(DEFAULT_CONFIG_BY_TYPE[nextType]);
+
+    // Preserve shared fields.
+    next.seed = current.seed;
+    next.width = current.width;
+    next.height = current.height;
+    next.colors = [...current.colors];
+    next.backgroundColor = current.backgroundColor;
+    next.texture = current.texture;
+    next.textureParams = {
+      drywall: { ...current.textureParams.drywall },
+      glass: { ...current.textureParams.glass },
+      cel: { ...current.textureParams.cel }
+    };
+    next.edges = {
+      tint: { ...current.edges.tint },
+      material: { ...current.edges.material },
+      wear: { ...current.edges.wear },
+      rimLight: { ...current.edges.rimLight },
+      outline: { ...current.edges.outline }
+    };
+    next.emission = { ...current.emission };
+    next.bloom = { ...current.bloom };
+    next.lighting = { ...current.lighting, position: { ...current.lighting.position } };
+    next.camera = { ...current.camera };
+    next.environment = { ...current.environment };
+    next.shadows = { ...current.shadows };
+    next.rendering = { ...current.rendering };
+    next.geometry = { ...current.geometry };
+
+    config = next;
+    schedulePreviewRender();
+  }
+
   function generateRandomGeneratedColors() {
     // Randomize everything, including a non-preset generated color theme.
     const seed = randomSeedU32();
@@ -425,6 +660,30 @@
     return () => {
       window.clearTimeout(handle);
     };
+  });
+
+  $effect(() => {
+    if (!urlSyncEnabled) return;
+    if (!canvasContainer) return;
+    void config.type;
+
+    if (config.type === 'popsicle') {
+      if (!preview) {
+        fallbackCanvas = null;
+        canvasContainer.innerHTML = '';
+        preview = new PopsiclePreview(canvasContainer);
+        preview.setMode(renderMode);
+      }
+      return;
+    }
+
+    if (preview) {
+      preview.dispose();
+      preview = null;
+    }
+    fallbackCanvas = null;
+    renderMode = 'raster';
+    renderNonPopsicleOnce();
   });
   
   $effect(() => {
@@ -631,7 +890,29 @@
             </button>
           </div>
         </section>
-       
+
+        <!-- Type -->
+        <section class="control-section">
+          <h3>Type</h3>
+          <label class="control-row">
+            <span class="setting-title">Generator</span>
+            <select
+              value={config.type}
+              onchange={(e) => {
+                const value = (e.currentTarget as HTMLSelectElement).value as WallpaperType;
+                switchType(value);
+              }}
+            >
+              <option value="popsicle">Popsicle</option>
+              <option value="spheres3d">Spheres (3D)</option>
+              <option value="circles2d">Circles (2D)</option>
+              <option value="triangles2d">Triangles (2D)</option>
+              <option value="triangles3d">Triangles (3D)</option>
+              <option value="hexgrid2d">Hex Grid (2D)</option>
+            </select>
+          </label>
+        </section>
+        
        <!-- Resolution Controls -->
       <section class="control-section">
         <h3>Resolution</h3>
