@@ -227,13 +227,18 @@
 
   function cloneDefaultConfig(): WallpaperConfig {
       return {
-        ...DEFAULT_CONFIG,
-        colors: [...DEFAULT_CONFIG.colors],
-        lighting: {
-          ...DEFAULT_CONFIG.lighting,
-          position: { ...DEFAULT_CONFIG.lighting.position }
-        },
-        camera: { ...DEFAULT_CONFIG.camera },
+         ...DEFAULT_CONFIG,
+         colors: [...DEFAULT_CONFIG.colors],
+         textureParams: {
+           drywall: { ...DEFAULT_CONFIG.textureParams.drywall },
+           glass: { ...DEFAULT_CONFIG.textureParams.glass },
+           cel: { ...DEFAULT_CONFIG.textureParams.cel }
+         },
+         lighting: {
+           ...DEFAULT_CONFIG.lighting,
+           position: { ...DEFAULT_CONFIG.lighting.position }
+         },
+         camera: { ...DEFAULT_CONFIG.camera },
         environment: { ...DEFAULT_CONFIG.environment },
         shadows: { ...DEFAULT_CONFIG.shadows },
         rendering: { ...DEFAULT_CONFIG.rendering },
@@ -246,6 +251,11 @@
     const merged: WallpaperConfig = {
       ...next,
       colors: [...next.colors],
+      textureParams: {
+        drywall: { ...next.textureParams.drywall },
+        glass: { ...next.textureParams.glass },
+        cel: { ...next.textureParams.cel }
+      },
       lighting: {
         ...next.lighting,
         position: { ...next.lighting.position }
@@ -383,6 +393,11 @@
     void c.seed;
     void c.colors.join(',');
     void c.texture;
+    void c.textureParams.drywall.grainAmount;
+    void c.textureParams.drywall.grainScale;
+    void c.textureParams.glass.style;
+    void c.textureParams.cel.bands;
+    void c.textureParams.cel.halftone;
     void c.backgroundColor;
     void c.stickCount;
     void c.stickOverhang;
@@ -419,6 +434,12 @@
     void renderMode;
     void exportFormat;
     schedulePreviewRender();
+  });
+
+  $effect(() => {
+    if (config.texture === 'cel' && renderMode === 'path') {
+      renderMode = 'raster';
+    }
   });
 
   $effect(() => {
@@ -589,8 +610,46 @@
             <option value="glossy">Glossy</option>
             <option value="matte">Matte</option>
             <option value="metallic">Metallic</option>
+            <option value="drywall">Drywall</option>
+            <option value="glass">Glass</option>
+            <option value="mirror">Mirror</option>
+            <option value="cel">Cel</option>
           </select>
         </label>
+
+        {#if config.texture === 'drywall'}
+          <label class="control-row slider">
+            <span class="setting-title">Grain: {config.textureParams.drywall.grainAmount.toFixed(2)}</span>
+            <input type="range" bind:value={config.textureParams.drywall.grainAmount} min="0" max="1" step="0.01" />
+          </label>
+          <label class="control-row slider">
+            <span class="setting-title">Grain Scale: {config.textureParams.drywall.grainScale.toFixed(2)}</span>
+            <input type="range" bind:value={config.textureParams.drywall.grainScale} min="0.5" max="8" step="0.05" />
+          </label>
+        {/if}
+
+        {#if config.texture === 'glass'}
+          <label class="control-row">
+            <span class="setting-title">Glass Style</span>
+            <select bind:value={config.textureParams.glass.style}>
+              <option value="simple">Simple</option>
+              <option value="frosted">Frosted</option>
+              <option value="thick">Thick</option>
+              <option value="stylized">Stylized</option>
+            </select>
+          </label>
+        {/if}
+
+        {#if config.texture === 'cel'}
+          <label class="control-row slider">
+            <span class="setting-title">Bands: {Math.round(config.textureParams.cel.bands)}</span>
+            <input type="range" bind:value={config.textureParams.cel.bands} min="2" max="8" step="1" />
+          </label>
+          <label class="control-row checkbox">
+            <input type="checkbox" bind:checked={config.textureParams.cel.halftone} />
+            <span class="setting-title">Halftone</span>
+          </label>
+        {/if}
          <label class="control-row">
            <button type="button" class="setting-title" class:locked={locks.backgroundColor} onclick={() => toggleLock('backgroundColor')} title="Click to lock/unlock for randomize">Background</button>
            <input type="color" bind:value={config.backgroundColor} />
@@ -730,7 +789,7 @@
           <span class="setting-title">Mode</span>
           <select bind:value={renderMode} title="Raster is instant; Path traced refines progressively">
             <option value="raster">Raster</option>
-            <option value="path">Path traced</option>
+            <option value="path" disabled={config.texture === 'cel'}>Path traced</option>
           </select>
         </label>
 

@@ -1,4 +1,23 @@
-export type TextureType = 'glossy' | 'matte' | 'metallic';
+export type TextureType = 'glossy' | 'matte' | 'metallic' | 'drywall' | 'glass' | 'mirror' | 'cel';
+
+export type GlassStyle = 'simple' | 'frosted' | 'thick' | 'stylized';
+
+export interface TextureParams {
+  drywall: {
+    /** 0..1 */
+    grainAmount: number;
+    /** Controls texture repeat in UV space */
+    grainScale: number;
+  };
+  glass: {
+    style: GlassStyle;
+  };
+  cel: {
+    /** Number of toon bands (2..8 recommended) */
+    bands: number;
+    halftone: boolean;
+  };
+}
 
 export interface CameraConfig {
   /** Distance from origin in scene units */
@@ -58,6 +77,7 @@ export interface WallpaperConfig {
   height: number;
   colors: string[];
   texture: TextureType;
+  textureParams: TextureParams;
   backgroundColor: string;
   stickCount: number;
   /** Stick overhang angle per stick in degrees (e.g., each stick rotates 15° from the previous) */
@@ -109,6 +129,11 @@ export const DEFAULT_CONFIG: WallpaperConfig = {
   height: 1080,
   colors: ['#FF6B6B', '#FF8E53', '#FE6B8B', '#FF8E53', '#FFD93D'],
   texture: 'glossy',
+  textureParams: {
+    drywall: { grainAmount: 0.65, grainScale: 2.5 },
+    glass: { style: 'simple' },
+    cel: { bands: 4, halftone: false }
+  },
   backgroundColor: '#1a1a2e',
   stickCount: 12,
   stickOverhang: 30,
@@ -311,7 +336,7 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number): WallpaperCo
 
   const theme = generateRandomColorThemeFromSeed(seed ^ 0x9e3779b9, 5);
 
-  const textures: TextureType[] = ['glossy', 'matte', 'metallic'];
+  const textures: TextureType[] = ['glossy', 'matte', 'metallic', 'drywall', 'glass', 'mirror'];
 
   // Opacity distribution:
   // - Very likely fully opaque (1)
@@ -335,6 +360,19 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number): WallpaperCo
     height: DEFAULT_CONFIG.height,
     colors: [...theme.colors],
     texture: textures[Math.floor(rng() * textures.length)],
+    textureParams: {
+      drywall: {
+        grainAmount: clamp(randomWeighted(rng, 0.15, 1.0, 0.65), 0, 1),
+        grainScale: clamp(randomWeighted(rng, 0.6, 6.0, 2.5), 0.1, 50)
+      },
+      glass: {
+        style: (['simple', 'frosted', 'thick', 'stylized'] as const)[Math.floor(rng() * 4)]
+      },
+      cel: {
+        bands: Math.max(2, Math.min(8, Math.round(randomWeighted(rng, 2, 8, 4)))),
+        halftone: rng() < 0.25
+      }
+    },
     backgroundColor: theme.backgroundColor,
     stickCount: Math.round(randomWeighted(rng, 1, 200, 40)),
     stickOverhang: randomWeighted(rng, 0, 180, 30),

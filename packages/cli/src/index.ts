@@ -31,7 +31,7 @@ program
   .option('-H, --height <height>', 'Image height in pixels')
   .option('-r, --resolution <preset>', 'Use a preset resolution (1080p, 1440p, 4k, mobile, square, ultrawide)')
   .option('-c, --colors <colors>', 'Comma-separated hex colors (e.g., "#ff0000,#00ff00")')
-    .option('-T, --texture <texture>', 'Texture type (glossy, matte, metallic)', 'glossy')
+    .option('-T, --texture <texture>', 'Texture type (glossy, matte, metallic, drywall, glass, mirror, cel)', 'glossy')
     .option('-b, --background <color>', 'Background color (hex)', '#1a1a2e')
    .option('-n, --count <number>', 'Number of sticks', '12')
     .option('--stick-overhang <degrees>', 'Stick overhang angle per stick in degrees', '30')
@@ -144,6 +144,7 @@ function buildConfigAndFormat(options: any): { config: WallpaperConfig; format: 
          height,
          colors,
          texture: options.texture as TextureType,
+         textureParams: DEFAULT_CONFIG.textureParams,
          backgroundColor: options.background || backgroundColor,
        stickCount: parseInt(options.count, 10),
       stickOverhang: parseFloat(options.stickOverhang),

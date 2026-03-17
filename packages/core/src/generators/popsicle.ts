@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import type { WallpaperConfig, TextureType, EnvironmentStyle } from '../types.js';
+import type { WallpaperConfig, EnvironmentStyle } from '../types.js';
+import { createStickMaterial } from '../materials.js';
 
 interface StickDimensions {
   width: number;
@@ -40,60 +41,6 @@ function getStickDimensions(
     height,
     depth: baseSize * aspect * 0.02 * stickThickness * safeSize
   };
-}
-
-function createMaterial(
-  texture: TextureType,
-  color: string,
-  envIntensity: number,
-  stickOpacity: number
-): THREE.MeshPhysicalMaterial {
-  const baseConfig: THREE.MeshPhysicalMaterialParameters = {
-    color: color,
-    transparent: stickOpacity < 1,
-    opacity: stickOpacity,
-    dithering: true
-  };
-
-  switch (texture) {
-    case 'glossy':
-      return new THREE.MeshPhysicalMaterial({
-        ...baseConfig,
-        roughness: 0.05,
-        metalness: 0.1,
-        clearcoat: 1.0,
-        clearcoatRoughness: 0.05,
-        reflectivity: 1.0,
-        envMapIntensity: envIntensity,
-        ior: 1.5,
-        transmission: 0.0,
-        thickness: 0.1
-      });
-    case 'metallic':
-      return new THREE.MeshPhysicalMaterial({
-        ...baseConfig,
-        roughness: 0.25,
-        metalness: 0.95,
-        clearcoat: 0.3,
-        clearcoatRoughness: 0.1,
-        reflectivity: 1.0,
-        envMapIntensity: envIntensity * 1.6,
-        ior: 2.0
-      });
-    case 'matte':
-    default:
-      return new THREE.MeshPhysicalMaterial({
-        ...baseConfig,
-        roughness: 0.9,
-        metalness: 0.0,
-        clearcoat: 0.0,
-        sheen: 0.3,
-        sheenRoughness: 0.8,
-        sheenColor: new THREE.Color(0xffffff),
-        reflectivity: 0.2,
-        envMapIntensity: envIntensity * 0.35
-      });
-  }
 }
 
 function createRoundedBox(
@@ -402,12 +349,19 @@ export function createPopsicleScene(
   const useShadows = !!shadows?.enabled;
 
   const group = new THREE.Group();
-  const materialCache = new Map<string, THREE.MeshPhysicalMaterial>();
+  const materialCache = new Map<string, THREE.Material>();
   const getMat = (hex: string) => {
-    const key = [texture, hex, envIntensity.toFixed(3), safeStickOpacity.toFixed(3)].join(':');
+    const key = [texture, hex, envIntensity.toFixed(3), safeStickOpacity.toFixed(3), String(config.seed)].join(':');
     const existing = materialCache.get(key);
     if (existing) return existing;
-    const m = createMaterial(texture, hex, envIntensity, safeStickOpacity);
+    const m = createStickMaterial({
+      texture,
+      color: hex,
+      envIntensity,
+      stickOpacity: safeStickOpacity,
+      seed: config.seed,
+      textureParams: config.textureParams
+    });
     materialCache.set(key, m);
     return m;
   };
