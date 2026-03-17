@@ -1,6 +1,7 @@
 import * as THREE from 'three';
-import type { WallpaperConfig, EnvironmentStyle } from '../types.js';
+import type { PopsicleConfig, EnvironmentStyle } from '../types.js';
 import { createStickMeshMaterial } from '../materials.js';
+import { renderWithOptionalBloom } from './postprocessing.js';
 
 interface StickDimensions {
   width: number;
@@ -250,7 +251,7 @@ function getStackingOffset(
 }
 
 export function createPopsicleScene(
-  config: WallpaperConfig,
+  config: PopsicleConfig,
   options?: { canvas?: HTMLCanvasElement; preserveDrawingBuffer?: boolean; pixelRatio?: number }
 ): {
   scene: THREE.Scene;
@@ -450,10 +451,17 @@ export function createPopsicleScene(
 }
 
 export function renderPopsicleToCanvas(
-  config: WallpaperConfig,
+  config: PopsicleConfig,
   canvas?: HTMLCanvasElement
 ): HTMLCanvasElement {
   const { scene, camera, renderer } = createPopsicleScene(config, { canvas, preserveDrawingBuffer: true, pixelRatio: 1 });
-  renderer.render(scene, camera);
+  renderWithOptionalBloom({
+    renderer,
+    scene,
+    camera,
+    width: config.width,
+    height: config.height,
+    bloom: config.bloom
+  });
   return renderer.domElement;
 }

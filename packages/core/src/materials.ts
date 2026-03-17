@@ -197,7 +197,7 @@ function applyRimLight(material: THREE.Material, cfg: RimLightConfig): void {
       shader.uniforms.rimPower = { value: power };
       shader.fragmentShader = shader.fragmentShader.replace(
         '#include <dithering_fragment>',
-        `#include <dithering_fragment>\n\n// Rim light\nvec3 rimN = normalize(normal);\nvec3 rimV = normalize(vViewPosition);\nfloat rimDot = clamp(dot(rimN, rimV), 0.0, 1.0);\nfloat rim = pow(1.0 - rimDot, rimPower) * rimIntensity;\ngl_FragColor.rgb += rimColor * rim;`
+        `#include <dithering_fragment>\n\n// Rim light\nvec3 rimN = normalize(normal);\nvec3 rimV = normalize(vViewPosition);\n#ifdef ORTHOGRAPHIC_CAMERA\nrimV = vec3(0.0, 0.0, 1.0);\n#endif\nfloat rimDot = clamp(dot(rimN, rimV), 0.0, 1.0);\nfloat rim = pow(1.0 - rimDot, rimPower) * rimIntensity;\ngl_FragColor.rgb += rimColor * rim;`
       );
     },
     `rim-v1:${rimColor.getHexString()}:${intensity.toFixed(3)}:${power.toFixed(3)}`
@@ -218,10 +218,11 @@ function applyEdgeWear(material: THREE.Material, cfg: EdgeWearConfig): void {
       shader.uniforms.wearIntensity = { value: intensity };
       shader.uniforms.wearWidth = { value: width };
       shader.uniforms.wearNoise = { value: noise };
+      shader.uniforms.wearSeed = { value: 0 };
 
       shader.fragmentShader = shader.fragmentShader.replace(
         '#include <dithering_fragment>',
-        `#include <dithering_fragment>\n\n// Edge wear (view-dependent)\nvec3 wearN = normalize(normal);\nvec3 wearV = normalize(vViewPosition);\nfloat wearDot = clamp(dot(wearN, wearV), 0.0, 1.0);\nfloat wearEdge = pow(1.0 - wearDot, 2.0);\nfloat wearMask = smoothstep(1.0 - wearWidth, 1.0, wearEdge) * wearIntensity;\nfloat wearRand = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);\nwearMask *= mix(1.0, wearRand, wearNoise);\ngl_FragColor.rgb = mix(gl_FragColor.rgb, wearColor, clamp(wearMask, 0.0, 1.0));`
+        `#include <dithering_fragment>\n\n// Edge wear (view-dependent)\nvec3 wearN = normalize(normal);\nvec3 wearV = normalize(vViewPosition);\n#ifdef ORTHOGRAPHIC_CAMERA\nwearV = vec3(0.0, 0.0, 1.0);\n#endif\nfloat wearDot = clamp(dot(wearN, wearV), 0.0, 1.0);\nfloat wearEdge = pow(1.0 - wearDot, 2.0);\nfloat wearMask = smoothstep(1.0 - wearWidth, 1.0, wearEdge) * wearIntensity;\nfloat wearRand = fract(sin(dot(gl_FragCoord.xy + vec2(wearSeed, wearSeed * 0.37), vec2(12.9898, 78.233))) * 43758.5453);\nwearMask *= mix(1.0, wearRand, wearNoise);\ngl_FragColor.rgb = mix(gl_FragColor.rgb, wearColor, clamp(wearMask, 0.0, 1.0));`
       );
     },
     `wear-v1:${wearColor.getHexString()}:${intensity.toFixed(3)}:${width.toFixed(3)}:${noise.toFixed(3)}`
@@ -286,7 +287,7 @@ export function createStickMeshMaterial(
   if (!needsEdgeMat) return face;
 
   const edge = face.clone();
-  applyRimLight(edge, config.edges.rimLight);
+  // Rim already cloned from face.
   if (config.edges.tint.enabled) {
     applyEdgeTint(edge, config.edges.tint.color, config.edges.tint.amount);
   }
@@ -294,6 +295,35 @@ export function createStickMeshMaterial(
   applyEdgeWear(edge, config.edges.wear);
 
   return [face, edge];
+}
+
+export function createSurfaceMaterial(
+  config: WallpaperConfig,
+  paletteIndex: number,
+  color: string,
+  envIntensity: number,
+  opacity: number
+): THREE.Material {
+  const emit =
+    config.emission.enabled &&
+    Math.round(config.emission.paletteIndex) === Math.round(paletteIndex) &&
+    Number.isFinite(Number(config.emission.intensity)) &&
+    Number(config.emission.intensity) > 0;
+  const emissive = emit
+    ? { enabled: true, intensity: Number(config.emission.intensity), color }
+    : { enabled: false, intensity: 0, color };
+
+  const m = createStickMaterial({
+    texture: config.texture,
+    color,
+    envIntensity,
+    stickOpacity: Math.max(0, Math.min(1, opacity)),
+    seed: config.seed,
+    textureParams: config.textureParams,
+    emissive
+  });
+  applyRimLight(m, config.edges.rimLight);
+  return m;
 }
 
 export function createStickMaterial(options: {
