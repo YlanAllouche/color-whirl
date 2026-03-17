@@ -103,6 +103,8 @@ function generateSVGContent(config: WallpaperConfig): string {
 
   const stickSize = (config as any).stickSize ?? 1.0;
   const stickRatio = (config as any).stickRatio ?? 3.0;
+  const stickOpacityRaw = (config as any).stickOpacity;
+  const stickOpacity = Math.max(0, Math.min(1, Number.isFinite(Number(stickOpacityRaw)) ? Number(stickOpacityRaw) : 1.0));
 
   const sizeNum = Number(stickSize);
   const ratioNum = Number(stickRatio);
@@ -153,7 +155,7 @@ function generateSVGContent(config: WallpaperConfig): string {
     const rx = radius;
     const ry = radius;
     
-    svg += `  <rect x="${x - stickWidth/2}" y="${y - stickHeight/2}" width="${stickWidth}" height="${stickHeight}" rx="${rx}" ry="${ry}" fill="${color}" transform="rotate(${rotation} ${x} ${y})" opacity="0.95"/>
+    svg += `  <rect x="${x - stickWidth/2}" y="${y - stickHeight/2}" width="${stickWidth}" height="${stickHeight}" rx="${rx}" ry="${ry}" fill="${color}" transform="rotate(${rotation} ${x} ${y})" opacity="${stickOpacity}"/>
 `;
   }
   

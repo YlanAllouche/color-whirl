@@ -73,6 +73,8 @@ export interface WallpaperConfig {
   stickRoundness: number;
   /** 0 = no bevel, 1 = strongest bevel */
   stickBevel: number;
+  /** 0..1: stick material opacity; 1 = fully opaque */
+  stickOpacity: number;
   lighting: LightingConfig;
   camera: CameraConfig;
   environment: EnvironmentConfig;
@@ -115,6 +117,7 @@ export const DEFAULT_CONFIG: WallpaperConfig = {
   stickThickness: 1.0,
   stickRoundness: 0.15,
   stickBevel: 0.35,
+  stickOpacity: 1.0,
   lighting: {
     enabled: true,
     intensity: 1.5,
@@ -293,6 +296,7 @@ export function generateRandomConfigNoPresets(): WallpaperConfig {
     stickThickness: randomWeighted(0.1, 3, 1.0),
     stickRoundness: randomWeighted(0, 1, 0.15),
     stickBevel: randomWeighted(0, 1, 0.35),
+    stickOpacity: DEFAULT_CONFIG.stickOpacity,
     lighting: {
       enabled: Math.random() > 0.2,
       intensity: randomWeighted(0.5, 3, 1.5),

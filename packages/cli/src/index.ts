@@ -39,6 +39,7 @@ program
   .option('--thickness <number>', 'Stick thickness multiplier', '1.0')
   .option('--roundness <number>', 'Stick end roundness (0-1)', '0.15')
   .option('--bevel <number>', 'Bevel amount (0-1)', '0.35')
+  .option('--stick-opacity <number>', 'Stick opacity (0-1)', String(DEFAULT_CONFIG.stickOpacity))
   .option('--camera-distance <number>', 'Camera distance', '17.3')
   .option('--camera-azimuth <number>', 'Camera azimuth in degrees', '45')
   .option('--camera-elevation <number>', 'Camera elevation in degrees', '35.3')
@@ -120,33 +121,39 @@ function buildConfig(options: any): WallpaperConfig {
      const envStyle = String(options.envStyle ?? DEFAULT_CONFIG.environment.style);
      const shadowType = String(options.shadowType ?? DEFAULT_CONFIG.shadows.type);
 
-     const config: WallpaperConfig = {
-       type: options.type as 'popsickle',
-       width,
-       height,
-       colors,
-       texture: options.texture as TextureType,
-       backgroundColor: options.background || backgroundColor,
-      stickCount: parseInt(options.count, 10),
-     stickOverhang: parseFloat(options.stickOverhang),
-      rotationCenterOffsetX: parseFloat(options.rotationCenterOffsetX),
-      rotationCenterOffsetY: parseFloat(options.rotationCenterOffsetY),
-      stickGap: parseFloat(options.gap),
-     stickSize: parseFloat(options.size),
-     stickRatio: parseFloat(options.ratio),
-     stickThickness: parseFloat(options.thickness),
-     stickRoundness: parseFloat(options.roundness),
-     stickBevel: parseFloat(options.bevel),
-     lighting: {
-       enabled: options.lighting,
-      intensity: parseFloat(options.lightIntensity),
-      position: {
-        x: parseFloat(options.lightX),
-        y: parseFloat(options.lightY),
-        z: parseFloat(options.lightZ)
-      },
-      ambientIntensity: parseFloat(options.ambient)
-    },
+      const stickOpacityRaw = parseFloat(options.stickOpacity);
+      const stickOpacity = Number.isFinite(stickOpacityRaw)
+        ? Math.max(0, Math.min(1, stickOpacityRaw))
+        : DEFAULT_CONFIG.stickOpacity;
+
+      const config: WallpaperConfig = {
+        type: options.type as 'popsickle',
+        width,
+        height,
+        colors,
+        texture: options.texture as TextureType,
+        backgroundColor: options.background || backgroundColor,
+       stickCount: parseInt(options.count, 10),
+      stickOverhang: parseFloat(options.stickOverhang),
+       rotationCenterOffsetX: parseFloat(options.rotationCenterOffsetX),
+       rotationCenterOffsetY: parseFloat(options.rotationCenterOffsetY),
+       stickGap: parseFloat(options.gap),
+      stickSize: parseFloat(options.size),
+      stickRatio: parseFloat(options.ratio),
+      stickThickness: parseFloat(options.thickness),
+      stickRoundness: parseFloat(options.roundness),
+      stickBevel: parseFloat(options.bevel),
+      stickOpacity,
+      lighting: {
+        enabled: options.lighting,
+       intensity: parseFloat(options.lightIntensity),
+       position: {
+         x: parseFloat(options.lightX),
+         y: parseFloat(options.lightY),
+         z: parseFloat(options.lightZ)
+       },
+       ambientIntensity: parseFloat(options.ambient)
+     },
      camera: {
        distance: parseFloat(options.cameraDistance),
        azimuth: parseFloat(options.cameraAzimuth),

@@ -82,6 +82,8 @@ function generateSVG(config: WallpaperConfig): GenerateResult {
 
   const stickSize = (config as any).stickSize ?? 1.0;
   const stickRatio = (config as any).stickRatio ?? 3.0;
+  const stickOpacityRaw = (config as any).stickOpacity;
+  const stickOpacity = Math.max(0, Math.min(1, Number.isFinite(Number(stickOpacityRaw)) ? Number(stickOpacityRaw) : 1.0));
 
   const sizeNum = Number(stickSize);
   const ratioNum = Number(stickRatio);
@@ -142,7 +144,7 @@ function generateSVG(config: WallpaperConfig): GenerateResult {
   </defs>
 `;
     
-    svg += `  <rect x="${x - stickWidth/2}" y="${y - stickHeight/2}" width="${stickWidth}" height="${stickHeight}" rx="${rx}" ry="${ry}" fill="url(#${gradientId})" transform="rotate(${rotation} ${x} ${y})" opacity="0.95"/>
+    svg += `  <rect x="${x - stickWidth/2}" y="${y - stickHeight/2}" width="${stickWidth}" height="${stickHeight}" rx="${rx}" ry="${ry}" fill="url(#${gradientId})" transform="rotate(${rotation} ${x} ${y})" opacity="${stickOpacity}"/>
 `;
   }
   
@@ -217,11 +219,11 @@ function generateHTML(config: WallpaperConfig): string {
       };
     }
     
-    function createMaterial(texture, color, envIntensity) {
+    function createMaterial(texture, color, envIntensity, stickOpacity) {
       const baseConfig = {
         color: color,
-        transparent: true,
-        opacity: 0.95,
+        transparent: stickOpacity < 1,
+        opacity: stickOpacity,
         dithering: true
       };
 
@@ -450,6 +452,7 @@ function generateHTML(config: WallpaperConfig): string {
         stickThickness,
         stickRoundness,
         stickBevel,
+        stickOpacity,
         lighting,
         camera: cameraConfig,
         environment,
@@ -457,6 +460,8 @@ function generateHTML(config: WallpaperConfig): string {
         rendering,
         geometry
       } = config;
+
+      const safeStickOpacity = clamp(Number.isFinite(Number(stickOpacity)) ? Number(stickOpacity) : 1.0, 0, 1);
     
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(backgroundColor);
@@ -521,7 +526,7 @@ function generateHTML(config: WallpaperConfig): string {
       for (let i = 0; i < stickCount; i++) {
         const color = colors[i % colors.length];
         const envIntensity = environment && environment.enabled ? Number(environment.intensity) || 0 : 0;
-        const material = createMaterial(texture, color, envIntensity);
+        const material = createMaterial(texture, color, envIntensity, safeStickOpacity);
         const stickGeometry = createRoundedBox(
           stickDimensions.width,
           stickDimensions.height,

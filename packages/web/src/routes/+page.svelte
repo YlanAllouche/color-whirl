@@ -46,6 +46,7 @@
     stickThickness: boolean;
     stickRoundness: boolean;
     stickBevel: boolean;
+    stickOpacity: boolean;
     cameraDistance: boolean;
     cameraAzimuth: boolean;
     cameraElevation: boolean;
@@ -74,6 +75,7 @@
     stickThickness: false,
     stickRoundness: false,
     stickBevel: false,
+    stickOpacity: false,
     cameraDistance: false,
     cameraAzimuth: false,
     cameraElevation: false,
@@ -188,11 +190,16 @@
     return geometry;
   }
   
-  function createMaterial(texture: string, color: string, envIntensity: number): THREE.MeshPhysicalMaterial {
+  function createMaterial(
+    texture: string,
+    color: string,
+    envIntensity: number,
+    stickOpacity: number
+  ): THREE.MeshPhysicalMaterial {
     const baseConfig: THREE.MeshPhysicalMaterialParameters = {
       color: color,
-      transparent: true,
-      opacity: 0.98,
+      transparent: stickOpacity < 1,
+      opacity: stickOpacity,
       dithering: true
     };
 
@@ -426,16 +433,19 @@
          stickGap,
          stickSize,
          stickRatio,
-         stickThickness,
-         stickRoundness,
-          stickBevel,
-          lighting,
-          camera: cameraConfig,
-          environment: environmentConfig,
-          shadows: shadowsConfig,
-          rendering: renderingConfig,
-          geometry: geometryConfig
-        } = config;
+           stickThickness,
+           stickRoundness,
+           stickBevel,
+           stickOpacity,
+           lighting,
+           camera: cameraConfig,
+           environment: environmentConfig,
+           shadows: shadowsConfig,
+           rendering: renderingConfig,
+           geometry: geometryConfig
+         } = config;
+
+        const safeStickOpacity = clamp(Number.isFinite(Number(stickOpacity)) ? Number(stickOpacity) : 1.0, 0, 1);
     
     scene = new THREE.Scene();
     scene.background = new THREE.Color(backgroundColor);
@@ -498,15 +508,15 @@
      
      const group = new THREE.Group();
      
-      for (let i = 0; i < stickCount; i++) {
-        const color = colors[i % colors.length];
-        const envIntensity = environmentConfig.enabled ? environmentConfig.intensity : 0;
-        const material = createMaterial(texture, color, envIntensity);
-      const stickGeometry = createRoundedBox(
-        stickDimensions.width,
-        stickDimensions.height,
-        stickDimensions.depth,
-        stickRoundness,
+       for (let i = 0; i < stickCount; i++) {
+         const color = colors[i % colors.length];
+         const envIntensity = environmentConfig.enabled ? environmentConfig.intensity : 0;
+         const material = createMaterial(texture, color, envIntensity, safeStickOpacity);
+       const stickGeometry = createRoundedBox(
+         stickDimensions.width,
+         stickDimensions.height,
+         stickDimensions.depth,
+         stickRoundness,
         stickBevel,
         geometryConfig.quality
       );
@@ -702,9 +712,10 @@
     if (locks.stickGap) merged.stickGap = current.stickGap;
     if (locks.stickSize) merged.stickSize = current.stickSize;
     if (locks.stickRatio) merged.stickRatio = current.stickRatio;
-    if (locks.stickThickness) merged.stickThickness = current.stickThickness;
-    if (locks.stickRoundness) merged.stickRoundness = current.stickRoundness;
-    if (locks.stickBevel) merged.stickBevel = current.stickBevel;
+     if (locks.stickThickness) merged.stickThickness = current.stickThickness;
+     if (locks.stickRoundness) merged.stickRoundness = current.stickRoundness;
+     if (locks.stickBevel) merged.stickBevel = current.stickBevel;
+     if (locks.stickOpacity) merged.stickOpacity = current.stickOpacity;
 
     if (locks.cameraDistance) merged.camera.distance = current.camera.distance;
     if (locks.cameraAzimuth) merged.camera.azimuth = current.camera.azimuth;
@@ -773,6 +784,7 @@
      next.stickThickness = num('thick', next.stickThickness);
      next.stickRoundness = num('round', next.stickRoundness);
      next.stickBevel = num('bevel', next.stickBevel);
+     next.stickOpacity = clampNum(num('so', next.stickOpacity), 0, 1);
 
     next.lighting.enabled = bool('light', next.lighting.enabled);
     next.lighting.intensity = num('li', next.lighting.intensity);
@@ -834,9 +846,10 @@
       p.set('gap', String(config.stickGap));
       p.set('size', String(config.stickSize));
       p.set('ratio', String(config.stickRatio));
-      p.set('thick', String(config.stickThickness));
-      p.set('round', String(config.stickRoundness));
-      p.set('bevel', String(config.stickBevel));
+       p.set('thick', String(config.stickThickness));
+       p.set('round', String(config.stickRoundness));
+       p.set('bevel', String(config.stickBevel));
+       p.set('so', String(config.stickOpacity));
 
     p.set('light', config.lighting.enabled ? '1' : '0');
     p.set('li', String(config.lighting.intensity));
@@ -889,9 +902,10 @@
       parts.push('--gap', String(config.stickGap));
       parts.push('--size', String(config.stickSize));
       parts.push('--ratio', String(config.stickRatio));
-     parts.push('--thickness', String(config.stickThickness));
-     parts.push('--roundness', String(config.stickRoundness));
-     parts.push('--bevel', String(config.stickBevel));
+      parts.push('--thickness', String(config.stickThickness));
+      parts.push('--roundness', String(config.stickRoundness));
+      parts.push('--bevel', String(config.stickBevel));
+      parts.push('--stick-opacity', String(config.stickOpacity));
     parts.push('--camera-distance', String(config.camera.distance));
     parts.push('--camera-azimuth', String(config.camera.azimuth));
     parts.push('--camera-elevation', String(config.camera.elevation));
@@ -1152,15 +1166,19 @@
            </label>
            <label class="control-row slider">
             <button type="button" class="setting-title" class:locked={locks.stickThickness} onclick={() => toggleLock('stickThickness')} title="Click to lock/unlock for randomize">Thickness: {config.stickThickness.toFixed(1)}</button>
-             <input type="range" bind:value={config.stickThickness} min="0.1" max="3.0" step="0.1" />
+              <input type="range" bind:value={config.stickThickness} min="0.1" max="3.0" step="0.1" />
+            </label>
+           <label class="control-row slider">
+            <button type="button" class="setting-title" class:locked={locks.stickRoundness} onclick={() => toggleLock('stickRoundness')} title="Click to lock/unlock for randomize">Roundness: {config.stickRoundness.toFixed(2)}</button>
+             <input type="range" bind:value={config.stickRoundness} min="0" max="1" step="0.01" />
            </label>
-          <label class="control-row slider">
-           <button type="button" class="setting-title" class:locked={locks.stickRoundness} onclick={() => toggleLock('stickRoundness')} title="Click to lock/unlock for randomize">Roundness: {config.stickRoundness.toFixed(2)}</button>
-            <input type="range" bind:value={config.stickRoundness} min="0" max="1" step="0.01" />
-          </label>
-          <label class="control-row slider">
-           <button type="button" class="setting-title" class:locked={locks.stickBevel} onclick={() => toggleLock('stickBevel')} title="Click to lock/unlock for randomize">Bevel: {config.stickBevel.toFixed(2)}</button>
-            <input type="range" bind:value={config.stickBevel} min="0" max="1" step="0.01" />
+           <label class="control-row slider">
+            <button type="button" class="setting-title" class:locked={locks.stickBevel} onclick={() => toggleLock('stickBevel')} title="Click to lock/unlock for randomize">Bevel: {config.stickBevel.toFixed(2)}</button>
+             <input type="range" bind:value={config.stickBevel} min="0" max="1" step="0.01" />
+            </label>
+           <label class="control-row slider">
+            <button type="button" class="setting-title" class:locked={locks.stickOpacity} onclick={() => toggleLock('stickOpacity')} title="Click to lock/unlock for randomize">Opacity: {config.stickOpacity.toFixed(2)}</button>
+             <input type="range" bind:value={config.stickOpacity} min="0" max="1" step="0.01" />
            </label>
           
           <!-- Helix Settings -->

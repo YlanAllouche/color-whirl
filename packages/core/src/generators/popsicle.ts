@@ -42,11 +42,11 @@ function getStickDimensions(
   };
 }
 
-function createMaterial(texture: TextureType, color: string): THREE.MeshPhysicalMaterial {
+function createMaterial(texture: TextureType, color: string, stickOpacity: number): THREE.MeshPhysicalMaterial {
   const baseConfig: THREE.MeshPhysicalMaterialParameters = {
     color: color,
-    transparent: true,
-    opacity: 0.98
+    transparent: stickOpacity < 1,
+    opacity: stickOpacity
   };
 
   switch (texture) {
@@ -214,9 +214,12 @@ export function createPopsicleScene(config: WallpaperConfig): {
     stickThickness,
     stickRoundness,
     stickBevel,
+    stickOpacity,
     lighting,
     camera: cameraConfig
   } = config;
+
+  const safeStickOpacity = clamp(Number.isFinite(stickOpacity) ? stickOpacity : 1.0, 0, 1);
   
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(backgroundColor);
@@ -269,7 +272,7 @@ export function createPopsicleScene(config: WallpaperConfig): {
   
   for (let i = 0; i < stickCount; i++) {
     const color = colors[i % colors.length];
-    const material = createMaterial(texture, color);
+    const material = createMaterial(texture, color, safeStickOpacity);
     const geometry = createRoundedBox(
       stickDimensions.width,
       stickDimensions.height,
