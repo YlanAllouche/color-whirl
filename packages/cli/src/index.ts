@@ -36,7 +36,84 @@ program
   .option('-c, --colors <colors>', 'Comma-separated hex colors (e.g., "#ff0000,#00ff00")')
   .option('-T, --texture <texture>', 'Texture type (glossy, matte, metallic, drywall, glass, mirror, cel)', 'glossy')
   .option('-b, --background <color>', 'Background color (hex)', '#1a1a2e')
-  .option('-n, --count <number>', 'Count (sticks/spheres/prisms)', '12')
+  .option('-n, --count <number>', 'Count (sticks/spheres/circles/prisms)', '12')
+  .option('--palette-mode <mode>', 'Palette mode (cycle, weighted)')
+  .option('--weights <weights>', 'Comma-separated palette weights (e.g. "1,0.2,3")')
+  .option('--opacity <opacity>', 'Shape opacity (0..1)')
+
+  // spheres3d
+  .option('--spheres-distribution <mode>', 'Spheres distribution (jitteredGrid, scatter, layeredDepth)')
+  .option('--spheres-radius-min <number>', 'Spheres min radius (scene units)')
+  .option('--spheres-radius-max <number>', 'Spheres max radius (scene units)')
+  .option('--spheres-spread <number>', 'Spheres XY spread (scene units)')
+  .option('--spheres-depth <number>', 'Spheres Z depth (scene units)')
+  .option('--spheres-layers <number>', 'Spheres depth layers (layeredDepth)')
+
+  // circles2d
+  .option('--circles-mode <mode>', 'Circles mode (scatter, grid)')
+  .option('--circles-r-min <px>', 'Circles min radius (px)')
+  .option('--circles-r-max <px>', 'Circles max radius (px)')
+  .option('--circles-jitter <number>', 'Circles jitter (0..1)')
+  .option('--circles-fill-opacity <number>', 'Circles fill opacity (0..1)')
+  .option('--circles-stroke', 'Enable circle stroke')
+  .option('--no-circles-stroke', 'Disable circle stroke')
+  .option('--circles-stroke-width <px>', 'Circle stroke width (px)')
+  .option('--circles-stroke-color <hex>', 'Circle stroke color (hex)')
+  .option('--circles-stroke-opacity <number>', 'Circle stroke opacity (0..1)')
+  .option('--croissant', 'Enable croissant circles')
+  .option('--no-croissant', 'Disable croissant circles')
+  .option('--croissant-inner-scale <number>', 'Croissant inner scale (0..1)')
+  .option('--croissant-offset <number>', 'Croissant inner offset (0..1)')
+  .option('--croissant-angle-jitter <deg>', 'Croissant angle jitter (deg)')
+
+  // triangles2d
+  .option('--triangles2d-mode <mode>', 'Triangles2D mode (tessellation, scatter, lowpoly)')
+  .option('--triangles-density <number>', 'Triangles2D density')
+  .option('--triangles-scale <px>', 'Triangles2D scale (px)')
+  .option('--triangles-jitter <number>', 'Triangles2D jitter (0..1)')
+  .option('--triangles-rotate-jitter <deg>', 'Triangles2D rotate jitter (deg)')
+  .option('--triangles-inset <px>', 'Triangles2D inset (px)')
+  .option('--triangles-fill-opacity <number>', 'Triangles2D fill opacity (0..1)')
+  .option('--triangles-stroke', 'Enable triangles2D stroke')
+  .option('--no-triangles-stroke', 'Disable triangles2D stroke')
+  .option('--triangles-stroke-width <px>', 'Triangles2D stroke width (px)')
+  .option('--triangles-stroke-color <hex>', 'Triangles2D stroke color (hex)')
+  .option('--triangles-stroke-opacity <number>', 'Triangles2D stroke opacity (0..1)')
+  .option('--triangles-shading', 'Enable triangles2D shading')
+  .option('--no-triangles-shading', 'Disable triangles2D shading')
+  .option('--triangles-light <deg>', 'Triangles2D shading light angle (deg)')
+  .option('--triangles-shading-strength <number>', 'Triangles2D shading strength (0..1)')
+
+  // triangles3d
+  .option('--prisms-mode <mode>', 'Prisms mode (tessellation, scatter, stackedPrisms)')
+  .option('--prisms-radius <number>', 'Prism radius (scene units)')
+  .option('--prisms-height <number>', 'Prism height (scene units)')
+  .option('--prisms-spread <number>', 'Prism spread (scene units)')
+  .option('--prisms-jitter <number>', 'Prism jitter (0..1)')
+
+  // hexgrid2d
+  .option('--hex-radius <px>', 'Hex radius (px)')
+  .option('--hex-margin <px>', 'Hex margin (px)')
+  .option('--hex-origin-x <px>', 'Hex origin x (px)')
+  .option('--hex-origin-y <px>', 'Hex origin y (px)')
+  .option('--hex-overscan <px>', 'Hex overscan (px)')
+  .option('--hex-fill-opacity <number>', 'Hex fill opacity (0..1)')
+  .option('--hex-stroke', 'Enable hex stroke')
+  .option('--no-hex-stroke', 'Disable hex stroke')
+  .option('--hex-stroke-width <px>', 'Hex stroke width (px)')
+  .option('--hex-stroke-color <hex>', 'Hex stroke color (hex)')
+  .option('--hex-stroke-opacity <number>', 'Hex stroke opacity (0..1)')
+  .option('--hex-stroke-join <join>', 'Hex stroke join (round, miter, bevel)')
+  .option('--hex-palette-mode <mode>', 'Hex palette mode (cycle, weighted)')
+  .option('--hex-weights-mode <mode>', 'Hex weights mode (auto, preset, custom)')
+  .option('--hex-weights-preset <preset>', 'Hex weights preset (equal, dominant, accents, rare-accents)')
+  .option('--hex-weights <weights>', 'Comma-separated hex palette weights (custom)')
+  .option('--hex-effect-kind <kind>', 'Hex effect kind (none, bevel, grain, gradient)')
+  .option('--hex-effect-amount <number>', 'Hex effect amount (0..1)')
+  .option('--hex-effect-frequency <number>', 'Hex effect frequency')
+  .option('--hex-grouping-mode <mode>', 'Hex grouping mode (none, voronoi, noise, random-walk)')
+  .option('--hex-grouping-strength <number>', 'Hex grouping strength (0..1)')
+  .option('--hex-grouping-target <number>', 'Hex target group count')
   .option('--stick-overhang <degrees>', 'Stick overhang angle per stick in degrees', '30')
   .option('--rotation-center-offset-x <percent>', 'Rotation center X offset as percentage (-100 to 100)', '0')
   .option('--rotation-center-offset-y <percent>', 'Rotation center Y offset as percentage (-100 to 100)', '0')
@@ -102,6 +179,24 @@ program
 function cloneConfig<T>(value: T): T {
   // All wallpaper configs are plain JSON-like data.
   return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function parseNumberList(value: unknown): number[] {
+  if (value == null) return [];
+  const s = String(value);
+  return s
+    .split(',')
+    .map((x) => x.trim())
+    .filter(Boolean)
+    .map((x) => Number(x))
+    .map((x) => (Number.isFinite(x) ? x : 0));
+}
+
+function parseOpacity01(value: unknown): number | null {
+  if (value == null) return null;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  return Math.max(0, Math.min(1, n));
 }
 
 function buildConfigAndFormat(options: any, command: Command): { config: WallpaperConfig; format: ExportFormat } {
@@ -219,13 +314,42 @@ function buildConfigAndFormat(options: any, command: Command): { config: Wallpap
      if (Number.isFinite(v)) config.shadows.normalBias = v;
    }
 
-   if (fromCli('geometryQuality') && options.geometryQuality != null) {
-     const v = parseFloat(options.geometryQuality);
-     if (Number.isFinite(v)) config.geometry.quality = v;
-   }
+  if (fromCli('geometryQuality') && options.geometryQuality != null) {
+    const v = parseFloat(options.geometryQuality);
+    if (Number.isFinite(v)) config.geometry.quality = v;
+  }
+
+  // Shared palette config for types that support it.
+  if (fromCli('paletteMode') && options.paletteMode != null) {
+    const m = String(options.paletteMode);
+    const mode = m === 'weighted' ? 'weighted' : 'cycle';
+    if (config.type === 'spheres3d') config.spheres.paletteMode = mode;
+    if (config.type === 'circles2d') config.circles.paletteMode = mode;
+    if (config.type === 'triangles2d') config.triangles.paletteMode = mode;
+    if (config.type === 'triangles3d') config.prisms.paletteMode = mode;
+  }
+
+  if (fromCli('weights') && options.weights != null) {
+    const weights = parseNumberList(options.weights);
+    if (config.type === 'spheres3d') config.spheres.colorWeights = weights;
+    if (config.type === 'circles2d') config.circles.colorWeights = weights;
+    if (config.type === 'triangles2d') config.triangles.colorWeights = weights;
+    if (config.type === 'triangles3d') config.prisms.colorWeights = weights;
+  }
+
+  if (fromCli('opacity') && options.opacity != null) {
+    const op = parseOpacity01(options.opacity);
+    if (op != null) {
+      if (config.type === 'spheres3d') config.spheres.opacity = op;
+      if (config.type === 'circles2d') config.circles.fillOpacity = op;
+      if (config.type === 'triangles2d') config.triangles.fillOpacity = op;
+      if (config.type === 'triangles3d') config.prisms.opacity = op;
+      if (config.type === 'hexgrid2d') config.hexgrid.fillOpacity = op;
+    }
+  }
 
    // Type-specific overrides (only if user supplied those flags)
-   if (config.type === 'popsicle') {
+  if (config.type === 'popsicle') {
      if (fromCli('count') && options.count != null) config.stickCount = parseInt(options.count, 10);
      if (fromCli('stickOverhang') && options.stickOverhang != null) config.stickOverhang = parseFloat(options.stickOverhang);
      if (fromCli('rotationCenterOffsetX') && options.rotationCenterOffsetX != null) config.rotationCenterOffsetX = parseFloat(options.rotationCenterOffsetX);
@@ -241,14 +365,250 @@ function buildConfigAndFormat(options: any, command: Command): { config: Wallpap
        const stickOpacityRaw = parseFloat(options.stickOpacity);
        if (Number.isFinite(stickOpacityRaw)) config.stickOpacity = Math.max(0, Math.min(1, stickOpacityRaw));
      }
-   }
+  }
 
-   if (config.type === 'spheres3d') {
-     if (fromCli('count') && options.count != null) config.spheres.count = parseInt(options.count, 10);
-   }
-   if (config.type === 'triangles3d') {
-     if (fromCli('count') && options.count != null) config.prisms.count = parseInt(options.count, 10);
-   }
+  if (config.type === 'spheres3d') {
+    if (fromCli('count') && options.count != null) config.spheres.count = parseInt(options.count, 10);
+
+    if (fromCli('spheresDistribution') && options.spheresDistribution != null) {
+      const d = String(options.spheresDistribution);
+      config.spheres.distribution = d === 'scatter' || d === 'layeredDepth' ? d : 'jitteredGrid';
+    }
+
+    if (fromCli('spheresRadiusMin') && options.spheresRadiusMin != null) {
+      const v = parseFloat(options.spheresRadiusMin);
+      if (Number.isFinite(v)) config.spheres.radiusMin = v;
+    }
+    if (fromCli('spheresRadiusMax') && options.spheresRadiusMax != null) {
+      const v = parseFloat(options.spheresRadiusMax);
+      if (Number.isFinite(v)) config.spheres.radiusMax = v;
+    }
+    if (fromCli('spheresSpread') && options.spheresSpread != null) {
+      const v = parseFloat(options.spheresSpread);
+      if (Number.isFinite(v)) config.spheres.spread = v;
+    }
+    if (fromCli('spheresDepth') && options.spheresDepth != null) {
+      const v = parseFloat(options.spheresDepth);
+      if (Number.isFinite(v)) config.spheres.depth = v;
+    }
+    if (fromCli('spheresLayers') && options.spheresLayers != null) {
+      const v = parseInt(options.spheresLayers, 10);
+      if (Number.isFinite(v)) config.spheres.layers = v;
+    }
+  }
+
+  if (config.type === 'circles2d') {
+    if (fromCli('count') && options.count != null) config.circles.count = parseInt(options.count, 10);
+
+    if (fromCli('circlesMode') && options.circlesMode != null) {
+      const m = String(options.circlesMode);
+      config.circles.mode = m === 'grid' ? 'grid' : 'scatter';
+    }
+    if (fromCli('circlesRMin') && options.circlesRMin != null) {
+      const v = parseFloat(options.circlesRMin);
+      if (Number.isFinite(v)) config.circles.rMinPx = v;
+    }
+    if (fromCli('circlesRMax') && options.circlesRMax != null) {
+      const v = parseFloat(options.circlesRMax);
+      if (Number.isFinite(v)) config.circles.rMaxPx = v;
+    }
+    if (fromCli('circlesJitter') && options.circlesJitter != null) {
+      const v = parseOpacity01(options.circlesJitter);
+      if (v != null) config.circles.jitter = v;
+    }
+    if (fromCli('circlesFillOpacity') && options.circlesFillOpacity != null) {
+      const v = parseOpacity01(options.circlesFillOpacity);
+      if (v != null) config.circles.fillOpacity = v;
+    }
+
+    if (fromCli('circlesStroke')) config.circles.stroke.enabled = Boolean(options.circlesStroke);
+    if (fromCli('circlesStrokeWidth') && options.circlesStrokeWidth != null) {
+      const v = parseFloat(options.circlesStrokeWidth);
+      if (Number.isFinite(v)) config.circles.stroke.widthPx = v;
+    }
+    if (fromCli('circlesStrokeColor') && options.circlesStrokeColor != null) config.circles.stroke.color = String(options.circlesStrokeColor);
+    if (fromCli('circlesStrokeOpacity') && options.circlesStrokeOpacity != null) {
+      const v = parseOpacity01(options.circlesStrokeOpacity);
+      if (v != null) config.circles.stroke.opacity = v;
+    }
+
+    if (fromCli('croissant')) config.circles.croissant.enabled = Boolean(options.croissant);
+    if (fromCli('croissantInnerScale') && options.croissantInnerScale != null) {
+      const v = parseOpacity01(options.croissantInnerScale);
+      if (v != null) config.circles.croissant.innerScale = v;
+    }
+    if (fromCli('croissantOffset') && options.croissantOffset != null) {
+      const v = parseOpacity01(options.croissantOffset);
+      if (v != null) config.circles.croissant.offset = v;
+    }
+    if (fromCli('croissantAngleJitter') && options.croissantAngleJitter != null) {
+      const v = parseFloat(options.croissantAngleJitter);
+      if (Number.isFinite(v)) config.circles.croissant.angleJitterDeg = v;
+    }
+  }
+
+  if (config.type === 'triangles2d') {
+    if (fromCli('triangles2dMode') && options.triangles2dMode != null) {
+      const m = String(options.triangles2dMode);
+      config.triangles.mode = m === 'scatter' || m === 'lowpoly' ? m : 'tessellation';
+    }
+    if (fromCli('trianglesDensity') && options.trianglesDensity != null) {
+      const v = parseFloat(options.trianglesDensity);
+      if (Number.isFinite(v)) config.triangles.density = v;
+    }
+    if (fromCli('trianglesScale') && options.trianglesScale != null) {
+      const v = parseFloat(options.trianglesScale);
+      if (Number.isFinite(v)) config.triangles.scalePx = v;
+    }
+    if (fromCli('trianglesJitter') && options.trianglesJitter != null) {
+      const v = parseOpacity01(options.trianglesJitter);
+      if (v != null) config.triangles.jitter = v;
+    }
+    if (fromCli('trianglesRotateJitter') && options.trianglesRotateJitter != null) {
+      const v = parseFloat(options.trianglesRotateJitter);
+      if (Number.isFinite(v)) config.triangles.rotateJitterDeg = v;
+    }
+    if (fromCli('trianglesInset') && options.trianglesInset != null) {
+      const v = parseFloat(options.trianglesInset);
+      if (Number.isFinite(v)) config.triangles.insetPx = v;
+    }
+    if (fromCli('trianglesFillOpacity') && options.trianglesFillOpacity != null) {
+      const v = parseOpacity01(options.trianglesFillOpacity);
+      if (v != null) config.triangles.fillOpacity = v;
+    }
+
+    if (fromCli('trianglesStroke')) config.triangles.stroke.enabled = Boolean(options.trianglesStroke);
+    if (fromCli('trianglesStrokeWidth') && options.trianglesStrokeWidth != null) {
+      const v = parseFloat(options.trianglesStrokeWidth);
+      if (Number.isFinite(v)) config.triangles.stroke.widthPx = v;
+    }
+    if (fromCli('trianglesStrokeColor') && options.trianglesStrokeColor != null) config.triangles.stroke.color = String(options.trianglesStrokeColor);
+    if (fromCli('trianglesStrokeOpacity') && options.trianglesStrokeOpacity != null) {
+      const v = parseOpacity01(options.trianglesStrokeOpacity);
+      if (v != null) config.triangles.stroke.opacity = v;
+    }
+
+    if (fromCli('trianglesShading')) config.triangles.shading.enabled = Boolean(options.trianglesShading);
+    if (fromCli('trianglesLight') && options.trianglesLight != null) {
+      const v = parseFloat(options.trianglesLight);
+      if (Number.isFinite(v)) config.triangles.shading.lightDeg = v;
+    }
+    if (fromCli('trianglesShadingStrength') && options.trianglesShadingStrength != null) {
+      const v = parseOpacity01(options.trianglesShadingStrength);
+      if (v != null) config.triangles.shading.strength = v;
+    }
+  }
+
+  if (config.type === 'triangles3d') {
+    if (fromCli('count') && options.count != null) config.prisms.count = parseInt(options.count, 10);
+
+    if (fromCli('prismsMode') && options.prismsMode != null) {
+      const m = String(options.prismsMode);
+      config.prisms.mode = m === 'scatter' || m === 'stackedPrisms' ? m : 'tessellation';
+    }
+    if (fromCli('prismsRadius') && options.prismsRadius != null) {
+      const v = parseFloat(options.prismsRadius);
+      if (Number.isFinite(v)) config.prisms.radius = v;
+    }
+    if (fromCli('prismsHeight') && options.prismsHeight != null) {
+      const v = parseFloat(options.prismsHeight);
+      if (Number.isFinite(v)) config.prisms.height = v;
+    }
+    if (fromCli('prismsSpread') && options.prismsSpread != null) {
+      const v = parseFloat(options.prismsSpread);
+      if (Number.isFinite(v)) config.prisms.spread = v;
+    }
+    if (fromCli('prismsJitter') && options.prismsJitter != null) {
+      const v = parseOpacity01(options.prismsJitter);
+      if (v != null) config.prisms.jitter = v;
+    }
+  }
+
+  if (config.type === 'hexgrid2d') {
+    if (fromCli('hexRadius') && options.hexRadius != null) {
+      const v = parseFloat(options.hexRadius);
+      if (Number.isFinite(v)) config.hexgrid.radiusPx = v;
+    }
+    if (fromCli('hexMargin') && options.hexMargin != null) {
+      const v = parseFloat(options.hexMargin);
+      if (Number.isFinite(v)) config.hexgrid.marginPx = v;
+    }
+    if (fromCli('hexOriginX') && options.hexOriginX != null) {
+      const v = parseFloat(options.hexOriginX);
+      if (Number.isFinite(v)) config.hexgrid.originPx.x = v;
+    }
+    if (fromCli('hexOriginY') && options.hexOriginY != null) {
+      const v = parseFloat(options.hexOriginY);
+      if (Number.isFinite(v)) config.hexgrid.originPx.y = v;
+    }
+    if (fromCli('hexOverscan') && options.hexOverscan != null) {
+      const v = parseFloat(options.hexOverscan);
+      if (Number.isFinite(v)) config.hexgrid.overscanPx = v;
+    }
+    if (fromCli('hexFillOpacity') && options.hexFillOpacity != null) {
+      const v = parseOpacity01(options.hexFillOpacity);
+      if (v != null) config.hexgrid.fillOpacity = v;
+    }
+
+    if (fromCli('hexStroke')) config.hexgrid.stroke.enabled = Boolean(options.hexStroke);
+    if (fromCli('hexStrokeWidth') && options.hexStrokeWidth != null) {
+      const v = parseFloat(options.hexStrokeWidth);
+      if (Number.isFinite(v)) config.hexgrid.stroke.widthPx = v;
+    }
+    if (fromCli('hexStrokeColor') && options.hexStrokeColor != null) config.hexgrid.stroke.color = String(options.hexStrokeColor);
+    if (fromCli('hexStrokeOpacity') && options.hexStrokeOpacity != null) {
+      const v = parseOpacity01(options.hexStrokeOpacity);
+      if (v != null) config.hexgrid.stroke.opacity = v;
+    }
+    if (fromCli('hexStrokeJoin') && options.hexStrokeJoin != null) {
+      const j = String(options.hexStrokeJoin);
+      config.hexgrid.stroke.join = j === 'miter' || j === 'bevel' ? j : 'round';
+    }
+
+    if (fromCli('hexPaletteMode') && options.hexPaletteMode != null) {
+      const m = String(options.hexPaletteMode);
+      config.hexgrid.coloring.paletteMode = m === 'weighted' ? 'weighted' : 'cycle';
+    }
+    if (fromCli('hexWeightsMode') && options.hexWeightsMode != null) {
+      const m = String(options.hexWeightsMode);
+      config.hexgrid.coloring.weightsMode = m === 'preset' || m === 'custom' ? m : 'auto';
+    }
+    if (fromCli('hexWeightsPreset') && options.hexWeightsPreset != null) {
+      const p = String(options.hexWeightsPreset);
+      config.hexgrid.coloring.preset = p === 'dominant' || p === 'accents' || p === 'rare-accents' ? p : 'equal';
+    }
+    if (fromCli('hexWeights') && options.hexWeights != null) {
+      config.hexgrid.coloring.weightsMode = 'custom';
+      config.hexgrid.coloring.weights = parseNumberList(options.hexWeights);
+    }
+
+    if (fromCli('hexEffectKind') && options.hexEffectKind != null) {
+      const k = String(options.hexEffectKind);
+      config.hexgrid.effect.kind = k === 'bevel' || k === 'grain' || k === 'gradient' ? k : 'none';
+    }
+    if (fromCli('hexEffectAmount') && options.hexEffectAmount != null) {
+      const v = parseOpacity01(options.hexEffectAmount);
+      if (v != null) config.hexgrid.effect.amount = v;
+    }
+    if (fromCli('hexEffectFrequency') && options.hexEffectFrequency != null) {
+      const v = parseFloat(options.hexEffectFrequency);
+      if (Number.isFinite(v)) config.hexgrid.effect.frequency = v;
+    }
+
+    if (fromCli('hexGroupingMode') && options.hexGroupingMode != null) {
+      const m = String(options.hexGroupingMode);
+      config.hexgrid.grouping.mode = m === 'voronoi' || m === 'noise' || m === 'random-walk' ? m : 'none';
+    }
+    if (fromCli('hexGroupingStrength') && options.hexGroupingStrength != null) {
+      const v = parseOpacity01(options.hexGroupingStrength);
+      if (v != null) config.hexgrid.grouping.strength = v;
+    }
+    if (fromCli('hexGroupingTarget') && options.hexGroupingTarget != null) {
+      const v = parseInt(options.hexGroupingTarget, 10);
+      if (Number.isFinite(v)) config.hexgrid.grouping.targetGroupCount = v;
+    }
+  }
+  // triangles3d count handled above
 
   const format = (options.format ?? 'png') as ExportFormat;
   return { config, format };
