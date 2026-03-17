@@ -88,6 +88,23 @@ function svgEnd(): string {
   return '</svg>';
 }
 
+function normalizeWeights(weights: number[], n: number): number[] {
+  const w = Array.from({ length: n }, (_, i) => Math.max(0, Number(weights[i] ?? 0)));
+  const sum = w.reduce((a, b) => a + b, 0);
+  if (!(sum > 0)) return Array.from({ length: n }, () => 1 / n);
+  return w.map((x) => x / sum);
+}
+
+function sampleWeightedIndex01(u01: number, weightsNorm: number[]): number {
+  const u = Math.max(0, Math.min(0.999999999, u01));
+  let acc = 0;
+  for (let i = 0; i < weightsNorm.length; i++) {
+    acc += weightsNorm[i];
+    if (u < acc) return i;
+  }
+  return Math.max(0, weightsNorm.length - 1);
+}
+
 function generateSVGContent(config: WallpaperConfig): string {
   switch (config.type) {
     case 'popsicle':
@@ -174,7 +191,11 @@ function generateCircles2DSVG(config: Extract<WallpaperConfig, { type: 'circles2
     return (t >>> 0) / 4294967296;
   };
 
-  const pickIndex = (i: number) => (config.circles.paletteMode === 'cycle' ? i % n : Math.floor(rand01(i, 1) * n));
+  const w = normalizeWeights(config.circles.colorWeights, n);
+  const pickIndex = (i: number) => {
+    if (config.circles.paletteMode === 'cycle') return i % n;
+    return sampleWeightedIndex01(rand01(i, 1), w);
+  };
   const fillOpacity = Math.max(0, Math.min(1, config.circles.fillOpacity));
 
   let svg = svgStart(width, height, backgroundColor);
@@ -221,6 +242,24 @@ function generateTriangles2DSVG(config: Extract<WallpaperConfig, { type: 'triang
   const inset = Math.max(0, Number(config.triangles.insetPx) || 0);
   const fillOpacity = Math.max(0, Math.min(1, config.triangles.fillOpacity));
 
+  const seed = config.seed >>> 0;
+  const rand01 = (i: number, ch: number) => {
+    const x = ((seed ^ (i * 0x9e3779b1)) + ch * 0x85ebca6b) >>> 0;
+    let t = x;
+    t ^= t >>> 16;
+    t = Math.imul(t, 0x7feb352d);
+    t ^= t >>> 15;
+    t = Math.imul(t, 0x846ca68b);
+    t ^= t >>> 16;
+    return (t >>> 0) / 4294967296;
+  };
+
+  const w = normalizeWeights(config.triangles.colorWeights, n);
+  const pickIndex = (i: number) => {
+    if (config.triangles.paletteMode === 'cycle') return i % n;
+    return sampleWeightedIndex01(rand01(i, 1), w);
+  };
+
   let svg = svgStart(width, height, backgroundColor);
 
   const sqrt3 = 1.7320508075688772;
@@ -234,8 +273,8 @@ function generateTriangles2DSVG(config: Extract<WallpaperConfig, { type: 'triang
     for (let rx = 0; rx < cols; rx++) {
       const x0 = inset + rx * s + (ry % 2 === 0 ? 0 : s / 2);
       const y0 = inset + ry * h;
-      const idx0 = t++ % n;
-      const idx1 = t++ % n;
+      const idx0 = pickIndex(t++);
+      const idx1 = pickIndex(t++);
       const c0 = colors[idx0] ?? '#ffffff';
       const c1 = colors[idx1] ?? '#ffffff';
 
@@ -309,16 +348,20 @@ function generateSpheres3DSVG(config: Extract<WallpaperConfig, { type: 'spheres3
   const rMin = Math.max(0.1, config.spheres.radiusMin * 120);
   const rMax = Math.max(rMin, config.spheres.radiusMax * 120);
 
+  const n = Math.max(1, colors.length);
+  const weightsNorm = normalizeWeights(config.spheres.colorWeights, n);
+
   let svg = svgStart(width, height, backgroundColor);
   for (let i = 0; i < count; i++) {
     const t = ((config.seed >>> 0) + i * 1013904223) >>> 0;
     const u = ((t ^ (t >>> 16)) >>> 0) / 4294967296;
     const v = (((t * 1664525 + 1013904223) >>> 0) / 4294967296);
-    const w = (((t * 1103515245 + 12345) >>> 0) / 4294967296);
+    const w0 = (((t * 1103515245 + 12345) >>> 0) / 4294967296);
     const cx = u * width;
     const cy = v * height;
-    const r = rMin + w * (rMax - rMin);
-    const col = colors[i % Math.max(1, colors.length)] ?? '#ffffff';
+    const r = rMin + w0 * (rMax - rMin);
+    const idx = config.spheres.paletteMode === 'cycle' ? i % n : sampleWeightedIndex01(u, weightsNorm);
+    const col = colors[idx] ?? '#ffffff';
     svg += `  <circle cx="${cx}" cy="${cy}" r="${r}" fill="${col}" opacity="${Math.max(0, Math.min(1, config.spheres.opacity))}"/>\n`;
   }
   svg += svgEnd();
@@ -330,6 +373,9 @@ function generateTriangles3DSVG(config: Extract<WallpaperConfig, { type: 'triang
   const { width, height, colors, backgroundColor } = config;
   const count = Math.max(0, Math.round(config.prisms.count));
   const s = Math.max(12, config.prisms.radius * 180);
+
+  const n = Math.max(1, colors.length);
+  const weightsNorm = normalizeWeights(config.prisms.colorWeights, n);
   let svg = svgStart(width, height, backgroundColor);
 
   for (let i = 0; i < count; i++) {
@@ -339,7 +385,8 @@ function generateTriangles3DSVG(config: Extract<WallpaperConfig, { type: 'triang
     const a = (((t * 1103515245 + 12345) >>> 0) / 4294967296) * Math.PI * 2;
     const cx = u * width;
     const cy = v * height;
-    const col = colors[i % Math.max(1, colors.length)] ?? '#ffffff';
+    const idx = config.prisms.paletteMode === 'cycle' ? i % n : sampleWeightedIndex01(u, weightsNorm);
+    const col = colors[idx] ?? '#ffffff';
 
     const p1 = `${cx + Math.cos(a) * s},${cy + Math.sin(a) * s}`;
     const p2 = `${cx + Math.cos(a + (2 * Math.PI) / 3) * s},${cy + Math.sin(a + (2 * Math.PI) / 3) * s}`;
