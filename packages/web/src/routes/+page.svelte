@@ -1,5 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import * as THREE from 'three';
+  import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+  import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+  import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
   import { 
     DEFAULT_CONFIG, 
     DEFAULT_CONFIG_BY_TYPE,
@@ -16,6 +20,7 @@
     exportToWebP,
     exportToSVG,
     downloadFile,
+    createWallpaperScene,
     renderWallpaperToCanvas
   } from '@wallpaper-maker/core';
 
@@ -32,6 +37,9 @@
   let canvasContainer: HTMLDivElement;
   let preview: PopsiclePreview | null = null;
   let fallbackCanvas: HTMLCanvasElement | null = null;
+  let fallbackRenderer: THREE.WebGLRenderer | null = null;
+  let fallbackComposer: EffectComposer | null = null;
+  let fallbackScene: THREE.Scene | null = null;
   let renderMode = $state<PreviewRenderMode>('raster');
 
   let renderRaf = 0;
@@ -155,9 +163,111 @@
   // Derived values
   let aspectRatio = $derived(config.width / config.height);
 
-  function renderNonPopsicleOnce() {
+  type FallbackQuality = 'interactive' | 'final';
+
+  function getFallbackPreviewSize(aspect: number, quality: FallbackQuality): {
+    previewWidth: number;
+    previewHeight: number;
+    cssWidth: number;
+    cssHeight: number;
+  } {
+    const cw = Math.max(1, canvasContainer?.clientWidth ?? 1);
+    const ch = Math.max(1, canvasContainer?.clientHeight ?? 1);
+
+    const safeAspect = Math.max(0.0001, aspect);
+    const cssWidth = Math.min(cw, ch * safeAspect);
+    const cssHeight = cssWidth / safeAspect;
+
+    const scale = quality === 'interactive' ? 0.6 : 1.0;
+    const previewWidth = Math.max(1, Math.round(cssWidth * scale));
+    const previewHeight = Math.max(1, Math.round(cssHeight * scale));
+
+    return { previewWidth, previewHeight, cssWidth, cssHeight };
+  }
+
+  function disposeFallback3D() {
+    if (fallbackComposer) {
+      fallbackComposer.dispose();
+      fallbackComposer = null;
+    }
+
+    if (fallbackScene) {
+      fallbackScene.traverse((obj) => {
+        const mesh = obj as any;
+        if (mesh.geometry?.dispose) mesh.geometry.dispose();
+        if (mesh.material) {
+          if (Array.isArray(mesh.material)) mesh.material.forEach((m: any) => m?.dispose?.());
+          else mesh.material?.dispose?.();
+        }
+      });
+      fallbackScene = null;
+    }
+
+    if (fallbackRenderer) {
+      try {
+        (fallbackRenderer as any).forceContextLoss?.();
+      } catch {
+        // Ignore
+      }
+      fallbackRenderer.dispose();
+      fallbackRenderer = null;
+    }
+  }
+
+  function renderNonPopsicleOnce(quality: FallbackQuality) {
     if (!canvasContainer) return;
-    const next = renderWallpaperToCanvas(config, fallbackCanvas ?? undefined);
+
+    const aspect = config.width / config.height;
+    const { previewWidth, previewHeight, cssWidth, cssHeight } = getFallbackPreviewSize(aspect, quality);
+
+    const effective: WallpaperConfig = { ...config, width: previewWidth, height: previewHeight } as any;
+
+    if (effective.type === 'spheres3d' || effective.type === 'triangles3d') {
+      disposeFallback3D();
+      fallbackCanvas = null;
+
+      const { scene, camera, renderer } = createWallpaperScene(effective, {
+        preserveDrawingBuffer: true,
+        pixelRatio: 1
+      });
+
+      renderer.domElement.style.width = `${Math.max(1, Math.round(cssWidth))}px`;
+      renderer.domElement.style.height = `${Math.max(1, Math.round(cssHeight))}px`;
+
+      if (effective.bloom.enabled) {
+        const composer = new EffectComposer(renderer);
+        composer.setSize(previewWidth, previewHeight);
+        composer.addPass(new RenderPass(scene, camera as any));
+        const bloom = new UnrealBloomPass(
+          new THREE.Vector2(previewWidth, previewHeight),
+          effective.bloom.strength,
+          effective.bloom.radius,
+          effective.bloom.threshold
+        );
+        composer.addPass(bloom);
+        composer.render();
+        fallbackComposer = composer;
+      } else {
+        renderer.render(scene, camera);
+      }
+
+      fallbackRenderer = renderer;
+      fallbackScene = scene;
+
+      const next = renderer.domElement;
+      if (!next.parentElement) {
+        canvasContainer.innerHTML = '';
+        canvasContainer.appendChild(next);
+      }
+      return;
+    }
+
+    // 2D types (and any non-popsicle that can be drawn to a 2D canvas)
+    disposeFallback3D();
+
+    const next = renderWallpaperToCanvas(effective, fallbackCanvas ?? undefined);
+    next.style.width = `${Math.max(1, Math.round(cssWidth))}px`;
+    next.style.height = `${Math.max(1, Math.round(cssHeight))}px`;
     fallbackCanvas = next;
     if (!next.parentElement) {
       canvasContainer.innerHTML = '';
@@ -171,7 +281,7 @@
       if (config.type === 'popsicle') {
         preview?.renderOnce(config as PopsicleConfig, 'interactive');
       } else {
-        renderNonPopsicleOnce();
+        renderNonPopsicleOnce('interactive');
       }
     });
 
@@ -180,7 +290,7 @@
       if (config.type === 'popsicle') {
         preview?.renderOnce(config as PopsicleConfig, 'final');
       } else {
-        renderNonPopsicleOnce();
+        renderNonPopsicleOnce('final');
       }
     }, RENDER_SETTLE_MS);
   }
@@ -587,6 +697,65 @@
     schedulePreviewRender();
   }
 
+  type WeightTarget = 'spheres' | 'circles' | 'triangles2d' | 'prisms' | 'hexgrid';
+
+  function setEqualWeights(target: WeightTarget) {
+    const n = Math.max(0, config.colors.length);
+    const w = Array.from({ length: n }, () => 1);
+
+    if (target === 'spheres' && config.type === 'spheres3d') config.spheres.colorWeights = w;
+    if (target === 'circles' && config.type === 'circles2d') config.circles.colorWeights = w;
+    if (target === 'triangles2d' && config.type === 'triangles2d') config.triangles.colorWeights = w;
+    if (target === 'prisms' && config.type === 'triangles3d') config.prisms.colorWeights = w;
+    if (target === 'hexgrid' && config.type === 'hexgrid2d') config.hexgrid.coloring.weights = w;
+  }
+
+  function setRandomWeights(target: WeightTarget) {
+    const n = Math.max(0, config.colors.length);
+    const w = Array.from({ length: n }, () => Number(Math.max(0.01, Math.random()).toFixed(3)));
+
+    if (target === 'spheres' && config.type === 'spheres3d') config.spheres.colorWeights = w;
+    if (target === 'circles' && config.type === 'circles2d') config.circles.colorWeights = w;
+    if (target === 'triangles2d' && config.type === 'triangles2d') config.triangles.colorWeights = w;
+    if (target === 'prisms' && config.type === 'triangles3d') config.prisms.colorWeights = w;
+    if (target === 'hexgrid' && config.type === 'hexgrid2d') config.hexgrid.coloring.weights = w;
+  }
+
+  function updateWeight(target: WeightTarget, index: number, value: number) {
+    const i = Math.max(0, Math.floor(index));
+    const v = Number.isFinite(value) ? value : 0;
+
+    if (target === 'spheres' && config.type === 'spheres3d') {
+      const a = [...(config.spheres.colorWeights ?? [])];
+      a[i] = v;
+      config.spheres.colorWeights = a;
+    }
+
+    if (target === 'circles' && config.type === 'circles2d') {
+      const a = [...(config.circles.colorWeights ?? [])];
+      a[i] = v;
+      config.circles.colorWeights = a;
+    }
+
+    if (target === 'triangles2d' && config.type === 'triangles2d') {
+      const a = [...(config.triangles.colorWeights ?? [])];
+      a[i] = v;
+      config.triangles.colorWeights = a;
+    }
+
+    if (target === 'prisms' && config.type === 'triangles3d') {
+      const a = [...(config.prisms.colorWeights ?? [])];
+      a[i] = v;
+      config.prisms.colorWeights = a;
+    }
+
+    if (target === 'hexgrid' && config.type === 'hexgrid2d') {
+      const a = [...(config.hexgrid.coloring.weights ?? [])];
+      a[i] = v;
+      config.hexgrid.coloring.weights = a;
+    }
+  }
+
   function generateRandomGeneratedColors() {
     // Randomize everything, including a non-preset generated color theme.
     const seed = randomSeedU32();
@@ -669,6 +838,7 @@
 
     if (config.type === 'popsicle') {
       if (!preview) {
+        disposeFallback3D();
         fallbackCanvas = null;
         canvasContainer.innerHTML = '';
         preview = new PopsiclePreview(canvasContainer);
@@ -682,8 +852,9 @@
       preview = null;
     }
     fallbackCanvas = null;
+    disposeFallback3D();
     renderMode = 'raster';
-    renderNonPopsicleOnce();
+    renderNonPopsicleOnce('final');
   });
   
   $effect(() => {
@@ -825,13 +996,14 @@
     preview?.dispose();
     preview = null;
     fallbackCanvas = null;
+    disposeFallback3D();
 
     if (config.type === 'popsicle') {
       preview = new PopsiclePreview(canvasContainer);
       preview.setMode(renderMode);
     } else {
       renderMode = 'raster';
-      renderNonPopsicleOnce();
+      renderNonPopsicleOnce('final');
     }
 
     schedulePreviewRender();
@@ -850,6 +1022,8 @@
       if (renderSettleTimer) window.clearTimeout(renderSettleTimer);
       preview?.dispose();
       preview = null;
+      disposeFallback3D();
+      fallbackCanvas = null;
     };
   });
 </script>
@@ -1220,8 +1394,566 @@
              </label>
             </div>
          </section>
+       {:else if config.type === 'spheres3d'}
+        <section class="control-section">
+          <h3>Spheres (3D)</h3>
+
+          <label class="control-row slider">
+            <span class="setting-title">Count: {config.spheres.count}</span>
+            <input type="range" bind:value={config.spheres.count} min="1" max="800" step="1" />
+          </label>
+
+          <label class="control-row">
+            <span class="setting-title">Distribution</span>
+            <select bind:value={config.spheres.distribution}>
+              <option value="jitteredGrid">Jittered grid</option>
+              <option value="scatter">Scatter</option>
+              <option value="layeredDepth">Layered depth</option>
+            </select>
+          </label>
+
+          <label class="control-row slider">
+            <span class="setting-title">Radius min: {config.spheres.radiusMin.toFixed(2)}</span>
+            <input type="range" bind:value={config.spheres.radiusMin} min="0.05" max="2.0" step="0.01" />
+          </label>
+          <label class="control-row slider">
+            <span class="setting-title">Radius max: {config.spheres.radiusMax.toFixed(2)}</span>
+            <input type="range" bind:value={config.spheres.radiusMax} min="0.05" max="3.5" step="0.01" />
+          </label>
+
+          <label class="control-row slider">
+            <span class="setting-title">Spread: {config.spheres.spread.toFixed(2)}</span>
+            <input type="range" bind:value={config.spheres.spread} min="0.5" max="20" step="0.05" />
+          </label>
+          <label class="control-row slider">
+            <span class="setting-title">Depth: {config.spheres.depth.toFixed(2)}</span>
+            <input type="range" bind:value={config.spheres.depth} min="0" max="20" step="0.05" />
+          </label>
+
+          <label class="control-row slider">
+            <span class="setting-title">Layers: {config.spheres.layers}</span>
+            <input type="range" bind:value={config.spheres.layers} min="1" max="16" step="1" disabled={config.spheres.distribution !== 'layeredDepth'} />
+          </label>
+
+          <label class="control-row slider">
+            <span class="setting-title">Opacity: {config.spheres.opacity.toFixed(2)}</span>
+            <input type="range" bind:value={config.spheres.opacity} min="0" max="1" step="0.01" />
+          </label>
+
+          <details class="control-details">
+            <summary class="control-details-summary">Palette</summary>
+            <label class="control-row">
+              <span class="setting-title">Mode</span>
+              <select bind:value={config.spheres.paletteMode}>
+                <option value="cycle">Cycle</option>
+                <option value="weighted">Weighted</option>
+              </select>
+            </label>
+
+            {#if config.spheres.paletteMode === 'weighted'}
+              <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-top:0.5rem;">
+                <button type="button" onclick={() => setEqualWeights('spheres')}>Equal weights</button>
+                <button
+                  type="button"
+                  onclick={() => setRandomWeights('spheres')}
+                >
+                  Random weights
+                </button>
+              </div>
+              {#each config.colors as c, i}
+                <label class="control-row slider">
+                  <span class="setting-title">w{i + 1}: {(config.spheres.colorWeights[i] ?? 1).toFixed(2)} {c}</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="5"
+                    step="0.05"
+                    value={config.spheres.colorWeights[i] ?? 1}
+                    oninput={(e) => {
+                      updateWeight('spheres', i, Number((e.currentTarget as HTMLInputElement).value));
+                    }}
+                  />
+                </label>
+              {/each}
+            {/if}
+          </details>
+        </section>
+       {:else if config.type === 'circles2d'}
+        <section class="control-section">
+          <h3>Circles (2D)</h3>
+
+          <label class="control-row">
+            <span class="setting-title">Mode</span>
+            <select bind:value={config.circles.mode}>
+              <option value="scatter">Scatter</option>
+              <option value="grid">Grid</option>
+            </select>
+          </label>
+
+          <label class="control-row slider">
+            <span class="setting-title">Count: {config.circles.count}</span>
+            <input type="range" bind:value={config.circles.count} min="0" max="4000" step="10" />
+          </label>
+
+          <label class="control-row slider">
+            <span class="setting-title">Radius min: {Math.round(config.circles.rMinPx)}px</span>
+            <input type="range" bind:value={config.circles.rMinPx} min="1" max="240" step="1" />
+          </label>
+          <label class="control-row slider">
+            <span class="setting-title">Radius max: {Math.round(config.circles.rMaxPx)}px</span>
+            <input type="range" bind:value={config.circles.rMaxPx} min="1" max="420" step="1" />
+          </label>
+
+          <label class="control-row slider">
+            <span class="setting-title">Jitter: {config.circles.jitter.toFixed(2)}</span>
+            <input type="range" bind:value={config.circles.jitter} min="0" max="1" step="0.01" />
+          </label>
+          <label class="control-row slider">
+            <span class="setting-title">Fill opacity: {config.circles.fillOpacity.toFixed(2)}</span>
+            <input type="range" bind:value={config.circles.fillOpacity} min="0" max="1" step="0.01" />
+          </label>
+
+          <details class="control-details">
+            <summary class="control-details-summary">Stroke</summary>
+            <label class="control-row checkbox">
+              <input type="checkbox" bind:checked={config.circles.stroke.enabled} />
+              <span class="setting-title">Enable</span>
+            </label>
+            <label class="control-row slider">
+              <span class="setting-title">Width: {Math.round(config.circles.stroke.widthPx)}px</span>
+              <input type="range" bind:value={config.circles.stroke.widthPx} min="0" max="24" step="1" disabled={!config.circles.stroke.enabled} />
+            </label>
+            <label class="control-row">
+              <span class="setting-title">Color</span>
+              <input type="color" bind:value={config.circles.stroke.color} disabled={!config.circles.stroke.enabled} />
+            </label>
+            <label class="control-row slider">
+              <span class="setting-title">Opacity: {config.circles.stroke.opacity.toFixed(2)}</span>
+              <input type="range" bind:value={config.circles.stroke.opacity} min="0" max="1" step="0.01" disabled={!config.circles.stroke.enabled} />
+            </label>
+          </details>
+
+          <details class="control-details">
+            <summary class="control-details-summary">Croissant</summary>
+            <label class="control-row checkbox">
+              <input type="checkbox" bind:checked={config.circles.croissant.enabled} />
+              <span class="setting-title">Enable</span>
+            </label>
+            <label class="control-row slider">
+              <span class="setting-title">Inner scale: {config.circles.croissant.innerScale.toFixed(2)}</span>
+              <input type="range" bind:value={config.circles.croissant.innerScale} min="0.05" max="0.98" step="0.01" disabled={!config.circles.croissant.enabled} />
+            </label>
+            <label class="control-row slider">
+              <span class="setting-title">Offset: {config.circles.croissant.offset.toFixed(2)}</span>
+              <input type="range" bind:value={config.circles.croissant.offset} min="0" max="1" step="0.01" disabled={!config.circles.croissant.enabled} />
+            </label>
+            <label class="control-row slider">
+              <span class="setting-title">Angle jitter: {Math.round(config.circles.croissant.angleJitterDeg)}deg</span>
+              <input type="range" bind:value={config.circles.croissant.angleJitterDeg} min="0" max="180" step="1" disabled={!config.circles.croissant.enabled} />
+            </label>
+          </details>
+
+          <details class="control-details">
+            <summary class="control-details-summary">Palette</summary>
+            <label class="control-row">
+              <span class="setting-title">Mode</span>
+              <select bind:value={config.circles.paletteMode}>
+                <option value="cycle">Cycle</option>
+                <option value="weighted">Weighted</option>
+              </select>
+            </label>
+
+            {#if config.circles.paletteMode === 'weighted'}
+              <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-top:0.5rem;">
+                <button type="button" onclick={() => setEqualWeights('circles')}>Equal weights</button>
+                <button
+                  type="button"
+                  onclick={() => setRandomWeights('circles')}
+                >
+                  Random weights
+                </button>
+              </div>
+              {#each config.colors as c, i}
+                <label class="control-row slider">
+                  <span class="setting-title">w{i + 1}: {(config.circles.colorWeights[i] ?? 1).toFixed(2)} {c}</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="5"
+                    step="0.05"
+                    value={config.circles.colorWeights[i] ?? 1}
+                    oninput={(e) => {
+                      updateWeight('circles', i, Number((e.currentTarget as HTMLInputElement).value));
+                    }}
+                  />
+                </label>
+              {/each}
+            {/if}
+          </details>
+        </section>
+       {:else if config.type === 'triangles2d'}
+        <section class="control-section">
+          <h3>Triangles (2D)</h3>
+
+          <label class="control-row">
+            <span class="setting-title">Mode</span>
+            <select bind:value={config.triangles.mode}>
+              <option value="tessellation">Tessellation</option>
+              <option value="scatter">Scatter</option>
+              <option value="lowpoly">Low poly</option>
+            </select>
+          </label>
+
+          <label class="control-row slider">
+            <span class="setting-title">Density: {config.triangles.density.toFixed(2)}</span>
+            <input type="range" bind:value={config.triangles.density} min="0.1" max="3.5" step="0.01" />
+          </label>
+
+          <label class="control-row slider">
+            <span class="setting-title">Scale: {Math.round(config.triangles.scalePx)}px</span>
+            <input type="range" bind:value={config.triangles.scalePx} min="6" max="320" step="1" />
+          </label>
+
+          <label class="control-row slider">
+            <span class="setting-title">Jitter: {config.triangles.jitter.toFixed(2)}</span>
+            <input type="range" bind:value={config.triangles.jitter} min="0" max="1" step="0.01" />
+          </label>
+
+          <label class="control-row slider">
+            <span class="setting-title">Rotate jitter: {Math.round(config.triangles.rotateJitterDeg)}deg</span>
+            <input type="range" bind:value={config.triangles.rotateJitterDeg} min="0" max="180" step="1" />
+          </label>
+
+          <label class="control-row slider">
+            <span class="setting-title">Inset: {Math.round(config.triangles.insetPx)}px</span>
+            <input type="range" bind:value={config.triangles.insetPx} min="0" max="120" step="1" />
+          </label>
+
+          <label class="control-row slider">
+            <span class="setting-title">Fill opacity: {config.triangles.fillOpacity.toFixed(2)}</span>
+            <input type="range" bind:value={config.triangles.fillOpacity} min="0" max="1" step="0.01" />
+          </label>
+
+          <details class="control-details">
+            <summary class="control-details-summary">Stroke</summary>
+            <label class="control-row checkbox">
+              <input type="checkbox" bind:checked={config.triangles.stroke.enabled} />
+              <span class="setting-title">Enable</span>
+            </label>
+            <label class="control-row slider">
+              <span class="setting-title">Width: {Math.round(config.triangles.stroke.widthPx)}px</span>
+              <input type="range" bind:value={config.triangles.stroke.widthPx} min="0" max="24" step="1" disabled={!config.triangles.stroke.enabled} />
+            </label>
+            <label class="control-row">
+              <span class="setting-title">Color</span>
+              <input type="color" bind:value={config.triangles.stroke.color} disabled={!config.triangles.stroke.enabled} />
+            </label>
+            <label class="control-row slider">
+              <span class="setting-title">Opacity: {config.triangles.stroke.opacity.toFixed(2)}</span>
+              <input type="range" bind:value={config.triangles.stroke.opacity} min="0" max="1" step="0.01" disabled={!config.triangles.stroke.enabled} />
+            </label>
+          </details>
+
+          <details class="control-details">
+            <summary class="control-details-summary">Shading</summary>
+            <label class="control-row checkbox">
+              <input type="checkbox" bind:checked={config.triangles.shading.enabled} />
+              <span class="setting-title">Enable</span>
+            </label>
+            <label class="control-row slider">
+              <span class="setting-title">Light: {Math.round(config.triangles.shading.lightDeg)}deg</span>
+              <input type="range" bind:value={config.triangles.shading.lightDeg} min="0" max="360" step="1" disabled={!config.triangles.shading.enabled} />
+            </label>
+            <label class="control-row slider">
+              <span class="setting-title">Strength: {config.triangles.shading.strength.toFixed(2)}</span>
+              <input type="range" bind:value={config.triangles.shading.strength} min="0" max="1" step="0.01" disabled={!config.triangles.shading.enabled} />
+            </label>
+          </details>
+
+          <details class="control-details">
+            <summary class="control-details-summary">Palette</summary>
+            <label class="control-row">
+              <span class="setting-title">Mode</span>
+              <select bind:value={config.triangles.paletteMode}>
+                <option value="cycle">Cycle</option>
+                <option value="weighted">Weighted</option>
+              </select>
+            </label>
+
+            {#if config.triangles.paletteMode === 'weighted'}
+              <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-top:0.5rem;">
+                <button type="button" onclick={() => setEqualWeights('triangles2d')}>Equal weights</button>
+                <button
+                  type="button"
+                  onclick={() => setRandomWeights('triangles2d')}
+                >
+                  Random weights
+                </button>
+              </div>
+              {#each config.colors as c, i}
+                <label class="control-row slider">
+                  <span class="setting-title">w{i + 1}: {(config.triangles.colorWeights[i] ?? 1).toFixed(2)} {c}</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="5"
+                    step="0.05"
+                    value={config.triangles.colorWeights[i] ?? 1}
+                    oninput={(e) => {
+                      updateWeight('triangles2d', i, Number((e.currentTarget as HTMLInputElement).value));
+                    }}
+                  />
+                </label>
+              {/each}
+            {/if}
+          </details>
+        </section>
+       {:else if config.type === 'triangles3d'}
+        <section class="control-section">
+          <h3>Triangles (3D)</h3>
+
+          <label class="control-row">
+            <span class="setting-title">Mode</span>
+            <select bind:value={config.prisms.mode}>
+              <option value="tessellation">Tessellation</option>
+              <option value="scatter">Scatter</option>
+              <option value="stackedPrisms">Stacked prisms</option>
+            </select>
+          </label>
+
+          <label class="control-row slider">
+            <span class="setting-title">Count: {config.prisms.count}</span>
+            <input type="range" bind:value={config.prisms.count} min="0" max="2500" step="10" />
+          </label>
+
+          <label class="control-row slider">
+            <span class="setting-title">Radius: {config.prisms.radius.toFixed(2)}</span>
+            <input type="range" bind:value={config.prisms.radius} min="0.05" max="2.0" step="0.01" />
+          </label>
+
+          <label class="control-row slider">
+            <span class="setting-title">Height: {config.prisms.height.toFixed(2)}</span>
+            <input type="range" bind:value={config.prisms.height} min="0.02" max="3.0" step="0.01" />
+          </label>
+
+          <label class="control-row slider">
+            <span class="setting-title">Spread: {config.prisms.spread.toFixed(2)}</span>
+            <input type="range" bind:value={config.prisms.spread} min="0" max="20" step="0.05" />
+          </label>
+
+          <label class="control-row slider">
+            <span class="setting-title">Jitter: {config.prisms.jitter.toFixed(2)}</span>
+            <input type="range" bind:value={config.prisms.jitter} min="0" max="1" step="0.01" />
+          </label>
+
+          <label class="control-row slider">
+            <span class="setting-title">Opacity: {config.prisms.opacity.toFixed(2)}</span>
+            <input type="range" bind:value={config.prisms.opacity} min="0" max="1" step="0.01" />
+          </label>
+
+          <details class="control-details">
+            <summary class="control-details-summary">Palette</summary>
+            <label class="control-row">
+              <span class="setting-title">Mode</span>
+              <select bind:value={config.prisms.paletteMode}>
+                <option value="cycle">Cycle</option>
+                <option value="weighted">Weighted</option>
+              </select>
+            </label>
+
+            {#if config.prisms.paletteMode === 'weighted'}
+              <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-top:0.5rem;">
+                <button type="button" onclick={() => setEqualWeights('prisms')}>Equal weights</button>
+                <button
+                  type="button"
+                  onclick={() => setRandomWeights('prisms')}
+                >
+                  Random weights
+                </button>
+              </div>
+              {#each config.colors as c, i}
+                <label class="control-row slider">
+                  <span class="setting-title">w{i + 1}: {(config.prisms.colorWeights[i] ?? 1).toFixed(2)} {c}</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="5"
+                    step="0.05"
+                    value={config.prisms.colorWeights[i] ?? 1}
+                    oninput={(e) => {
+                      updateWeight('prisms', i, Number((e.currentTarget as HTMLInputElement).value));
+                    }}
+                  />
+                </label>
+              {/each}
+            {/if}
+          </details>
+        </section>
+       {:else if config.type === 'hexgrid2d'}
+        <section class="control-section">
+          <h3>Hex Grid (2D)</h3>
+
+          <label class="control-row slider">
+            <span class="setting-title">Radius: {Math.round(config.hexgrid.radiusPx)}px</span>
+            <input type="range" bind:value={config.hexgrid.radiusPx} min="3" max="140" step="1" />
+          </label>
+
+          <label class="control-row slider">
+            <span class="setting-title">Margin: {Math.round(config.hexgrid.marginPx)}px</span>
+            <input type="range" bind:value={config.hexgrid.marginPx} min="0" max="60" step="1" />
+          </label>
+
+          <label class="control-row slider">
+            <span class="setting-title">Overscan: {Math.round(config.hexgrid.overscanPx)}px</span>
+            <input type="range" bind:value={config.hexgrid.overscanPx} min="0" max="400" step="5" />
+          </label>
+
+          <label class="control-row slider">
+            <span class="setting-title">Fill opacity: {config.hexgrid.fillOpacity.toFixed(2)}</span>
+            <input type="range" bind:value={config.hexgrid.fillOpacity} min="0" max="1" step="0.01" />
+          </label>
+
+          <details class="control-details">
+            <summary class="control-details-summary">Origin</summary>
+            <label class="control-row slider">
+              <span class="setting-title">X: {Math.round(config.hexgrid.originPx.x)}px</span>
+              <input type="range" bind:value={config.hexgrid.originPx.x} min="-500" max="500" step="1" />
+            </label>
+            <label class="control-row slider">
+              <span class="setting-title">Y: {Math.round(config.hexgrid.originPx.y)}px</span>
+              <input type="range" bind:value={config.hexgrid.originPx.y} min="-500" max="500" step="1" />
+            </label>
+          </details>
+
+          <details class="control-details">
+            <summary class="control-details-summary">Stroke</summary>
+            <label class="control-row checkbox">
+              <input type="checkbox" bind:checked={config.hexgrid.stroke.enabled} />
+              <span class="setting-title">Enable</span>
+            </label>
+            <label class="control-row slider">
+              <span class="setting-title">Width: {Math.round(config.hexgrid.stroke.widthPx)}px</span>
+              <input type="range" bind:value={config.hexgrid.stroke.widthPx} min="0" max="24" step="1" disabled={!config.hexgrid.stroke.enabled} />
+            </label>
+            <label class="control-row">
+              <span class="setting-title">Join</span>
+              <select bind:value={config.hexgrid.stroke.join} disabled={!config.hexgrid.stroke.enabled}>
+                <option value="round">Round</option>
+                <option value="miter">Miter</option>
+                <option value="bevel">Bevel</option>
+              </select>
+            </label>
+            <label class="control-row">
+              <span class="setting-title">Color</span>
+              <input type="color" bind:value={config.hexgrid.stroke.color} disabled={!config.hexgrid.stroke.enabled} />
+            </label>
+            <label class="control-row slider">
+              <span class="setting-title">Opacity: {config.hexgrid.stroke.opacity.toFixed(2)}</span>
+              <input type="range" bind:value={config.hexgrid.stroke.opacity} min="0" max="1" step="0.01" disabled={!config.hexgrid.stroke.enabled} />
+            </label>
+          </details>
+
+          <details class="control-details">
+            <summary class="control-details-summary">Coloring</summary>
+            <label class="control-row">
+              <span class="setting-title">Palette mode</span>
+              <select bind:value={config.hexgrid.coloring.paletteMode}>
+                <option value="cycle">Cycle</option>
+                <option value="weighted">Weighted</option>
+              </select>
+            </label>
+
+            <label class="control-row">
+              <span class="setting-title">Weights</span>
+              <select bind:value={config.hexgrid.coloring.weightsMode}>
+                <option value="auto">Auto</option>
+                <option value="preset">Preset</option>
+                <option value="custom">Custom</option>
+              </select>
+            </label>
+
+            <label class="control-row">
+              <span class="setting-title">Preset</span>
+              <select bind:value={config.hexgrid.coloring.preset} disabled={config.hexgrid.coloring.weightsMode !== 'preset'}>
+                <option value="equal">Equal</option>
+                <option value="dominant">Dominant</option>
+                <option value="accents">Accents</option>
+                <option value="rare-accents">Rare accents</option>
+              </select>
+            </label>
+
+            {#if config.hexgrid.coloring.weightsMode === 'custom'}
+              <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-top:0.5rem;">
+                <button type="button" onclick={() => setEqualWeights('hexgrid')}>Equal weights</button>
+                <button
+                  type="button"
+                  onclick={() => setRandomWeights('hexgrid')}
+                >
+                  Random weights
+                </button>
+              </div>
+              {#each config.colors as c, i}
+                <label class="control-row slider">
+                  <span class="setting-title">w{i + 1}: {(config.hexgrid.coloring.weights[i] ?? 1).toFixed(2)} {c}</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="5"
+                    step="0.05"
+                    value={config.hexgrid.coloring.weights[i] ?? 1}
+                    oninput={(e) => {
+                      updateWeight('hexgrid', i, Number((e.currentTarget as HTMLInputElement).value));
+                    }}
+                  />
+                </label>
+              {/each}
+            {/if}
+          </details>
+
+          <details class="control-details">
+            <summary class="control-details-summary">Grouping</summary>
+            <label class="control-row">
+              <span class="setting-title">Mode</span>
+              <select bind:value={config.hexgrid.grouping.mode}>
+                <option value="none">None</option>
+                <option value="voronoi">Voronoi</option>
+                <option value="noise">Noise</option>
+                <option value="random-walk">Random walk</option>
+              </select>
+            </label>
+            <label class="control-row slider">
+              <span class="setting-title">Strength: {config.hexgrid.grouping.strength.toFixed(2)}</span>
+              <input type="range" bind:value={config.hexgrid.grouping.strength} min="0" max="1" step="0.01" disabled={config.hexgrid.grouping.mode === 'none'} />
+            </label>
+            <label class="control-row slider">
+              <span class="setting-title">Target groups: {config.hexgrid.grouping.targetGroupCount}</span>
+              <input type="range" bind:value={config.hexgrid.grouping.targetGroupCount} min="1" max="250" step="1" disabled={config.hexgrid.grouping.mode === 'none'} />
+            </label>
+          </details>
+
+          <details class="control-details">
+            <summary class="control-details-summary">Effect</summary>
+            <label class="control-row">
+              <span class="setting-title">Kind</span>
+              <select bind:value={config.hexgrid.effect.kind}>
+                <option value="none">None</option>
+                <option value="bevel">Bevel</option>
+                <option value="grain">Grain</option>
+                <option value="gradient">Gradient</option>
+              </select>
+            </label>
+            <label class="control-row slider">
+              <span class="setting-title">Amount: {config.hexgrid.effect.amount.toFixed(2)}</span>
+              <input type="range" bind:value={config.hexgrid.effect.amount} min="0" max="1" step="0.01" disabled={config.hexgrid.effect.kind === 'none'} />
+            </label>
+            <label class="control-row slider">
+              <span class="setting-title">Frequency: {config.hexgrid.effect.frequency.toFixed(2)}</span>
+              <input type="range" bind:value={config.hexgrid.effect.frequency} min="0.1" max="10" step="0.05" disabled={config.hexgrid.effect.kind === 'none'} />
+            </label>
+          </details>
+        </section>
        {/if}
-      
+       
       <!-- Camera View -->
       <section class="control-section">
         <h3>Camera View</h3>
