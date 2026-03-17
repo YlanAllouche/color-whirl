@@ -41,6 +41,57 @@ program
   .option('--weights <weights>', 'Comma-separated palette weights (e.g. "1,0.2,3")')
   .option('--opacity <opacity>', 'Shape opacity (0..1)')
 
+  // textureParams
+  .option('--drywall-grain-amount <number>', 'Drywall grain amount (0..1)')
+  .option('--drywall-grain-scale <number>', 'Drywall grain scale')
+  .option('--glass-style <style>', 'Glass style (simple, frosted, thick, stylized)')
+  .option('--cel-bands <number>', 'Cel band count')
+  .option('--cel-halftone', 'Enable cel halftone')
+  .option('--no-cel-halftone', 'Disable cel halftone')
+
+  // edges
+  .option('--edges-tint', 'Enable edge tint')
+  .option('--no-edges-tint', 'Disable edge tint')
+  .option('--edges-tint-color <hex>', 'Edge tint color (hex)')
+  .option('--edges-tint-amount <number>', 'Edge tint amount (0..1)')
+
+  .option('--edges-material', 'Enable edge material override')
+  .option('--no-edges-material', 'Disable edge material override')
+  .option('--edges-material-roughness <number>', 'Edge roughness (0..1)')
+  .option('--edges-material-metalness <number>', 'Edge metalness (0..1)')
+  .option('--edges-material-clearcoat <number>', 'Edge clearcoat (0..1)')
+  .option('--edges-material-env-intensity-mult <number>', 'Edge env intensity multiplier')
+
+  .option('--edges-wear', 'Enable edge wear')
+  .option('--no-edges-wear', 'Disable edge wear')
+  .option('--edges-wear-intensity <number>', 'Edge wear intensity (0..1)')
+  .option('--edges-wear-width <number>', 'Edge wear width (0..1)')
+  .option('--edges-wear-noise <number>', 'Edge wear noise (0..1)')
+  .option('--edges-wear-color-shift <hex>', 'Edge wear color shift (hex)')
+
+  .option('--edges-rim-light', 'Enable edge rim light')
+  .option('--no-edges-rim-light', 'Disable edge rim light')
+  .option('--edges-rim-light-color <hex>', 'Rim light color (hex)')
+  .option('--edges-rim-light-intensity <number>', 'Rim light intensity')
+  .option('--edges-rim-light-power <number>', 'Rim light power')
+
+  .option('--edges-outline', 'Enable outline (3D only)')
+  .option('--no-edges-outline', 'Disable outline')
+  .option('--edges-outline-color <hex>', 'Outline color (hex)')
+  .option('--edges-outline-thickness <number>', 'Outline thickness')
+  .option('--edges-outline-opacity <number>', 'Outline opacity (0..1)')
+
+  // emission + bloom
+  .option('--emission', 'Enable emission')
+  .option('--no-emission', 'Disable emission')
+  .option('--emission-palette-index <number>', 'Emission palette index')
+  .option('--emission-intensity <number>', 'Emission intensity')
+  .option('--bloom', 'Enable bloom')
+  .option('--no-bloom', 'Disable bloom')
+  .option('--bloom-strength <number>', 'Bloom strength')
+  .option('--bloom-radius <number>', 'Bloom radius')
+  .option('--bloom-threshold <number>', 'Bloom threshold (0..1)')
+
   // spheres3d
   .option('--spheres-distribution <mode>', 'Spheres distribution (jitteredGrid, scatter, layeredDepth)')
   .option('--spheres-radius-min <number>', 'Spheres min radius (scene units)')
@@ -199,6 +250,10 @@ function parseOpacity01(value: unknown): number | null {
   return Math.max(0, Math.min(1, n));
 }
 
+function clamp(n: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, n));
+}
+
 function buildConfigAndFormat(options: any, command: Command): { config: WallpaperConfig; format: ExportFormat } {
   if (options.cfg) {
     const state = decodeAppStateFromBase64Url(String(options.cfg)) as WallpaperAppStateV1;
@@ -258,9 +313,28 @@ function buildConfigAndFormat(options: any, command: Command): { config: Wallpap
      config.backgroundColor = String(options.background);
    }
 
-   if (fromCli('texture') && options.texture) {
-     config.texture = options.texture as TextureType;
-   }
+  if (fromCli('texture') && options.texture) {
+    config.texture = options.texture as TextureType;
+  }
+
+  // texture params
+  if (fromCli('drywallGrainAmount') && options.drywallGrainAmount != null) {
+    const v = parseOpacity01(options.drywallGrainAmount);
+    if (v != null) config.textureParams.drywall.grainAmount = v;
+  }
+  if (fromCli('drywallGrainScale') && options.drywallGrainScale != null) {
+    const v = parseFloat(options.drywallGrainScale);
+    if (Number.isFinite(v)) config.textureParams.drywall.grainScale = clamp(v, 0.1, 50);
+  }
+  if (fromCli('glassStyle') && options.glassStyle != null) {
+    const s = String(options.glassStyle);
+    if (s === 'simple' || s === 'frosted' || s === 'thick' || s === 'stylized') config.textureParams.glass.style = s;
+  }
+  if (fromCli('celBands') && options.celBands != null) {
+    const v = Math.round(parseFloat(options.celBands));
+    if (Number.isFinite(v)) config.textureParams.cel.bands = clamp(v, 2, 12);
+  }
+  if (fromCli('celHalftone')) config.textureParams.cel.halftone = Boolean(options.celHalftone);
 
    if (fromCli('cameraDistance') && options.cameraDistance != null) config.camera.distance = parseFloat(options.cameraDistance);
    if (fromCli('cameraAzimuth') && options.cameraAzimuth != null) config.camera.azimuth = parseFloat(options.cameraAzimuth);
@@ -317,6 +391,123 @@ function buildConfigAndFormat(options: any, command: Command): { config: Wallpap
   if (fromCli('geometryQuality') && options.geometryQuality != null) {
     const v = parseFloat(options.geometryQuality);
     if (Number.isFinite(v)) config.geometry.quality = v;
+  }
+
+  // edges / emission / bloom
+  const edgesTouched =
+    fromCli('edgesTint') ||
+    fromCli('edgesTintColor') ||
+    fromCli('edgesTintAmount') ||
+    fromCli('edgesMaterial') ||
+    fromCli('edgesMaterialRoughness') ||
+    fromCli('edgesMaterialMetalness') ||
+    fromCli('edgesMaterialClearcoat') ||
+    fromCli('edgesMaterialEnvIntensityMult') ||
+    fromCli('edgesWear') ||
+    fromCli('edgesWearIntensity') ||
+    fromCli('edgesWearWidth') ||
+    fromCli('edgesWearNoise') ||
+    fromCli('edgesWearColorShift') ||
+    fromCli('edgesRimLight') ||
+    fromCli('edgesRimLightColor') ||
+    fromCli('edgesRimLightIntensity') ||
+    fromCli('edgesRimLightPower') ||
+    fromCli('edgesOutline') ||
+    fromCli('edgesOutlineColor') ||
+    fromCli('edgesOutlineThickness') ||
+    fromCli('edgesOutlineOpacity');
+
+  const is3D = config.type === 'popsicle' || config.type === 'spheres3d' || config.type === 'triangles3d';
+  if (edgesTouched && !is3D) {
+    console.warn(`Warning: edges options are only supported for 3D types; ignoring edges flags for type=${config.type}`);
+  }
+
+  if (is3D) {
+    if (fromCli('edgesTint')) config.edges.tint.enabled = Boolean(options.edgesTint);
+    if (fromCli('edgesTintColor') && options.edgesTintColor != null) config.edges.tint.color = String(options.edgesTintColor);
+    if (fromCli('edgesTintAmount') && options.edgesTintAmount != null) {
+      const v = parseOpacity01(options.edgesTintAmount);
+      if (v != null) config.edges.tint.amount = v;
+    }
+
+    if (fromCli('edgesMaterial')) config.edges.material.enabled = Boolean(options.edgesMaterial);
+    if (fromCli('edgesMaterialRoughness') && options.edgesMaterialRoughness != null) {
+      const v = parseOpacity01(options.edgesMaterialRoughness);
+      if (v != null) config.edges.material.roughness = v;
+    }
+    if (fromCli('edgesMaterialMetalness') && options.edgesMaterialMetalness != null) {
+      const v = parseOpacity01(options.edgesMaterialMetalness);
+      if (v != null) config.edges.material.metalness = v;
+    }
+    if (fromCli('edgesMaterialClearcoat') && options.edgesMaterialClearcoat != null) {
+      const v = parseOpacity01(options.edgesMaterialClearcoat);
+      if (v != null) config.edges.material.clearcoat = v;
+    }
+    if (fromCli('edgesMaterialEnvIntensityMult') && options.edgesMaterialEnvIntensityMult != null) {
+      const v = parseFloat(options.edgesMaterialEnvIntensityMult);
+      if (Number.isFinite(v)) config.edges.material.envIntensityMult = clamp(v, 0, 3);
+    }
+
+    if (fromCli('edgesWear')) config.edges.wear.enabled = Boolean(options.edgesWear);
+    if (fromCli('edgesWearIntensity') && options.edgesWearIntensity != null) {
+      const v = parseOpacity01(options.edgesWearIntensity);
+      if (v != null) config.edges.wear.intensity = v;
+    }
+    if (fromCli('edgesWearWidth') && options.edgesWearWidth != null) {
+      const v = parseOpacity01(options.edgesWearWidth);
+      if (v != null) config.edges.wear.width = v;
+    }
+    if (fromCli('edgesWearNoise') && options.edgesWearNoise != null) {
+      const v = parseOpacity01(options.edgesWearNoise);
+      if (v != null) config.edges.wear.noise = v;
+    }
+    if (fromCli('edgesWearColorShift') && options.edgesWearColorShift != null) config.edges.wear.colorShift = String(options.edgesWearColorShift);
+
+    if (fromCli('edgesRimLight')) config.edges.rimLight.enabled = Boolean(options.edgesRimLight);
+    if (fromCli('edgesRimLightColor') && options.edgesRimLightColor != null) config.edges.rimLight.color = String(options.edgesRimLightColor);
+    if (fromCli('edgesRimLightIntensity') && options.edgesRimLightIntensity != null) {
+      const v = parseFloat(options.edgesRimLightIntensity);
+      if (Number.isFinite(v)) config.edges.rimLight.intensity = clamp(v, 0, 5);
+    }
+    if (fromCli('edgesRimLightPower') && options.edgesRimLightPower != null) {
+      const v = parseFloat(options.edgesRimLightPower);
+      if (Number.isFinite(v)) config.edges.rimLight.power = clamp(v, 0.5, 8);
+    }
+
+    if (fromCli('edgesOutline')) config.edges.outline.enabled = Boolean(options.edgesOutline);
+    if (fromCli('edgesOutlineColor') && options.edgesOutlineColor != null) config.edges.outline.color = String(options.edgesOutlineColor);
+    if (fromCli('edgesOutlineThickness') && options.edgesOutlineThickness != null) {
+      const v = parseFloat(options.edgesOutlineThickness);
+      if (Number.isFinite(v)) config.edges.outline.thickness = clamp(v, 0, 0.2);
+    }
+    if (fromCli('edgesOutlineOpacity') && options.edgesOutlineOpacity != null) {
+      const v = parseOpacity01(options.edgesOutlineOpacity);
+      if (v != null) config.edges.outline.opacity = v;
+    }
+  }
+
+  if (fromCli('emission')) config.emission.enabled = Boolean(options.emission);
+  if (fromCli('emissionPaletteIndex') && options.emissionPaletteIndex != null) {
+    const v = Math.round(parseFloat(options.emissionPaletteIndex));
+    if (Number.isFinite(v)) config.emission.paletteIndex = clamp(v, 0, Math.max(0, config.colors.length - 1));
+  }
+  if (fromCli('emissionIntensity') && options.emissionIntensity != null) {
+    const v = parseFloat(options.emissionIntensity);
+    if (Number.isFinite(v)) config.emission.intensity = clamp(v, 0, 20);
+  }
+
+  if (fromCli('bloom')) config.bloom.enabled = Boolean(options.bloom);
+  if (fromCli('bloomStrength') && options.bloomStrength != null) {
+    const v = parseFloat(options.bloomStrength);
+    if (Number.isFinite(v)) config.bloom.strength = clamp(v, 0, 10);
+  }
+  if (fromCli('bloomRadius') && options.bloomRadius != null) {
+    const v = parseFloat(options.bloomRadius);
+    if (Number.isFinite(v)) config.bloom.radius = clamp(v, 0, 10);
+  }
+  if (fromCli('bloomThreshold') && options.bloomThreshold != null) {
+    const v = parseOpacity01(options.bloomThreshold);
+    if (v != null) config.bloom.threshold = v;
   }
 
   // Shared palette config for types that support it.
