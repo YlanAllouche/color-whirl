@@ -93,6 +93,13 @@ program
   .option('--bloom-radius <number>', 'Bloom radius')
   .option('--bloom-threshold <number>', 'Bloom threshold (0..1)')
 
+  // collisions
+  .option('--collisions-mode <mode>', 'Collision mode (none, carve)')
+  .option('--collisions-direction <direction>', 'Collision carve direction (oneWay, twoWay)')
+  .option('--collisions-margin <px>', 'Collision carve margin in px')
+  .option('--collisions-edge <edge>', 'Collision carve edge (hard, soft)')
+  .option('--collisions-feather <px>', 'Collision carve feather (soft edge) in px')
+
   // spheres3d
   .option('--spheres-distribution <mode>', 'Spheres distribution (jitteredGrid, scatter, layeredDepth)')
   .option('--spheres-radius-min <number>', 'Spheres min radius (scene units)')
@@ -523,6 +530,28 @@ function buildConfigAndFormat(options: any, command: Command): { config: Wallpap
   if (fromCli('bloomThreshold') && options.bloomThreshold != null) {
     const v = parseOpacity01(options.bloomThreshold);
     if (v != null) config.bloom.threshold = v;
+  }
+
+  // collisions
+  if (fromCli('collisionsMode') && options.collisionsMode != null) {
+    const m = String(options.collisionsMode);
+    config.collisions.mode = m === 'carve' ? 'carve' : 'none';
+  }
+  if (fromCli('collisionsDirection') && options.collisionsDirection != null) {
+    const d = String(options.collisionsDirection);
+    config.collisions.carve.direction = d === 'twoWay' ? 'twoWay' : 'oneWay';
+  }
+  if (fromCli('collisionsEdge') && options.collisionsEdge != null) {
+    const e = String(options.collisionsEdge);
+    config.collisions.carve.edge = e === 'soft' ? 'soft' : 'hard';
+  }
+  if (fromCli('collisionsMargin') && options.collisionsMargin != null) {
+    const v = parseFloat(options.collisionsMargin);
+    if (Number.isFinite(v)) config.collisions.carve.marginPx = Math.max(0, v);
+  }
+  if (fromCli('collisionsFeather') && options.collisionsFeather != null) {
+    const v = parseFloat(options.collisionsFeather);
+    if (Number.isFinite(v)) config.collisions.carve.featherPx = Math.max(0, v);
   }
 
   // Shared palette config for types that support it.

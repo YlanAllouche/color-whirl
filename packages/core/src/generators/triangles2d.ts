@@ -106,6 +106,7 @@ export function renderTriangles2DToCanvas(config: Triangles2DConfig, canvas?: HT
 
   const collisionsEnabled = config.collisions.mode === 'carve' && Math.max(0, config.colors.length) <= 8;
   const direction = config.collisions.carve.direction;
+  const oneWayPriority = collisionsEnabled && direction === 'oneWay';
 
   const shapes = collisionsEnabled ? document.createElement('canvas') : null;
   if (shapes) {
@@ -139,6 +140,19 @@ export function renderTriangles2DToCanvas(config: Triangles2DConfig, canvas?: HT
 
   const carveMargin = Math.max(0, Number(config.collisions.carve.marginPx) || 0);
   const carveFeather = config.collisions.carve.edge === 'soft' ? Math.max(0, Number(config.collisions.carve.featherPx) || 0) : 0;
+
+  type TriInstance = {
+    order: number;
+    ax: number;
+    ay: number;
+    bx: number;
+    by: number;
+    cx: number;
+    cy: number;
+    idx: number;
+  };
+  const queued: TriInstance[] = oneWayPriority ? [] : [];
+  let triOrder = 0;
 
   const applyCarve = (target: CanvasRenderingContext2D, path: Path2D) => {
     if (!collisionsEnabled) return;
@@ -331,7 +345,8 @@ export function renderTriangles2DToCanvas(config: Triangles2DConfig, canvas?: HT
       const cx1 = cx0 + Math.cos(theta + (4 * Math.PI) / 3) * s;
       const cy1 = cy0 + Math.sin(theta + (4 * Math.PI) / 3) * s;
 
-      drawTri(ax, ay, bx, by, cx1, cy1, idx);
+      if (oneWayPriority) queued.push({ order: triOrder++, ax, ay, bx, by, cx: cx1, cy: cy1, idx });
+      else drawTri(ax, ay, bx, by, cx1, cy1, idx);
     }
   } else {
     const sqrt3 = 1.7320508075688772;
@@ -352,8 +367,8 @@ export function renderTriangles2DToCanvas(config: Triangles2DConfig, canvas?: HT
 
       const idxAt = (x: number, y: number) => y * cols + x;
       let t = 0;
-      for (let y = 0; y < rows - 1; y++) {
-        for (let x = 0; x < cols - 1; x++) {
+        for (let y = 0; y < rows - 1; y++) {
+          for (let x = 0; x < cols - 1; x++) {
           const p00 = pts[idxAt(x, y)];
           const p10 = pts[idxAt(x + 1, y)];
           const p01 = pts[idxAt(x, y + 1)];
@@ -361,16 +376,26 @@ export function renderTriangles2DToCanvas(config: Triangles2DConfig, canvas?: HT
           const flip = rng() < 0.5;
           const i0 = pickIndex(t++);
           const i1 = pickIndex(t++);
-          if (flip) {
-            drawTri(p00.x, p00.y, p10.x, p10.y, p11.x, p11.y, i0);
-            drawTri(p00.x, p00.y, p11.x, p11.y, p01.x, p01.y, i1);
-          } else {
-            drawTri(p00.x, p00.y, p10.x, p10.y, p01.x, p01.y, i0);
-            drawTri(p10.x, p10.y, p11.x, p11.y, p01.x, p01.y, i1);
+            if (flip) {
+              if (oneWayPriority) {
+                queued.push({ order: triOrder++, ax: p00.x, ay: p00.y, bx: p10.x, by: p10.y, cx: p11.x, cy: p11.y, idx: i0 });
+                queued.push({ order: triOrder++, ax: p00.x, ay: p00.y, bx: p11.x, by: p11.y, cx: p01.x, cy: p01.y, idx: i1 });
+              } else {
+                drawTri(p00.x, p00.y, p10.x, p10.y, p11.x, p11.y, i0);
+                drawTri(p00.x, p00.y, p11.x, p11.y, p01.x, p01.y, i1);
+              }
+            } else {
+              if (oneWayPriority) {
+                queued.push({ order: triOrder++, ax: p00.x, ay: p00.y, bx: p10.x, by: p10.y, cx: p01.x, cy: p01.y, idx: i0 });
+                queued.push({ order: triOrder++, ax: p10.x, ay: p10.y, bx: p11.x, by: p11.y, cx: p01.x, cy: p01.y, idx: i1 });
+              } else {
+                drawTri(p00.x, p00.y, p10.x, p10.y, p01.x, p01.y, i0);
+                drawTri(p10.x, p10.y, p11.x, p11.y, p01.x, p01.y, i1);
+              }
+            }
           }
         }
-      }
-    } else {
+      } else {
       const s = scale;
       const h = (s * sqrt3) / 2;
       const cols = Math.ceil((c.width - inset * 2) / s) + 3;
@@ -391,7 +416,11 @@ export function renderTriangles2DToCanvas(config: Triangles2DConfig, canvas?: HT
           const b1y = y0 + h + jy;
           const c1x = x0 - s / 2 + jx;
           const c1y = y0 + h + jy;
-          drawTri(a1x, a1y, b1x, b1y, c1x, c1y, pickIndex(t++));
+          {
+            const idx = pickIndex(t++);
+            if (oneWayPriority) queued.push({ order: triOrder++, ax: a1x, ay: a1y, bx: b1x, by: b1y, cx: c1x, cy: c1y, idx });
+            else drawTri(a1x, a1y, b1x, b1y, c1x, c1y, idx);
+          }
 
           const a2x = x0 + jx;
           const a2y = y0 + 2 * h + jy;
@@ -399,9 +428,25 @@ export function renderTriangles2DToCanvas(config: Triangles2DConfig, canvas?: HT
           const b2y = y0 + h + jy;
           const c2x = x0 - s / 2 + jx;
           const c2y = y0 + h + jy;
-          drawTri(a2x, a2y, b2x, b2y, c2x, c2y, pickIndex(t++));
+          {
+            const idx = pickIndex(t++);
+            if (oneWayPriority) queued.push({ order: triOrder++, ax: a2x, ay: a2y, bx: b2x, by: b2y, cx: c2x, cy: c2y, idx });
+            else drawTri(a2x, a2y, b2x, b2y, c2x, c2y, idx);
+          }
         }
       }
+    }
+  }
+
+  if (oneWayPriority) {
+    queued.sort((a, b) => {
+      const wa = Number(weights[a.idx] ?? 0);
+      const wb = Number(weights[b.idx] ?? 0);
+      if (wa !== wb) return wa - wb;
+      return a.order - b.order;
+    });
+    for (const t of queued) {
+      drawTri(t.ax, t.ay, t.bx, t.by, t.cx, t.cy, t.idx);
     }
   }
 

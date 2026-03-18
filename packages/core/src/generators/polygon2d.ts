@@ -244,22 +244,19 @@ export function renderPolygon2DToCanvas(config: Polygon2DConfig, canvas?: HTMLCa
   const j = clamp(config.polygons.jitter, 0, 1);
   const rotJ = ((Number(config.polygons.rotateJitterDeg) || 0) * Math.PI) / 180;
 
-  for (let i = 0; i < count; i++) {
-    const r = rMin + rng() * (rMax - rMin);
-    const cx = rng() * c.width;
-    const cy = rng() * c.height;
-    const cxJ = cx + (rng() - 0.5) * r * 2 * j;
-    const cyJ = cy + (rng() - 0.5) * r * 2 * j;
-    const theta = (rng() - 0.5) * rotJ;
+  type PolyInstance = { order: number; cx: number; cy: number; r: number; theta: number; paletteIndex: number };
+  const oneWayPriority = collisionsEnabled && direction === 'oneWay';
+  const instances: PolyInstance[] = oneWayPriority ? [] : [];
+  let order = 0;
 
-    const paletteIndex = pickIndex(i);
+  const renderAt = (cxJ: number, cyJ: number, r: number, theta: number, paletteIndex: number) => {
     const color = config.colors[paletteIndex] ?? '#ffffff';
     const path = buildPolygonPath(cxJ, cyJ, r, edges, theta);
 
     if (!collisionsEnabled) {
       drawTo(sctx, path, color);
       if (paletteIndex === Math.round(config.emission.paletteIndex)) drawEmission(gctx, cxJ, cyJ, r, color, theta);
-      continue;
+      return;
     }
 
     if (direction === 'twoWay' && shapes && mask && mctx && temp && tctx && tempGlow && tgctx) {
@@ -290,13 +287,41 @@ export function renderPolygon2DToCanvas(config: Polygon2DConfig, canvas?: HTMLCa
       gctx.globalCompositeOperation = 'source-over';
       gctx.globalAlpha = 1;
       gctx.drawImage(tempGlow, 0, 0);
-      continue;
+      return;
     }
 
     applyCarve(sctx, path);
     applyCarve(gctx, path);
     drawTo(sctx, path, color);
     if (paletteIndex === Math.round(config.emission.paletteIndex)) drawEmission(gctx, cxJ, cyJ, r, color, theta);
+  };
+
+  for (let i = 0; i < count; i++) {
+    const r = rMin + rng() * (rMax - rMin);
+    const cx = rng() * c.width;
+    const cy = rng() * c.height;
+    const cxJ = cx + (rng() - 0.5) * r * 2 * j;
+    const cyJ = cy + (rng() - 0.5) * r * 2 * j;
+    const theta = (rng() - 0.5) * rotJ;
+
+    const paletteIndex = pickIndex(i);
+    if (oneWayPriority) {
+      instances.push({ order: order++, cx: cxJ, cy: cyJ, r, theta, paletteIndex });
+    } else {
+      renderAt(cxJ, cyJ, r, theta, paletteIndex);
+    }
+  }
+
+  if (oneWayPriority) {
+    instances.sort((a, b) => {
+      const wa = Number(weights[a.paletteIndex] ?? 0);
+      const wb = Number(weights[b.paletteIndex] ?? 0);
+      if (wa !== wb) return wa - wb;
+      return a.order - b.order;
+    });
+    for (const it of instances) {
+      renderAt(it.cx, it.cy, it.r, it.theta, it.paletteIndex);
+    }
   }
 
   if (shapes) {

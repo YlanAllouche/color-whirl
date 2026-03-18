@@ -231,7 +231,7 @@ export function renderCircles2DToCanvas(config: Circles2DConfig, canvas?: HTMLCa
     target.fill();
   };
 
-  const drawShape = (cx: number, cy: number, r: number, paletteIndex: number) => {
+  const drawShape = (cx: number, cy: number, r: number, paletteIndex: number, croissantPhiOverride?: number) => {
     const color = config.colors[paletteIndex] ?? '#ffffff';
     const fillRule: CanvasFillRule | undefined = croissant.enabled ? 'evenodd' : undefined;
 
@@ -239,7 +239,9 @@ export function renderCircles2DToCanvas(config: Circles2DConfig, canvas?: HTMLCa
     if (croissant.enabled) {
       const innerScale = clamp(croissant.innerScale, 0.01, 0.99);
       const offset = clamp(croissant.offset, 0, 1);
-      const phi = ((rng() - 0.5) * croissant.angleJitterDeg * Math.PI) / 180;
+      const phi = typeof croissantPhiOverride === 'number'
+        ? croissantPhiOverride
+        : ((rng() - 0.5) * croissant.angleJitterDeg * Math.PI) / 180;
       const dx = Math.cos(phi) * r * offset;
       const dy = Math.sin(phi) * r * offset;
       path.arc(cx, cy, r, 0, Math.PI * 2);
@@ -301,6 +303,18 @@ export function renderCircles2DToCanvas(config: Circles2DConfig, canvas?: HTMLCa
   const rMin = Math.max(0.1, Number(config.circles.rMinPx) || 1);
   const rMax = Math.max(rMin, Number(config.circles.rMaxPx) || rMin);
 
+  type CircleInstance = {
+    order: number;
+    cx: number;
+    cy: number;
+    r: number;
+    paletteIndex: number;
+    croissantPhi?: number;
+  };
+  const oneWayPriority = collisionsEnabled && direction === 'oneWay';
+  const instances: CircleInstance[] = oneWayPriority ? [] : [];
+  let order = 0;
+
   if (config.circles.mode === 'grid') {
     const grid = Math.max(1, Math.round(Math.sqrt(count)));
     const gx = grid;
@@ -317,7 +331,12 @@ export function renderCircles2DToCanvas(config: Circles2DConfig, canvas?: HTMLCa
         const cy = inset + (y + 0.5) * cellH + (rng() - 0.5) * cellH * j;
         const r = rMin + rng() * (rMax - rMin);
         const paletteIndex = pickIndex(i);
-        drawShape(cx, cy, r, paletteIndex);
+        if (oneWayPriority) {
+          const phi = croissant.enabled ? ((rng() - 0.5) * croissant.angleJitterDeg * Math.PI) / 180 : undefined;
+          instances.push({ order: order++, cx, cy, r, paletteIndex, croissantPhi: phi });
+        } else {
+          drawShape(cx, cy, r, paletteIndex);
+        }
         i++;
       }
     }
@@ -330,7 +349,25 @@ export function renderCircles2DToCanvas(config: Circles2DConfig, canvas?: HTMLCa
       const cxJ = cx + (rng() - 0.5) * r * 2 * j;
       const cyJ = cy + (rng() - 0.5) * r * 2 * j;
       const paletteIndex = pickIndex(i);
-      drawShape(cxJ, cyJ, r, paletteIndex);
+      if (oneWayPriority) {
+        const phi = croissant.enabled ? ((rng() - 0.5) * croissant.angleJitterDeg * Math.PI) / 180 : undefined;
+        instances.push({ order: order++, cx: cxJ, cy: cyJ, r, paletteIndex, croissantPhi: phi });
+      } else {
+        drawShape(cxJ, cyJ, r, paletteIndex);
+      }
+    }
+  }
+
+  if (oneWayPriority) {
+    instances.sort((a, b) => {
+      const wa = Number(weights[a.paletteIndex] ?? 0);
+      const wb = Number(weights[b.paletteIndex] ?? 0);
+      if (wa !== wb) return wa - wb;
+      return a.order - b.order;
+    });
+
+    for (const it of instances) {
+      drawShape(it.cx, it.cy, it.r, it.paletteIndex, it.croissantPhi);
     }
   }
 
