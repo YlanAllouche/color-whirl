@@ -168,7 +168,8 @@
   let supportsOutlineOnly = $derived(config.type === 'spheres3d' || config.type === 'triangles3d');
   let supportsBloom = $derived(config.type !== 'hexgrid2d');
   let supportsCollisions = $derived(
-    config.type === 'circles2d' ||
+    config.type === 'popsicle' ||
+      config.type === 'circles2d' ||
       config.type === 'polygon2d' ||
       config.type === 'triangles2d' ||
       config.type === 'spheres3d' ||
@@ -262,6 +263,12 @@
 
       renderer.domElement.style.width = `${Math.max(1, Math.round(cssWidth))}px`;
       renderer.domElement.style.height = `${Math.max(1, Math.round(cssHeight))}px`;
+
+       try {
+         (scene.userData as any).__wmBeforeRender?.(renderer, scene, camera);
+       } catch {
+         // Ignore
+       }
 
       if (effective.bloom.enabled) {
         const composer = new EffectComposer(renderer);
@@ -1271,7 +1278,7 @@
            </div>
          </section>
 
-        <!-- Type -->
+      <!-- Type -->
         <section class="control-section">
           <h3>Type</h3>
           <label class="control-row">
@@ -1293,8 +1300,62 @@
             </select>
           </label>
         </section>
-        
-       <!-- Resolution Controls -->
+
+        {#if supportsCollisions}
+          <section class="control-section">
+            <h3>Collisions</h3>
+            <label class="control-row">
+              <span class="setting-title">Mode</span>
+              <select bind:value={config.collisions.mode} disabled={config.colors.length > 8}>
+                <option value="none">None</option>
+                <option value="carve">Carve</option>
+              </select>
+            </label>
+
+            {#if config.colors.length > 8}
+              <div style="font-size: 0.75rem; color: #a9a9b3; line-height: 1.2;">
+                Collision masking is disabled when the palette has more than 8 colors.
+              </div>
+            {/if}
+
+            {#if config.collisions.mode === 'carve' && config.colors.length <= 8}
+              <label class="control-row">
+                <span class="setting-title">Direction</span>
+                <select bind:value={config.collisions.carve.direction}>
+                  <option value="oneWay">One-way</option>
+                  <option value="twoWay">Two-way</option>
+                </select>
+              </label>
+              <label class="control-row slider">
+                <span class="setting-title">Margin: {Math.round(config.collisions.carve.marginPx)}px</span>
+                <input type="range" bind:value={config.collisions.carve.marginPx} min="0" max="80" step="1" />
+              </label>
+              <label class="control-row">
+                <span class="setting-title">Edge</span>
+                <select bind:value={config.collisions.carve.edge}>
+                  <option value="hard">Hard</option>
+                  <option value="soft">Soft</option>
+                </select>
+              </label>
+              <label class="control-row slider">
+                <span class="setting-title">Feather: {Math.round(config.collisions.carve.featherPx)}px</span>
+                <input
+                  type="range"
+                  bind:value={config.collisions.carve.featherPx}
+                  min="0"
+                  max="40"
+                  step="1"
+                  disabled={config.collisions.carve.edge !== 'soft'}
+                />
+              </label>
+              <div style="font-size: 0.75rem; color: #a9a9b3; line-height: 1.2;">
+                One-way priority is based on palette weights: higher weight carves lower.
+              </div>
+            {/if}
+          </section>
+        {/if}
+         
+        <!-- Resolution Controls -->
       <section class="control-section">
         <h3>Resolution</h3>
         <div class="preset-buttons">
@@ -1440,60 +1501,6 @@
             <span class="setting-title">Intensity: {config.emission.intensity.toFixed(2)}</span>
             <input type="range" bind:value={config.emission.intensity} min="0" max="20" step="0.05" disabled={!config.emission.enabled} />
           </label>
-        </section>
-      {/if}
-
-      {#if supportsCollisions}
-        <section class="control-section">
-          <h3>Collisions</h3>
-          <label class="control-row">
-            <span class="setting-title">Mode</span>
-            <select bind:value={config.collisions.mode} disabled={config.colors.length > 8}>
-              <option value="none">None</option>
-              <option value="carve">Carve</option>
-            </select>
-          </label>
-
-          {#if config.colors.length > 8}
-            <div style="font-size: 0.75rem; color: #a9a9b3; line-height: 1.2;">
-              Collision masking is disabled when the palette has more than 8 colors.
-            </div>
-          {/if}
-
-          {#if config.collisions.mode === 'carve' && config.colors.length <= 8}
-            <label class="control-row">
-              <span class="setting-title">Direction</span>
-              <select bind:value={config.collisions.carve.direction}>
-                <option value="oneWay">One-way</option>
-                <option value="twoWay">Two-way</option>
-              </select>
-            </label>
-            <label class="control-row slider">
-              <span class="setting-title">Margin: {Math.round(config.collisions.carve.marginPx)}px</span>
-              <input type="range" bind:value={config.collisions.carve.marginPx} min="0" max="80" step="1" />
-            </label>
-            <label class="control-row">
-              <span class="setting-title">Edge</span>
-              <select bind:value={config.collisions.carve.edge}>
-                <option value="hard">Hard</option>
-                <option value="soft">Soft</option>
-              </select>
-            </label>
-            <label class="control-row slider">
-              <span class="setting-title">Feather: {Math.round(config.collisions.carve.featherPx)}px</span>
-              <input
-                type="range"
-                bind:value={config.collisions.carve.featherPx}
-                min="0"
-                max="40"
-                step="1"
-                disabled={config.collisions.carve.edge !== 'soft'}
-              />
-            </label>
-            <div style="font-size: 0.75rem; color: #a9a9b3; line-height: 1.2;">
-              One-way priority is based on palette weights: higher weight carves lower.
-            </div>
-          {/if}
         </section>
       {/if}
 
