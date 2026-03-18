@@ -163,6 +163,20 @@
   // Derived values
   let aspectRatio = $derived(config.width / config.height);
 
+  let is3DType = $derived(config.type === 'popsicle' || config.type === 'spheres3d' || config.type === 'triangles3d');
+  let supportsOutlineOnly = $derived(config.type === 'spheres3d' || config.type === 'triangles3d');
+  let supportsBloom = $derived(config.type !== 'hexgrid2d');
+  let supportsEmission = $derived(
+    config.type === 'popsicle' ||
+      config.type === 'spheres3d' ||
+      config.type === 'triangles3d' ||
+      config.type === 'circles2d' ||
+      config.type === 'triangles2d'
+  );
+  let showEmissionSection = $derived(
+    supportsEmission && (config.type === 'circles2d' || config.type === 'triangles2d' ? config.bloom.enabled : true)
+  );
+
   type FallbackQuality = 'interactive' | 'final';
 
   function getFallbackPreviewSize(aspect: number, quality: FallbackQuality): {
@@ -1045,6 +1059,20 @@
   });
 
   $effect(() => {
+    // Avoid no-op toggles: emission for 2D types needs bloom; hexgrid doesn't support either.
+    if (config.type === 'circles2d' || config.type === 'triangles2d') {
+      if (config.emission.enabled && !config.bloom.enabled) {
+        config.bloom.enabled = true;
+      }
+    }
+
+    if (config.type === 'hexgrid2d') {
+      if (config.emission.enabled) config.emission.enabled = false;
+      if (config.bloom.enabled) config.bloom.enabled = false;
+    }
+  });
+
+  $effect(() => {
     if (!preview) return;
     if (config.type !== 'popsicle') return;
     preview.setMode(renderMode);
@@ -1241,51 +1269,53 @@
       <!-- Appearance -->
       <section class="control-section">
         <h3>Appearance</h3>
-        <label class="control-row">
-          <button type="button" class="setting-title" class:locked={locks.texture} onclick={() => toggleLock('texture')} title="Click to lock/unlock for randomize">Texture</button>
-          <select bind:value={config.texture}>
-            <option value="glossy">Glossy</option>
-            <option value="matte">Matte</option>
-            <option value="metallic">Metallic</option>
-            <option value="drywall">Drywall</option>
-            <option value="glass">Glass</option>
-            <option value="mirror">Mirror</option>
-            <option value="cel">Cel</option>
-          </select>
-        </label>
-
-        {#if config.texture === 'drywall'}
-          <label class="control-row slider">
-            <span class="setting-title">Grain: {config.textureParams.drywall.grainAmount.toFixed(2)}</span>
-            <input type="range" bind:value={config.textureParams.drywall.grainAmount} min="0" max="1" step="0.01" />
-          </label>
-          <label class="control-row slider">
-            <span class="setting-title">Grain Scale: {config.textureParams.drywall.grainScale.toFixed(2)}</span>
-            <input type="range" bind:value={config.textureParams.drywall.grainScale} min="0.5" max="8" step="0.05" />
-          </label>
-        {/if}
-
-        {#if config.texture === 'glass'}
+        {#if is3DType}
           <label class="control-row">
-            <span class="setting-title">Glass Style</span>
-            <select bind:value={config.textureParams.glass.style}>
-              <option value="simple">Simple</option>
-              <option value="frosted">Frosted</option>
-              <option value="thick">Thick</option>
-              <option value="stylized">Stylized</option>
+            <button type="button" class="setting-title" class:locked={locks.texture} onclick={() => toggleLock('texture')} title="Click to lock/unlock for randomize">Texture</button>
+            <select bind:value={config.texture}>
+              <option value="glossy">Glossy</option>
+              <option value="matte">Matte</option>
+              <option value="metallic">Metallic</option>
+              <option value="drywall">Drywall</option>
+              <option value="glass">Glass</option>
+              <option value="mirror">Mirror</option>
+              <option value="cel">Cel</option>
             </select>
           </label>
-        {/if}
 
-        {#if config.texture === 'cel'}
-          <label class="control-row slider">
-            <span class="setting-title">Bands: {Math.round(config.textureParams.cel.bands)}</span>
-            <input type="range" bind:value={config.textureParams.cel.bands} min="2" max="8" step="1" />
-          </label>
-          <label class="control-row checkbox">
-            <input type="checkbox" bind:checked={config.textureParams.cel.halftone} />
-            <span class="setting-title">Halftone</span>
-          </label>
+          {#if config.texture === 'drywall'}
+            <label class="control-row slider">
+              <span class="setting-title">Grain: {config.textureParams.drywall.grainAmount.toFixed(2)}</span>
+              <input type="range" bind:value={config.textureParams.drywall.grainAmount} min="0" max="1" step="0.01" />
+            </label>
+            <label class="control-row slider">
+              <span class="setting-title">Grain Scale: {config.textureParams.drywall.grainScale.toFixed(2)}</span>
+              <input type="range" bind:value={config.textureParams.drywall.grainScale} min="0.5" max="8" step="0.05" />
+            </label>
+          {/if}
+
+          {#if config.texture === 'glass'}
+            <label class="control-row">
+              <span class="setting-title">Glass Style</span>
+              <select bind:value={config.textureParams.glass.style}>
+                <option value="simple">Simple</option>
+                <option value="frosted">Frosted</option>
+                <option value="thick">Thick</option>
+                <option value="stylized">Stylized</option>
+              </select>
+            </label>
+          {/if}
+
+          {#if config.texture === 'cel'}
+            <label class="control-row slider">
+              <span class="setting-title">Bands: {Math.round(config.textureParams.cel.bands)}</span>
+              <input type="range" bind:value={config.textureParams.cel.bands} min="2" max="8" step="1" />
+            </label>
+            <label class="control-row checkbox">
+              <input type="checkbox" bind:checked={config.textureParams.cel.halftone} />
+              <span class="setting-title">Halftone</span>
+            </label>
+          {/if}
         {/if}
          <label class="control-row">
            <button type="button" class="setting-title" class:locked={locks.backgroundColor} onclick={() => toggleLock('backgroundColor')} title="Click to lock/unlock for randomize">Background</button>
@@ -1294,29 +1324,32 @@
        </section>
 
       <!-- Emission -->
-      <section class="control-section">
-        <h3>Emission</h3>
-        <label class="control-row checkbox">
-          <input type="checkbox" bind:checked={config.emission.enabled} />
-          <span class="setting-title">Enable</span>
-        </label>
+      {#if showEmissionSection}
+        <section class="control-section">
+          <h3>Emission</h3>
+          <label class="control-row checkbox">
+            <input type="checkbox" bind:checked={config.emission.enabled} />
+            <span class="setting-title">Enable</span>
+          </label>
 
-        <label class="control-row">
-          <span class="setting-title">Palette Index</span>
-          <select bind:value={config.emission.paletteIndex} disabled={!config.emission.enabled}>
-            {#each config.colors as c, i}
-              <option value={i}>{i}: {c}</option>
-            {/each}
-          </select>
-        </label>
+          <label class="control-row">
+            <span class="setting-title">Palette Index</span>
+            <select bind:value={config.emission.paletteIndex} disabled={!config.emission.enabled}>
+              {#each config.colors as c, i}
+                <option value={i}>{i}: {c}</option>
+              {/each}
+            </select>
+          </label>
 
-        <label class="control-row slider">
-          <span class="setting-title">Intensity: {config.emission.intensity.toFixed(2)}</span>
-          <input type="range" bind:value={config.emission.intensity} min="0" max="20" step="0.05" disabled={!config.emission.enabled} />
-        </label>
-      </section>
+          <label class="control-row slider">
+            <span class="setting-title">Intensity: {config.emission.intensity.toFixed(2)}</span>
+            <input type="range" bind:value={config.emission.intensity} min="0" max="20" step="0.05" disabled={!config.emission.enabled} />
+          </label>
+        </section>
+      {/if}
 
       <!-- Edges -->
+      {#if config.type === 'popsicle'}
       <section class="control-section">
         <h3>Edges</h3>
 
@@ -1424,6 +1457,27 @@
           </label>
         </details>
       </section>
+      {:else if supportsOutlineOnly}
+        <section class="control-section">
+          <h3>Outline</h3>
+          <label class="control-row checkbox">
+            <input type="checkbox" bind:checked={config.edges.outline.enabled} />
+            <span class="setting-title">Enable</span>
+          </label>
+          <label class="control-row">
+            <span class="setting-title">Color</span>
+            <input type="color" bind:value={config.edges.outline.color} disabled={!config.edges.outline.enabled} />
+          </label>
+          <label class="control-row slider">
+            <span class="setting-title">Thickness: {config.edges.outline.thickness.toFixed(3)}</span>
+            <input type="range" bind:value={config.edges.outline.thickness} min="0" max="0.12" step="0.001" disabled={!config.edges.outline.enabled} />
+          </label>
+          <label class="control-row slider">
+            <span class="setting-title">Opacity: {config.edges.outline.opacity.toFixed(2)}</span>
+            <input type="range" bind:value={config.edges.outline.opacity} min="0" max="1" step="0.01" disabled={!config.edges.outline.enabled} />
+          </label>
+        </section>
+      {/if}
        
        {#if config.type === 'popsicle'}
         <!-- Stick Settings -->
@@ -2038,23 +2092,26 @@
         </section>
        {/if}
        
-      <!-- Camera View -->
-      <section class="control-section">
-        <h3>Camera View</h3>
-        <label class="control-row slider">
-          <button type="button" class="setting-title" class:locked={locks.cameraAzimuth} onclick={() => toggleLock('cameraAzimuth')} title="Click to lock/unlock for randomize">Azimuth: {config.camera.azimuth}°</button>
-          <input type="range" bind:value={config.camera.azimuth} min="0" max="360" step="5" />
-        </label>
-        <label class="control-row slider">
-          <button type="button" class="setting-title" class:locked={locks.cameraElevation} onclick={() => toggleLock('cameraElevation')} title="Click to lock/unlock for randomize">Elevation: {config.camera.elevation}°</button>
-          <input type="range" bind:value={config.camera.elevation} min="-80" max="80" step="5" />
-        </label>
-        <label class="control-row slider">
-          <button type="button" class="setting-title" class:locked={locks.cameraDistance} onclick={() => toggleLock('cameraDistance')} title="Click to lock/unlock for randomize">Distance: {config.camera.distance.toFixed(1)}</button>
-          <input type="range" bind:value={config.camera.distance} min="5" max="50" step="0.1" />
-        </label>
-      </section>
+      {#if is3DType}
+        <!-- Camera View -->
+        <section class="control-section">
+          <h3>Camera View</h3>
+          <label class="control-row slider">
+            <button type="button" class="setting-title" class:locked={locks.cameraAzimuth} onclick={() => toggleLock('cameraAzimuth')} title="Click to lock/unlock for randomize">Azimuth: {config.camera.azimuth}°</button>
+            <input type="range" bind:value={config.camera.azimuth} min="0" max="360" step="5" />
+          </label>
+          <label class="control-row slider">
+            <button type="button" class="setting-title" class:locked={locks.cameraElevation} onclick={() => toggleLock('cameraElevation')} title="Click to lock/unlock for randomize">Elevation: {config.camera.elevation}°</button>
+            <input type="range" bind:value={config.camera.elevation} min="-80" max="80" step="5" />
+          </label>
+          <label class="control-row slider">
+            <button type="button" class="setting-title" class:locked={locks.cameraDistance} onclick={() => toggleLock('cameraDistance')} title="Click to lock/unlock for randomize">Distance: {config.camera.distance.toFixed(1)}</button>
+            <input type="range" bind:value={config.camera.distance} min="5" max="50" step="0.1" />
+          </label>
+        </section>
+      {/if}
       
+      {#if is3DType}
       <!-- Lighting -->
       <section class="control-section">
         <h3>Lighting</h3>
@@ -2096,52 +2153,58 @@
           </label>
         {/if}
       </section>
+      {/if}
 
       <!-- Render -->
       <section class="control-section">
         <h3>Render</h3>
 
-        <label class="control-row slider">
-          <span class="setting-title">Exposure: {config.rendering.exposure.toFixed(2)}</span>
-          <input type="range" bind:value={config.rendering.exposure} min="0.3" max="2.5" step="0.01" />
-        </label>
-
-        <label class="control-row">
-          <span class="setting-title">Tone Mapping</span>
-          <select bind:value={config.rendering.toneMapping}>
-            <option value="aces">ACES</option>
-            <option value="none">None</option>
-          </select>
-        </label>
-
-        <label class="control-row">
-          <span class="setting-title">Mode</span>
-          <select bind:value={renderMode} title="Raster is instant; Path traced refines progressively">
-            <option value="raster">Raster</option>
-            <option value="path" disabled={config.type !== 'popsicle' || config.texture === 'cel' || config.edges.outline.enabled || config.bloom.enabled}>Path traced</option>
-          </select>
-        </label>
-
-        <details class="control-details">
-          <summary class="control-details-summary">Bloom</summary>
-          <label class="control-row checkbox">
-            <input type="checkbox" bind:checked={config.bloom.enabled} />
-            <span class="setting-title">Enable bloom</span>
-          </label>
+        {#if is3DType}
           <label class="control-row slider">
-            <span class="setting-title">Strength: {config.bloom.strength.toFixed(2)}</span>
-            <input type="range" bind:value={config.bloom.strength} min="0" max="3" step="0.01" disabled={!config.bloom.enabled} />
+            <span class="setting-title">Exposure: {config.rendering.exposure.toFixed(2)}</span>
+            <input type="range" bind:value={config.rendering.exposure} min="0.3" max="2.5" step="0.01" />
           </label>
-          <label class="control-row slider">
-            <span class="setting-title">Radius: {config.bloom.radius.toFixed(2)}</span>
-            <input type="range" bind:value={config.bloom.radius} min="0" max="1" step="0.01" disabled={!config.bloom.enabled} />
-          </label>
-          <label class="control-row slider">
-            <span class="setting-title">Threshold: {config.bloom.threshold.toFixed(2)}</span>
-            <input type="range" bind:value={config.bloom.threshold} min="0" max="1" step="0.01" disabled={!config.bloom.enabled} />
-          </label>
-        </details>
 
+          <label class="control-row">
+            <span class="setting-title">Tone Mapping</span>
+            <select bind:value={config.rendering.toneMapping}>
+              <option value="aces">ACES</option>
+              <option value="none">None</option>
+            </select>
+          </label>
+
+          <label class="control-row">
+            <span class="setting-title">Mode</span>
+            <select bind:value={renderMode} title="Raster is instant; Path traced refines progressively">
+              <option value="raster">Raster</option>
+              <option value="path" disabled={config.type !== 'popsicle' || config.texture === 'cel' || config.edges.outline.enabled || config.bloom.enabled}>Path traced</option>
+            </select>
+          </label>
+        {/if}
+
+        {#if supportsBloom}
+          <details class="control-details">
+            <summary class="control-details-summary">Bloom</summary>
+            <label class="control-row checkbox">
+              <input type="checkbox" bind:checked={config.bloom.enabled} />
+              <span class="setting-title">Enable bloom</span>
+            </label>
+            <label class="control-row slider">
+              <span class="setting-title">Strength: {config.bloom.strength.toFixed(2)}</span>
+              <input type="range" bind:value={config.bloom.strength} min="0" max="3" step="0.01" disabled={!config.bloom.enabled} />
+            </label>
+            <label class="control-row slider">
+              <span class="setting-title">Radius: {config.bloom.radius.toFixed(2)}</span>
+              <input type="range" bind:value={config.bloom.radius} min="0" max="1" step="0.01" disabled={!config.bloom.enabled} />
+            </label>
+            <label class="control-row slider">
+              <span class="setting-title">Threshold: {config.bloom.threshold.toFixed(2)}</span>
+              <input type="range" bind:value={config.bloom.threshold} min="0" max="1" step="0.01" disabled={!config.bloom.enabled} />
+            </label>
+          </details>
+        {/if}
+
+        {#if is3DType}
         <div style="border-top: 1px solid #333; margin-top: 0.75rem; padding-top: 0.75rem;">
           <label class="control-row checkbox">
             <input type="checkbox" bind:checked={config.environment.enabled} />
@@ -2223,6 +2286,8 @@
             </label>
           </details>
         </div>
+
+        {/if}
       </section>
 
       <section class="control-section">
