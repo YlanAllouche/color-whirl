@@ -12,6 +12,7 @@
     RESOLUTION_PRESETS,
     generateRandomConfigNoPresets,
     generateRandomConfigNoPresetsFromSeed,
+    normalizeWallpaperConfig,
     encodeAppStateToBase64Url,
     decodeAppStateFromBase64Url,
     type WallpaperAppStateV1,
@@ -380,32 +381,33 @@
   function cloneDefaultConfig(): WallpaperConfig {
       return {
          ...DEFAULT_CONFIG,
-         colors: [...DEFAULT_CONFIG.colors],
-         textureParams: {
-           drywall: { ...DEFAULT_CONFIG.textureParams.drywall },
-           glass: { ...DEFAULT_CONFIG.textureParams.glass },
-           cel: { ...DEFAULT_CONFIG.textureParams.cel }
-         },
-         edges: {
-           tint: { ...DEFAULT_CONFIG.edges.tint },
-           material: { ...DEFAULT_CONFIG.edges.material },
-           wear: { ...DEFAULT_CONFIG.edges.wear },
-           rimLight: { ...DEFAULT_CONFIG.edges.rimLight },
-           outline: { ...DEFAULT_CONFIG.edges.outline }
-         },
-         emission: { ...DEFAULT_CONFIG.emission },
-         bloom: { ...DEFAULT_CONFIG.bloom },
-         lighting: {
-           ...DEFAULT_CONFIG.lighting,
-           position: { ...DEFAULT_CONFIG.lighting.position }
-         },
-         camera: { ...DEFAULT_CONFIG.camera },
-        environment: { ...DEFAULT_CONFIG.environment },
-        shadows: { ...DEFAULT_CONFIG.shadows },
-        rendering: { ...DEFAULT_CONFIG.rendering },
-        geometry: { ...DEFAULT_CONFIG.geometry }
-      };
-   }
+          colors: [...DEFAULT_CONFIG.colors],
+          textureParams: {
+            drywall: { ...DEFAULT_CONFIG.textureParams.drywall },
+            glass: { ...DEFAULT_CONFIG.textureParams.glass },
+            cel: { ...DEFAULT_CONFIG.textureParams.cel }
+          },
+          edges: {
+            tint: { ...DEFAULT_CONFIG.edges.tint },
+            material: { ...DEFAULT_CONFIG.edges.material },
+            wear: { ...DEFAULT_CONFIG.edges.wear },
+            rimLight: { ...DEFAULT_CONFIG.edges.rimLight },
+            outline: { ...DEFAULT_CONFIG.edges.outline }
+          },
+          emission: { ...DEFAULT_CONFIG.emission },
+          bloom: { ...DEFAULT_CONFIG.bloom },
+          collisions: { ...DEFAULT_CONFIG.collisions, carve: { ...DEFAULT_CONFIG.collisions.carve } },
+          lighting: {
+            ...DEFAULT_CONFIG.lighting,
+            position: { ...DEFAULT_CONFIG.lighting.position }
+          },
+          camera: { ...DEFAULT_CONFIG.camera },
+         environment: { ...DEFAULT_CONFIG.environment },
+         shadows: { ...DEFAULT_CONFIG.shadows },
+         rendering: { ...DEFAULT_CONFIG.rendering },
+         geometry: { ...DEFAULT_CONFIG.geometry }
+       };
+    }
 
   function mergeWithLocks(next: WallpaperConfig): WallpaperConfig {
     const current = config;
@@ -426,6 +428,7 @@
       },
       emission: { ...next.emission },
       bloom: { ...next.bloom },
+      collisions: { ...next.collisions, carve: { ...next.collisions.carve } },
       lighting: {
         ...next.lighting,
         position: { ...next.lighting.position }
@@ -500,6 +503,7 @@
           },
           emission: { ...src.emission },
           bloom: { ...src.bloom },
+          collisions: { ...src.collisions, carve: { ...src.collisions.carve } },
           lighting: {
             ...src.lighting,
             position: { ...src.lighting.position }
@@ -528,6 +532,7 @@
           },
           emission: { ...src.emission },
           bloom: { ...src.bloom },
+          collisions: { ...src.collisions, carve: { ...src.collisions.carve } },
           lighting: {
             ...src.lighting,
             position: { ...src.lighting.position }
@@ -557,6 +562,7 @@
           },
           emission: { ...src.emission },
           bloom: { ...src.bloom },
+          collisions: { ...src.collisions, carve: { ...src.collisions.carve } },
           lighting: {
             ...src.lighting,
             position: { ...src.lighting.position }
@@ -591,6 +597,7 @@
           },
           emission: { ...src.emission },
           bloom: { ...src.bloom },
+          collisions: { ...src.collisions, carve: { ...src.collisions.carve } },
           lighting: {
             ...src.lighting,
             position: { ...src.lighting.position }
@@ -625,6 +632,7 @@
           },
           emission: { ...src.emission },
           bloom: { ...src.bloom },
+          collisions: { ...src.collisions, carve: { ...src.collisions.carve } },
           lighting: {
             ...src.lighting,
             position: { ...src.lighting.position }
@@ -654,6 +662,7 @@
           },
           emission: { ...src.emission },
           bloom: { ...src.bloom },
+          collisions: { ...src.collisions, carve: { ...src.collisions.carve } },
           lighting: {
             ...src.lighting,
             position: { ...src.lighting.position }
@@ -702,6 +711,7 @@
     };
     next.emission = { ...current.emission };
     next.bloom = { ...current.bloom };
+    next.collisions = { ...current.collisions, carve: { ...current.collisions.carve } };
     next.lighting = { ...current.lighting, position: { ...current.lighting.position } };
     next.camera = { ...current.camera };
     next.environment = { ...current.environment };
@@ -918,6 +928,11 @@
     void c.bloom.strength;
     void c.bloom.radius;
     void c.bloom.threshold;
+    void c.collisions.mode;
+    void c.collisions.carve.direction;
+    void c.collisions.carve.marginPx;
+    void c.collisions.carve.edge;
+    void c.collisions.carve.featherPx;
     if (c.type === 'popsicle') {
       void c.stickCount;
       void c.stickOverhang;
@@ -1088,7 +1103,7 @@
         const cfg = sp.get('cfg');
         if (cfg) {
           const state = decodeAppStateFromBase64Url(cfg);
-          config = state.c;
+          config = normalizeWallpaperConfig(state.c as any);
           exportFormat = state.f;
           renderMode = state.m;
         } else {

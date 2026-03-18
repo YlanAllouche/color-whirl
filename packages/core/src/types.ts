@@ -90,6 +90,22 @@ export interface BloomConfig {
   threshold: number;
 }
 
+export type CollisionsMode = 'none' | 'carve';
+export type CollisionsCarveDirection = 'oneWay' | 'twoWay';
+export type CollisionsCarveEdge = 'hard' | 'soft';
+
+export interface CollisionsCarveConfig {
+  direction: CollisionsCarveDirection;
+  marginPx: number;
+  edge: CollisionsCarveEdge;
+  featherPx: number;
+}
+
+export interface CollisionsConfig {
+  mode: CollisionsMode;
+  carve: CollisionsCarveConfig;
+}
+
 export interface CameraConfig {
   /** Distance from origin in scene units */
   distance: number;
@@ -155,6 +171,7 @@ export interface BaseWallpaperConfig {
   edges: EdgesConfig;
   emission: EmissionConfig;
   bloom: BloomConfig;
+  collisions: CollisionsConfig;
   lighting: LightingConfig;
   camera: CameraConfig;
   environment: EnvironmentConfig;
@@ -393,6 +410,15 @@ export const DEFAULT_POPSICLE_CONFIG: PopsicleConfig = {
     radius: 0.35,
     threshold: 0.85
   },
+  collisions: {
+    mode: 'none',
+    carve: {
+      direction: 'oneWay',
+      marginPx: 0,
+      edge: 'hard',
+      featherPx: 0
+    }
+  },
   stickCount: 12,
   stickOverhang: 30,
   rotationCenterOffsetX: 0,
@@ -533,6 +559,57 @@ export const DEFAULT_CONFIG_BY_TYPE: Record<WallpaperType, WallpaperConfig> = {
   triangles3d: DEFAULT_TRIANGLES3D_CONFIG,
   hexgrid2d: DEFAULT_HEXGRID2D_CONFIG
 };
+
+function isPlainObject(value: unknown): value is Record<string, any> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function cloneJson<T>(value: T): T {
+  // Wallpaper configs are plain JSON-like data.
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function deepMerge(base: any, patch: any): any {
+  if (Array.isArray(base)) {
+    return Array.isArray(patch) ? patch.slice() : base.slice();
+  }
+
+  if (isPlainObject(base)) {
+    const out: Record<string, any> = {};
+    const patchObj = isPlainObject(patch) ? patch : {};
+    const keys = new Set([...Object.keys(base), ...Object.keys(patchObj)]);
+    for (const key of keys) {
+      out[key] = deepMerge(base[key], patchObj[key]);
+    }
+    return out;
+  }
+
+  return patch == null ? base : patch;
+}
+
+export function normalizeWallpaperConfig(input: any): WallpaperConfig {
+  const rawType = typeof input?.type === 'string' ? String(input.type) : 'popsicle';
+  const type = (rawType in DEFAULT_CONFIG_BY_TYPE ? rawType : 'popsicle') as WallpaperType;
+
+  const base = cloneJson(DEFAULT_CONFIG_BY_TYPE[type]);
+  const merged = deepMerge(base, input ?? {});
+  merged.type = type;
+
+  // Light validation for new fields (keep back-compat with missing/invalid values).
+  const cm = merged.collisions?.mode;
+  if (cm !== 'none' && cm !== 'carve') merged.collisions.mode = 'none';
+
+  const dir = merged.collisions?.carve?.direction;
+  if (dir !== 'oneWay' && dir !== 'twoWay') merged.collisions.carve.direction = 'oneWay';
+
+  const edge = merged.collisions?.carve?.edge;
+  if (edge !== 'hard' && edge !== 'soft') merged.collisions.carve.edge = 'hard';
+
+  if (!Number.isFinite(Number(merged.collisions?.carve?.marginPx))) merged.collisions.carve.marginPx = 0;
+  if (!Number.isFinite(Number(merged.collisions?.carve?.featherPx))) merged.collisions.carve.featherPx = 0;
+
+  return merged as WallpaperConfig;
+}
 
 /**
  * Generate a random value using a weighted normal distribution.
@@ -737,6 +814,7 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
     },
     emission: { ...DEFAULT_POPSICLE_CONFIG.emission },
     bloom: { ...DEFAULT_POPSICLE_CONFIG.bloom },
+    collisions: { ...DEFAULT_POPSICLE_CONFIG.collisions, carve: { ...DEFAULT_POPSICLE_CONFIG.collisions.carve } },
     lighting: {
       enabled: rng() > 0.2,
       intensity: randomWeighted(rng, 0.5, 3, 1.5),

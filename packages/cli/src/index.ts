@@ -10,6 +10,7 @@ import {
   TextureType,
   type WallpaperType,
   decodeAppStateFromBase64Url,
+  normalizeWallpaperConfig,
   type WallpaperAppStateV1,
   type ExportFormat
 } from '@wallpaper-maker/core';
@@ -257,7 +258,7 @@ function clamp(n: number, min: number, max: number): number {
 function buildConfigAndFormat(options: any, command: Command): { config: WallpaperConfig; format: ExportFormat } {
   if (options.cfg) {
     const state = decodeAppStateFromBase64Url(String(options.cfg)) as WallpaperAppStateV1;
-    const cfg = state.c;
+    const cfg = normalizeWallpaperConfig(state.c as any);
     const fmt = (options.format ?? state.f ?? 'png') as ExportFormat;
     return { config: cfg, format: fmt };
   }
