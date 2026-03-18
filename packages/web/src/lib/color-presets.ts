@@ -201,6 +201,27 @@ const GRUVBOX_PRESETS: ColorPreset[] = [
   }
 ];
 
+const DRACULA_PRESETS: ColorPreset[] = [
+  {
+    id: 'dracula-dracula',
+    label: 'Dracula',
+    group: 'Dracula',
+    // Accents (canonical).
+    colors: ['#ff5555', '#ffb86c', '#f1fa8c', '#50fa7b', '#8be9fd', '#bd93f9', '#ff79c6', '#6272a4'],
+    backgroundColor: '#282a36',
+    source: 'https://github.com/dracula/dracula-theme'
+  },
+  {
+    id: 'dracula-alucard',
+    label: 'Alucard',
+    group: 'Dracula',
+    // Light variant name commonly used for the inverse of Dracula.
+    colors: ['#ff5555', '#ffb86c', '#f1fa8c', '#50fa7b', '#8be9fd', '#bd93f9', '#ff79c6', '#6272a4'],
+    backgroundColor: '#f8f8f2',
+    source: 'https://github.com/dracula/dracula-theme'
+  }
+];
+
 const CATPPUCCIN_PRESETS: ColorPreset[] = [
   {
     id: 'catppuccin-latte',
@@ -334,6 +355,7 @@ const COLORHUNT_PRESETS: ColorPreset[] = COLORHUNT_CODES.map((code, i) => {
 export const COLOR_PRESETS: ColorPreset[] = [
   ...CURATED_PRESETS,
   ...SOLARIZED_PRESETS,
+  ...DRACULA_PRESETS,
   ...CATPPUCCIN_PRESETS,
   ...GRUVBOX_PRESETS,
   ...COLORHUNT_PRESETS
@@ -342,6 +364,7 @@ export const COLOR_PRESETS: ColorPreset[] = [
 export const COLOR_PRESET_GROUPS: string[] = [
   'Curated',
   'Solarized',
+  'Dracula',
   'Catppuccin',
   'Gruvbox',
   'ColorHunt Popular'

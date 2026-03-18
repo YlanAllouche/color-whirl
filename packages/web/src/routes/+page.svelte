@@ -209,39 +209,59 @@
     return { previewWidth, previewHeight, cssWidth, cssHeight };
   }
 
+  function disposeFallback3DResources(res: {
+    renderer: THREE.WebGLRenderer | null;
+    composer: EffectComposer | null;
+    scene: THREE.Scene | null;
+  }) {
+    if (res.composer) {
+      try {
+        res.composer.dispose();
+      } catch {
+        // Ignore
+      }
+    }
+
+    if (res.scene) {
+      try {
+        (res.scene.userData as any).__wmDisposeCollisionMasking?.();
+        (res.scene.userData as any).__wmDisposeProceduralEnvironment?.();
+      } catch {
+        // Ignore
+      }
+      try {
+        res.scene.traverse((obj) => {
+          const mesh = obj as any;
+          if (mesh.geometry?.dispose) mesh.geometry.dispose();
+          if (mesh.material) {
+            if (Array.isArray(mesh.material)) mesh.material.forEach((m: any) => m?.dispose?.());
+            else mesh.material?.dispose?.();
+          }
+        });
+      } catch {
+        // Ignore
+      }
+    }
+
+    if (res.renderer) {
+      try {
+        (res.renderer as any).forceContextLoss?.();
+      } catch {
+        // Ignore
+      }
+      try {
+        res.renderer.dispose();
+      } catch {
+        // Ignore
+      }
+    }
+  }
+
   function disposeFallback3D() {
-    if (fallbackComposer) {
-      fallbackComposer.dispose();
-      fallbackComposer = null;
-    }
-
-    if (fallbackScene) {
-      try {
-        (fallbackScene.userData as any).__wmDisposeCollisionMasking?.();
-        (fallbackScene.userData as any).__wmDisposeProceduralEnvironment?.();
-      } catch {
-        // Ignore
-      }
-      fallbackScene.traverse((obj) => {
-        const mesh = obj as any;
-        if (mesh.geometry?.dispose) mesh.geometry.dispose();
-        if (mesh.material) {
-          if (Array.isArray(mesh.material)) mesh.material.forEach((m: any) => m?.dispose?.());
-          else mesh.material?.dispose?.();
-        }
-      });
-      fallbackScene = null;
-    }
-
-    if (fallbackRenderer) {
-      try {
-        (fallbackRenderer as any).forceContextLoss?.();
-      } catch {
-        // Ignore
-      }
-      fallbackRenderer.dispose();
-      fallbackRenderer = null;
-    }
+    disposeFallback3DResources({ renderer: fallbackRenderer, composer: fallbackComposer, scene: fallbackScene });
+    fallbackComposer = null;
+    fallbackScene = null;
+    fallbackRenderer = null;
   }
 
   function renderNonPopsicleOnce(quality: FallbackQuality) {
@@ -250,50 +270,70 @@
     const aspect = config.width / config.height;
     const { previewWidth, previewHeight, cssWidth, cssHeight } = getFallbackPreviewSize(aspect, quality);
 
-    const effective: WallpaperConfig = { ...config, width: previewWidth, height: previewHeight } as any;
+    let effective: WallpaperConfig = { ...config, width: previewWidth, height: previewHeight } as any;
+
+    // 3D collision masking is expensive; keep interactive renders snappy by previewing without collisions.
+    if (
+      quality === 'interactive' &&
+      effective.collisions?.mode === 'carve' &&
+      (effective.type === 'spheres3d' || effective.type === 'triangles3d')
+    ) {
+      effective = {
+        ...(effective as any),
+        collisions: { ...effective.collisions, mode: 'none', carve: { ...effective.collisions.carve } }
+      } as any;
+    }
 
     if (effective.type === 'spheres3d' || effective.type === 'triangles3d') {
-      disposeFallback3D();
       fallbackCanvas = null;
 
-      const { scene, camera, renderer } = createWallpaperScene(effective, {
-        preserveDrawingBuffer: true,
-        pixelRatio: 1
-      });
+      const prev = { renderer: fallbackRenderer, composer: fallbackComposer, scene: fallbackScene };
 
-      renderer.domElement.style.width = `${Math.max(1, Math.round(cssWidth))}px`;
-      renderer.domElement.style.height = `${Math.max(1, Math.round(cssHeight))}px`;
+      try {
+        const { scene, camera, renderer } = createWallpaperScene(effective, {
+          preserveDrawingBuffer: true,
+          pixelRatio: 1
+        });
 
-       try {
-         (scene.userData as any).__wmBeforeRender?.(renderer, scene, camera);
-       } catch {
-         // Ignore
-       }
+        renderer.domElement.style.width = `${Math.max(1, Math.round(cssWidth))}px`;
+        renderer.domElement.style.height = `${Math.max(1, Math.round(cssHeight))}px`;
 
-      if (effective.bloom.enabled) {
-        const composer = new EffectComposer(renderer);
-        composer.setSize(previewWidth, previewHeight);
-        composer.addPass(new RenderPass(scene, camera as any));
-        const bloom = new UnrealBloomPass(
-          new THREE.Vector2(previewWidth, previewHeight),
-          effective.bloom.strength,
-          effective.bloom.radius,
-          effective.bloom.threshold
-        );
-        composer.addPass(bloom);
-        composer.render();
+        try {
+          (scene.userData as any).__wmBeforeRender?.(renderer, scene, camera);
+        } catch {
+          // Ignore
+        }
+
+        let composer: EffectComposer | null = null;
+        if (effective.bloom.enabled) {
+          composer = new EffectComposer(renderer);
+          composer.setSize(previewWidth, previewHeight);
+          composer.addPass(new RenderPass(scene, camera as any));
+          const bloom = new UnrealBloomPass(
+            new THREE.Vector2(previewWidth, previewHeight),
+            effective.bloom.strength,
+            effective.bloom.radius,
+            effective.bloom.threshold
+          );
+          composer.addPass(bloom);
+          composer.render();
+        } else {
+          renderer.render(scene, camera);
+        }
+
+        const next = renderer.domElement;
+        if (!next.parentElement) {
+          canvasContainer.innerHTML = '';
+          canvasContainer.appendChild(next);
+        }
+
+        fallbackRenderer = renderer;
+        fallbackScene = scene;
         fallbackComposer = composer;
-      } else {
-        renderer.render(scene, camera);
-      }
 
-      fallbackRenderer = renderer;
-      fallbackScene = scene;
-
-      const next = renderer.domElement;
-      if (!next.parentElement) {
-        canvasContainer.innerHTML = '';
-        canvasContainer.appendChild(next);
+        disposeFallback3DResources(prev);
+      } catch (err) {
+        console.error('3D preview render failed:', err);
       }
       return;
     }
@@ -315,7 +355,15 @@
     if (renderRaf) cancelAnimationFrame(renderRaf);
     renderRaf = requestAnimationFrame(() => {
       if (config.type === 'popsicle') {
-        preview?.renderOnce(config as PopsicleConfig, 'interactive');
+        if (config.collisions.mode === 'carve' && config.colors.length <= 8) {
+          const c = {
+            ...(config as any),
+            collisions: { ...config.collisions, mode: 'none', carve: { ...config.collisions.carve } }
+          } as PopsicleConfig;
+          preview?.renderOnce(c, 'interactive');
+        } else {
+          preview?.renderOnce(config as PopsicleConfig, 'interactive');
+        }
       } else {
         renderNonPopsicleOnce('interactive');
       }
@@ -1249,34 +1297,18 @@
     </div>
     
     <div class="sidebar-content">
-      <!-- Export Section -->
-      <section class="control-section">
-        <h3>Export</h3>
-        <div class="export-controls">
-          <select bind:value={exportFormat}>
-            <option value="png">PNG</option>
-            <option value="jpg">JPG</option>
-            <option value="webp">WebP</option>
-            <option value="svg">SVG</option>
-          </select>
-          <button onclick={handleExport} disabled={isExporting}>
-            {isExporting ? 'Exporting...' : 'Export'}
-          </button>
-        </div>
-      </section>
-      
         <!-- Random Config -->
          <section class="control-section">
            <h3>Randomize</h3>
            <div class="randomize-buttons">
              <button type="button" onclick={generateRandomGeneratedColors} title="Randomize all settings, generate a new non-preset color theme">
-               Randomize
-             </button>
-             <button type="button" onclick={generateRandomIncludingType} title="Randomize all settings and generator type (keeps resolution/geometry quality)">
-               Randomize (incl type)
-             </button>
-           </div>
-         </section>
+                current
+              </button>
+              <button type="button" onclick={generateRandomIncludingType} title="Randomize all settings and generator type (keeps resolution/geometry quality)">
+                all
+              </button>
+            </div>
+          </section>
 
       <!-- Type -->
         <section class="control-section">
@@ -1369,29 +1401,7 @@
             {/if}
           </section>
         {/if}
-         
-        <!-- Resolution Controls -->
-      <section class="control-section">
-        <h3>Resolution</h3>
-        <div class="preset-buttons">
-          {#each Object.keys(RESOLUTION_PRESETS) as preset}
-            <button onclick={() => applyResolutionPreset(preset as keyof typeof RESOLUTION_PRESETS)}>
-              {preset}
-            </button>
-          {/each}
-        </div>
-        <div class="input-row">
-          <label>
-            <span>W</span>
-            <input type="number" bind:value={config.width} min="100" max="8000" />
-          </label>
-          <label>
-            <span>H</span>
-            <input type="number" bind:value={config.height} min="100" max="8000" />
-          </label>
-        </div>
-      </section>
-      
+          
       <!-- Colors Section -->
       <section class="control-section">
         <h3>
@@ -2562,6 +2572,44 @@
         <div class="cli-controls">
           <textarea class="cli-text" readonly rows="4">{cliCommand}</textarea>
           <button class="cli-copy" onclick={copyCliCommand}>Copy</button>
+        </div>
+      </section>
+
+      <!-- Resolution Controls -->
+      <section class="control-section">
+        <h3>Resolution</h3>
+        <div class="preset-buttons">
+          {#each Object.keys(RESOLUTION_PRESETS) as preset}
+            <button onclick={() => applyResolutionPreset(preset as keyof typeof RESOLUTION_PRESETS)}>
+              {preset}
+            </button>
+          {/each}
+        </div>
+        <div class="input-row">
+          <label>
+            <span>W</span>
+            <input type="number" bind:value={config.width} min="100" max="8000" />
+          </label>
+          <label>
+            <span>H</span>
+            <input type="number" bind:value={config.height} min="100" max="8000" />
+          </label>
+        </div>
+      </section>
+
+      <!-- Export Section -->
+      <section class="control-section">
+        <h3>Export</h3>
+        <div class="export-controls">
+          <select bind:value={exportFormat}>
+            <option value="png">PNG</option>
+            <option value="jpg">JPG</option>
+            <option value="webp">WebP</option>
+            <option value="svg">SVG</option>
+          </select>
+          <button onclick={handleExport} disabled={isExporting}>
+            {isExporting ? 'Exporting...' : 'Export'}
+          </button>
         </div>
       </section>
     </div>
