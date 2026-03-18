@@ -446,10 +446,7 @@
     merged.width = current.width;
     merged.height = current.height;
 
-    // Render pipeline settings are not randomized; always preserve the current values.
-    merged.environment = { ...current.environment };
-    merged.shadows = { ...current.shadows };
-    merged.rendering = { ...current.rendering };
+    // Geometry quality is not randomized; always preserve the current value.
     merged.geometry = { ...current.geometry };
 
      if (locks.colors) merged.colors = [...current.colors];
@@ -830,6 +827,18 @@
     // Randomize everything, including a non-preset generated color theme.
     const seed = randomSeedU32();
     config = mergeWithLocks(generateRandomConfigNoPresetsFromSeed(seed, config.type));
+    schedulePreviewRender();
+  }
+
+  function generateRandomIncludingType() {
+    const seed = randomSeedU32();
+    const types: WallpaperType[] = ['popsicle', 'spheres3d', 'circles2d', 'polygon2d', 'triangles2d', 'triangles3d', 'hexgrid2d'];
+    const currentType = config.type;
+    let nextType = types[seed % types.length] ?? 'popsicle';
+    if (types.length > 1 && nextType === currentType) {
+      nextType = types[(types.indexOf(nextType) + 1) % types.length] ?? nextType;
+    }
+    config = mergeWithLocks(generateRandomConfigNoPresetsFromSeed(seed, nextType));
     schedulePreviewRender();
   }
 
@@ -1243,14 +1252,17 @@
       </section>
       
         <!-- Random Config -->
-        <section class="control-section">
-          <h3>Randomize</h3>
-          <div class="randomize-buttons">
-            <button type="button" onclick={generateRandomGeneratedColors} title="Randomize all settings, generate a new non-preset color theme">
-              Randomize
-            </button>
-          </div>
-        </section>
+         <section class="control-section">
+           <h3>Randomize</h3>
+           <div class="randomize-buttons">
+             <button type="button" onclick={generateRandomGeneratedColors} title="Randomize all settings, generate a new non-preset color theme">
+               Randomize
+             </button>
+             <button type="button" onclick={generateRandomIncludingType} title="Randomize all settings and generator type (keeps resolution/geometry quality)">
+               Randomize (incl type)
+             </button>
+           </div>
+         </section>
 
         <!-- Type -->
         <section class="control-section">
