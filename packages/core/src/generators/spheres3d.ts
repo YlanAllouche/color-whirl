@@ -134,6 +134,30 @@ function pickIndex(mode: PaletteAssignMode, i: number, rng: () => number, w: num
   return sampleWeightedIndex01(rng(), w);
 }
 
+function chainOnBeforeCompile(material: THREE.Material, fn: (shader: any) => void, keyPart: string): void {
+  const prev = material.onBeforeCompile;
+  material.onBeforeCompile = (shader: any, renderer: any) => {
+    (prev as any)?.(shader, renderer);
+    fn(shader);
+  };
+
+  const prevKey = (material as any).customProgramCacheKey;
+  (material as any).customProgramCacheKey = () => {
+    const a = typeof prevKey === 'function' ? String(prevKey()) : '';
+    return a ? `${a}|${keyPart}` : keyPart;
+  };
+  material.needsUpdate = true;
+}
+
+function makeSolidRedTexture01(): THREE.DataTexture {
+  const tex = new THREE.DataTexture(new Uint8Array([255]), 1, 1, THREE.RedFormat);
+  tex.colorSpace = THREE.NoColorSpace;
+  tex.needsUpdate = true;
+  tex.minFilter = THREE.NearestFilter;
+  tex.magFilter = THREE.NearestFilter;
+  return tex;
+}
+
 export function createSpheres3DScene(
   config: Spheres3DConfig,
   options?: { canvas?: HTMLCanvasElement; preserveDrawingBuffer?: boolean; pixelRatio?: number }
@@ -252,14 +276,238 @@ export function createSpheres3DScene(
   geometry.computeBoundingBox();
   geometry.computeBoundingSphere();
 
-  const perColor: Array<{ idx: number; inst: THREE.InstancedMesh; outline?: THREE.InstancedMesh }> = [];
+  const perColor: Array<{ idx: number; inst: THREE.InstancedMesh; mat: THREE.Material; outline?: THREE.InstancedMesh }> = [];
   for (let pi = 0; pi < nColors; pi++) {
     const mat = createSurfaceMaterial(config, pi, colors[pi], envIntensity, opacity);
     const inst = new THREE.InstancedMesh(geometry, mat, count);
     inst.castShadow = useShadows;
     inst.receiveShadow = useShadows;
-    perColor.push({ idx: pi, inst });
+    perColor.push({ idx: pi, inst, mat });
     scene.add(inst);
+  }
+
+  // Palette-group collision masking (3D): build per-group depth textures and apply shader alpha/discard.
+  if (config.collisions.mode === 'carve' && nColors <= 8) {
+    const depthMat = new THREE.MeshDepthMaterial();
+    const dummy = makeSolidRedTexture01();
+
+    const size = new THREE.Vector2();
+    renderer.getDrawingBufferSize(size);
+    let rtW = Math.max(1, Math.round(size.x));
+    let rtH = Math.max(1, Math.round(size.y));
+
+    const makeRT = () => {
+      const rt = new THREE.WebGLRenderTarget(rtW, rtH, {
+        minFilter: THREE.NearestFilter,
+        magFilter: THREE.NearestFilter,
+        format: THREE.RGBAFormat,
+        depthBuffer: true,
+        stencilBuffer: false
+      });
+      rt.depthTexture = new THREE.DepthTexture(rtW, rtH);
+      rt.depthTexture.format = THREE.DepthFormat;
+      rt.depthTexture.type = THREE.UnsignedShortType;
+      rt.depthTexture.minFilter = THREE.NearestFilter;
+      rt.depthTexture.magFilter = THREE.NearestFilter;
+      return rt;
+    };
+
+    let depthRTs = Array.from({ length: nColors }, () => makeRT());
+
+    let weights = Array.from({ length: nColors }, (_, i) => Math.max(0, Number(config.spheres.colorWeights[i] ?? 1)));
+    if (!(weights.some((x) => x > 0))) weights = Array.from({ length: nColors }, () => 1);
+
+    const marginPx = Math.max(0, Number(config.collisions.carve.marginPx) || 0);
+    const featherPx = config.collisions.carve.edge === 'soft' ? Math.max(0, Number(config.collisions.carve.featherPx) || 0) : 0;
+    const softEdge = config.collisions.carve.edge === 'soft' && featherPx > 0;
+
+    const otherIndicesByPalette: number[][] = [];
+    for (let pi = 0; pi < nColors; pi++) {
+      const others: number[] = [];
+      for (let j = 0; j < nColors; j++) {
+        if (j === pi) continue;
+        if (config.collisions.carve.direction === 'twoWay') {
+          others.push(j);
+          continue;
+        }
+        if ((weights[j] ?? 0) > (weights[pi] ?? 0)) others.push(j);
+      }
+      others.sort((a, b) => (weights[b] ?? 0) - (weights[a] ?? 0));
+
+      otherIndicesByPalette[pi] = others.slice(0, 7);
+
+      const otherDepth = otherIndicesByPalette[pi].map((j) => depthRTs[j].depthTexture);
+      const mat = perColor[pi].mat;
+      if (softEdge) {
+        mat.transparent = true;
+        mat.depthWrite = false;
+      }
+
+      chainOnBeforeCompile(
+        mat,
+        (shader) => {
+          shader.uniforms.wmCollideRes = { value: new THREE.Vector2(rtW, rtH) };
+          shader.uniforms.wmCollideMarginPx = { value: marginPx };
+          shader.uniforms.wmCollideFeatherPx = { value: featherPx };
+          shader.uniforms.wmCollideSoftEdge = { value: softEdge ? 1 : 0 };
+          shader.uniforms.wmOtherDepthCount = { value: otherDepth.length };
+          shader.uniforms.wmOtherDepth0 = { value: (otherDepth[0] as any) ?? dummy };
+          shader.uniforms.wmOtherDepth1 = { value: (otherDepth[1] as any) ?? dummy };
+          shader.uniforms.wmOtherDepth2 = { value: (otherDepth[2] as any) ?? dummy };
+          shader.uniforms.wmOtherDepth3 = { value: (otherDepth[3] as any) ?? dummy };
+          shader.uniforms.wmOtherDepth4 = { value: (otherDepth[4] as any) ?? dummy };
+          shader.uniforms.wmOtherDepth5 = { value: (otherDepth[5] as any) ?? dummy };
+          shader.uniforms.wmOtherDepth6 = { value: (otherDepth[6] as any) ?? dummy };
+
+          (mat.userData as any).__wmCollisionShader = shader;
+
+          const header = `
+uniform vec2 wmCollideRes;
+uniform float wmCollideMarginPx;
+uniform float wmCollideFeatherPx;
+uniform float wmCollideSoftEdge;
+uniform int wmOtherDepthCount;
+uniform sampler2D wmOtherDepth0;
+uniform sampler2D wmOtherDepth1;
+uniform sampler2D wmOtherDepth2;
+uniform sampler2D wmOtherDepth3;
+uniform sampler2D wmOtherDepth4;
+uniform sampler2D wmOtherDepth5;
+uniform sampler2D wmOtherDepth6;
+
+float wmPresentDepth(sampler2D d, vec2 uv) {
+  float z = texture2D(d, clamp(uv, 0.0, 1.0)).x;
+  return z < 0.999999 ? 1.0 : 0.0;
+}
+
+float wmPresentAtRadius(sampler2D d, vec2 uv, float radiusPx) {
+  float p = wmPresentDepth(d, uv);
+  if (radiusPx <= 0.0) return p;
+  vec2 px = 1.0 / wmCollideRes;
+  vec2 o = vec2(radiusPx, 0.0) * px;
+  p = max(p, wmPresentDepth(d, uv + vec2( o.x, 0.0)));
+  p = max(p, wmPresentDepth(d, uv + vec2(-o.x, 0.0)));
+  p = max(p, wmPresentDepth(d, uv + vec2(0.0,  o.x)));
+  p = max(p, wmPresentDepth(d, uv + vec2(0.0, -o.x)));
+  p = max(p, wmPresentDepth(d, uv + vec2( o.x,  o.x)));
+  p = max(p, wmPresentDepth(d, uv + vec2(-o.x,  o.x)));
+  p = max(p, wmPresentDepth(d, uv + vec2( o.x, -o.x)));
+  p = max(p, wmPresentDepth(d, uv + vec2(-o.x, -o.x)));
+  return p;
+}
+
+float wmAnyPresent(vec2 uv, float radiusPx) {
+  float p = 0.0;
+  if (wmOtherDepthCount > 0) p = max(p, wmPresentAtRadius(wmOtherDepth0, uv, radiusPx));
+  if (wmOtherDepthCount > 1) p = max(p, wmPresentAtRadius(wmOtherDepth1, uv, radiusPx));
+  if (wmOtherDepthCount > 2) p = max(p, wmPresentAtRadius(wmOtherDepth2, uv, radiusPx));
+  if (wmOtherDepthCount > 3) p = max(p, wmPresentAtRadius(wmOtherDepth3, uv, radiusPx));
+  if (wmOtherDepthCount > 4) p = max(p, wmPresentAtRadius(wmOtherDepth4, uv, radiusPx));
+  if (wmOtherDepthCount > 5) p = max(p, wmPresentAtRadius(wmOtherDepth5, uv, radiusPx));
+  if (wmOtherDepthCount > 6) p = max(p, wmPresentAtRadius(wmOtherDepth6, uv, radiusPx));
+  return p;
+}
+
+void wmApplyCollisionMask(inout vec4 col) {
+  if (wmOtherDepthCount <= 0) return;
+  vec2 uv = gl_FragCoord.xy / wmCollideRes;
+  float margin = max(0.0, wmCollideMarginPx);
+  float feather = max(0.0, wmCollideFeatherPx);
+
+  float cut = 1.0;
+  if (wmAnyPresent(uv, margin) > 0.5) cut = 0.0;
+
+  if (wmCollideSoftEdge > 0.5 && feather > 0.0) {
+    if (wmAnyPresent(uv, margin + feather * 0.25) > 0.5) cut = min(cut, 0.25);
+    if (wmAnyPresent(uv, margin + feather * 0.50) > 0.5) cut = min(cut, 0.50);
+    if (wmAnyPresent(uv, margin + feather * 0.75) > 0.5) cut = min(cut, 0.75);
+    if (wmAnyPresent(uv, margin + feather) > 0.5) cut = min(cut, 1.00);
+    col.a *= cut;
+    if (col.a <= 0.001) discard;
+  } else {
+    if (cut <= 0.0) discard;
+  }
+}
+`;
+
+          shader.fragmentShader = shader.fragmentShader.replace(
+            '#include <dithering_fragment>',
+            `${header}\nwmApplyCollisionMask(gl_FragColor);\n#include <dithering_fragment>`
+          );
+        },
+        `collide-v1:${config.collisions.carve.direction}:${config.collisions.carve.edge}:${marginPx.toFixed(2)}:${featherPx.toFixed(2)}:${otherDepth.length}`
+      );
+    }
+
+    const paletteMeshes = perColor.map((p) => p.inst);
+    (scene.userData as any).__wmBeforeRender = (r: THREE.WebGLRenderer, s: THREE.Scene, camera: THREE.Camera) => {
+      const sz = new THREE.Vector2();
+      r.getDrawingBufferSize(sz);
+      const nextW = Math.max(1, Math.round(sz.x));
+      const nextH = Math.max(1, Math.round(sz.y));
+
+      if (nextW !== rtW || nextH !== rtH) {
+        rtW = nextW;
+        rtH = nextH;
+        for (const rt of depthRTs) rt.dispose();
+        depthRTs = Array.from({ length: nColors }, () => makeRT());
+
+        for (let pi = 0; pi < nColors; pi++) {
+          const mat = perColor[pi].mat;
+          const shader = (mat.userData as any).__wmCollisionShader;
+          if (!shader) continue;
+          shader.uniforms.wmCollideRes.value.set(rtW, rtH);
+
+          const idxs = otherIndicesByPalette[pi] ?? [];
+          shader.uniforms.wmOtherDepthCount.value = idxs.length;
+          shader.uniforms.wmOtherDepth0.value = (depthRTs[idxs[0]]?.depthTexture as any) ?? dummy;
+          shader.uniforms.wmOtherDepth1.value = (depthRTs[idxs[1]]?.depthTexture as any) ?? dummy;
+          shader.uniforms.wmOtherDepth2.value = (depthRTs[idxs[2]]?.depthTexture as any) ?? dummy;
+          shader.uniforms.wmOtherDepth3.value = (depthRTs[idxs[3]]?.depthTexture as any) ?? dummy;
+          shader.uniforms.wmOtherDepth4.value = (depthRTs[idxs[4]]?.depthTexture as any) ?? dummy;
+          shader.uniforms.wmOtherDepth5.value = (depthRTs[idxs[5]]?.depthTexture as any) ?? dummy;
+          shader.uniforms.wmOtherDepth6.value = (depthRTs[idxs[6]]?.depthTexture as any) ?? dummy;
+        }
+      }
+
+      // Update uniforms that might be tied to size.
+      for (let pi = 0; pi < nColors; pi++) {
+        const mat = perColor[pi].mat;
+        const shader = (mat.userData as any).__wmCollisionShader;
+        if (!shader) continue;
+        shader.uniforms.wmCollideRes.value.set(rtW, rtH);
+      }
+
+      const prevTarget = r.getRenderTarget();
+      const prevOverride = (s as any).overrideMaterial;
+      const vis = paletteMeshes.map((m) => m.visible);
+      const clearCol = r.getClearColor(new THREE.Color());
+      const clearA = r.getClearAlpha();
+
+      r.setClearColor(0x000000, 0);
+      (s as any).overrideMaterial = depthMat;
+      for (let i = 0; i < nColors; i++) {
+        for (let j = 0; j < nColors; j++) paletteMeshes[j].visible = j === i;
+        r.setRenderTarget(depthRTs[i]);
+        r.clear();
+        r.render(s, camera);
+      }
+      (s as any).overrideMaterial = prevOverride;
+      for (let j = 0; j < nColors; j++) paletteMeshes[j].visible = vis[j];
+      r.setRenderTarget(prevTarget);
+      r.setClearColor(clearCol, clearA);
+    };
+
+    (scene.userData as any).__wmDisposeCollisionMasking = () => {
+      try {
+        for (const rt of depthRTs) rt.dispose();
+        depthMat.dispose();
+        dummy.dispose();
+      } catch {
+        // Ignore
+      }
+      delete (scene.userData as any).__wmBeforeRender;
+    };
   }
 
   // Bucket instances by palette index.
@@ -373,6 +621,7 @@ function lerp(a: number, b: number, t: number): number {
 export function renderSpheres3DToCanvas(config: Spheres3DConfig, canvas?: HTMLCanvasElement): HTMLCanvasElement {
   const { scene, camera, renderer } = createSpheres3DScene(config, { canvas, preserveDrawingBuffer: true, pixelRatio: 1 });
   renderWithOptionalBloom({ renderer, scene, camera, width: config.width, height: config.height, bloom: config.bloom });
+  (scene.userData as any).__wmDisposeCollisionMasking?.();
   (scene.userData as any).__wmDisposeProceduralEnvironment?.();
   delete (scene.userData as any).__wmDisposeProceduralEnvironment;
   return renderer.domElement;

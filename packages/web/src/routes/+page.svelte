@@ -209,6 +209,7 @@
 
     if (fallbackScene) {
       try {
+        (fallbackScene.userData as any).__wmDisposeCollisionMasking?.();
         (fallbackScene.userData as any).__wmDisposeProceduralEnvironment?.();
       } catch {
         // Ignore

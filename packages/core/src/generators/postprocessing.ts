@@ -15,6 +15,13 @@ export function renderWithOptionalBloom(options: {
   bloom: BloomConfig;
 }): void {
   const { renderer, scene, camera, width, height, bloom } = options;
+
+  try {
+    (scene.userData as any).__wmBeforeRender?.(renderer, scene, camera);
+  } catch {
+    // Ignore
+  }
+
   if (!bloom?.enabled) {
     renderer.render(scene, camera);
     return;
