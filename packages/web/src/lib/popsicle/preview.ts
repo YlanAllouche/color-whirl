@@ -834,8 +834,11 @@ export class PopsiclePreview {
     const featherPx = config.collisions.carve.edge === 'soft' ? Math.max(0, Number(config.collisions.carve.featherPx) || 0) : 0;
     const softEdge = config.collisions.carve.edge === 'soft' && featherPx > 0;
 
-    const rtW = Math.max(1, Math.round(previewWidth));
-    const rtH = Math.max(1, Math.round(previewHeight));
+    const screenW = Math.max(1, Math.round(previewWidth));
+    const screenH = Math.max(1, Math.round(previewHeight));
+    const maskScale = 0.6;
+    const rtW = Math.max(1, Math.round(screenW * maskScale));
+    const rtH = Math.max(1, Math.round(screenH * maskScale));
 
     const makeRT = () => {
       const rt = new THREE.WebGLRenderTarget(rtW, rtH, {
@@ -893,13 +896,21 @@ export class PopsiclePreview {
       const idxs = otherIndicesByPalette[pi] ?? [];
       const otherDepth = idxs.map((j) => depthRTs[j].depthTexture);
 
+      const finishEnabled = config.collisions.mode === 'carve' && config.collisions.carve.finish === 'wallsCap' ? 1 : 0;
+      const finishDepthPx =
+        (Math.max(0, Number(config.collisions.carve.marginPx) || 0) +
+          (config.collisions.carve.edge === 'soft' ? Math.max(0, Number(config.collisions.carve.featherPx) || 0) : 0)) *
+        Math.max(0, Number(config.collisions.carve.finishAutoDepthMult) || 0);
+
       chainOnBeforeCompile(
         mat,
         (shader) => {
-          shader.uniforms.wmCollideRes = { value: new THREE.Vector2(rtW, rtH) };
+          shader.uniforms.wmCollideRes = { value: new THREE.Vector2(screenW, screenH) };
           shader.uniforms.wmCollideMarginPx = { value: marginPx };
           shader.uniforms.wmCollideFeatherPx = { value: featherPx };
           shader.uniforms.wmCollideSoftEdge = { value: softEdge ? 1 : 0 };
+          shader.uniforms.wmFinishEnabled = { value: finishEnabled };
+          shader.uniforms.wmFinishDepthPx = { value: finishDepthPx };
           shader.uniforms.wmOtherDepthCount = { value: otherDepth.length };
           shader.uniforms.wmOtherDepth0 = { value: (otherDepth[0] as any) ?? dummy };
           shader.uniforms.wmOtherDepth1 = { value: (otherDepth[1] as any) ?? dummy };
@@ -912,11 +923,13 @@ export class PopsiclePreview {
           (mat.userData as any).__wmCollisionShader = shader;
 
           const headerGlobal = `
-uniform vec2 wmCollideRes;
-uniform float wmCollideMarginPx;
-uniform float wmCollideFeatherPx;
-uniform float wmCollideSoftEdge;
-uniform int wmOtherDepthCount;
+ uniform vec2 wmCollideRes;
+ uniform float wmCollideMarginPx;
+ uniform float wmCollideFeatherPx;
+ uniform float wmCollideSoftEdge;
+uniform float wmFinishEnabled;
+uniform float wmFinishDepthPx;
+ uniform int wmOtherDepthCount;
 uniform sampler2D wmOtherDepth0;
 uniform sampler2D wmOtherDepth1;
 uniform sampler2D wmOtherDepth2;
@@ -970,18 +983,41 @@ void wmApplyCollisionMask(inout vec4 col) {
   float margin = max(0.0, wmCollideMarginPx);
   float feather = max(0.0, wmCollideFeatherPx);
 
-  float cut = 1.0;
-  if (wmAnyInFront(uv, margin, curZ) > 0.5) cut = 0.0;
+  float hit0 = wmAnyInFront(uv, 0.0, curZ);
+  if (hit0 > 0.5) {
+    discard;
+  }
+
+  float hitM = wmAnyInFront(uv, margin, curZ);
+  if (hitM <= 0.5) {
+    return;
+  }
+
+  float carveAmt = 1.0;
+  if (wmCollideSoftEdge > 0.5 && feather > 0.0) {
+    float cut = 0.0;
+    if (wmAnyInFront(uv, margin + feather * 0.25, curZ) > 0.5) cut = max(cut, 0.25);
+    if (wmAnyInFront(uv, margin + feather * 0.50, curZ) > 0.5) cut = max(cut, 0.50);
+    if (wmAnyInFront(uv, margin + feather * 0.75, curZ) > 0.5) cut = max(cut, 0.75);
+    if (wmAnyInFront(uv, margin + feather, curZ) > 0.5) cut = max(cut, 1.00);
+    carveAmt = 1.0 - cut;
+  }
+
+  if (wmFinishEnabled > 0.5) {
+    float wallThickness = max(2.0, min(30.0, wmFinishDepthPx * 0.35));
+    float wall = wmAnyInFront(uv, max(0.0, margin - wallThickness), curZ);
+    vec3 capCol = col.rgb * 0.14;
+    vec3 wallCol = col.rgb * 0.30;
+    vec3 inside = mix(capCol, wallCol, wall);
+    col.rgb = mix(col.rgb, inside, carveAmt);
+    return;
+  }
 
   if (wmCollideSoftEdge > 0.5 && feather > 0.0) {
-    if (wmAnyInFront(uv, margin + feather * 0.25, curZ) > 0.5) cut = min(cut, 0.25);
-    if (wmAnyInFront(uv, margin + feather * 0.50, curZ) > 0.5) cut = min(cut, 0.50);
-    if (wmAnyInFront(uv, margin + feather * 0.75, curZ) > 0.5) cut = min(cut, 0.75);
-    if (wmAnyInFront(uv, margin + feather, curZ) > 0.5) cut = min(cut, 1.00);
-    col.a *= cut;
+    col.a *= max(0.0, 1.0 - carveAmt);
     if (col.a <= 0.001) discard;
   } else {
-    if (cut <= 0.0) discard;
+    discard;
   }
 }
 `;

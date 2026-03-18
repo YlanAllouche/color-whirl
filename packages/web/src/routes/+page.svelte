@@ -43,6 +43,8 @@
   let fallbackScene: THREE.Scene | null = null;
   let renderMode = $state<PreviewRenderMode>('raster');
 
+  let collisionDragActive = $state(false);
+
   let renderRaf = 0;
   let renderSettleTimer = 0;
   const RENDER_SETTLE_MS = 280;
@@ -290,9 +292,11 @@
       const prev = { renderer: fallbackRenderer, composer: fallbackComposer, scene: fallbackScene };
 
       try {
+        const collisionMaskScale = effective.collisions?.mode === 'carve' ? 0.6 : 1;
         const { scene, camera, renderer } = createWallpaperScene(effective, {
           preserveDrawingBuffer: true,
-          pixelRatio: 1
+          pixelRatio: 1,
+          collisionMaskScale
         });
 
         renderer.domElement.style.width = `${Math.max(1, Math.round(cssWidth))}px`;
@@ -370,13 +374,16 @@
     });
 
     if (renderSettleTimer) window.clearTimeout(renderSettleTimer);
-    renderSettleTimer = window.setTimeout(() => {
-      if (config.type === 'popsicle') {
-        preview?.renderOnce(config as PopsicleConfig, 'final');
-      } else {
-        renderNonPopsicleOnce('final');
-      }
-    }, RENDER_SETTLE_MS);
+
+    if (!collisionDragActive) {
+      renderSettleTimer = window.setTimeout(() => {
+        if (config.type === 'popsicle') {
+          preview?.renderOnce(config as PopsicleConfig, 'final');
+        } else {
+          renderNonPopsicleOnce('final');
+        }
+      }, RENDER_SETTLE_MS);
+    }
   }
   
   // 3D rendering is handled by PopsiclePreview.
@@ -1360,7 +1367,25 @@
               </label>
               <label class="control-row slider">
                 <span class="setting-title">Margin: {Math.round(config.collisions.carve.marginPx)}px</span>
-                <input type="range" bind:value={config.collisions.carve.marginPx} min="0" max="400" step="1" />
+                <input
+                  type="range"
+                  bind:value={config.collisions.carve.marginPx}
+                  min="0"
+                  max="400"
+                  step="1"
+                  onpointerdown={() => {
+                    collisionDragActive = true;
+                    if (renderSettleTimer) window.clearTimeout(renderSettleTimer);
+                  }}
+                  onpointerup={() => {
+                    collisionDragActive = false;
+                    schedulePreviewRender();
+                  }}
+                  onpointercancel={() => {
+                    collisionDragActive = false;
+                    schedulePreviewRender();
+                  }}
+                />
               </label>
               <label class="control-row">
                 <span class="setting-title">Margin (exact)</span>
@@ -1382,6 +1407,18 @@
                   max="200"
                   step="1"
                   disabled={config.collisions.carve.edge !== 'soft'}
+                  onpointerdown={() => {
+                    collisionDragActive = true;
+                    if (renderSettleTimer) window.clearTimeout(renderSettleTimer);
+                  }}
+                  onpointerup={() => {
+                    collisionDragActive = false;
+                    schedulePreviewRender();
+                  }}
+                  onpointercancel={() => {
+                    collisionDragActive = false;
+                    schedulePreviewRender();
+                  }}
                 />
               </label>
               <label class="control-row">
@@ -1395,6 +1432,29 @@
                   disabled={config.collisions.carve.edge !== 'soft'}
                 />
               </label>
+
+              {#if is3DType}
+                <div style="border-top: 1px solid #333; margin-top: 0.75rem; padding-top: 0.75rem;">
+                  <label class="control-row">
+                    <span class="setting-title">Finish Volume</span>
+                    <select bind:value={config.collisions.carve.finish}>
+                      <option value="none">None</option>
+                      <option value="wallsCap">Walls + Cap</option>
+                    </select>
+                  </label>
+
+                  {#if config.collisions.carve.finish === 'wallsCap'}
+                    <label class="control-row slider">
+                      <span class="setting-title">Depth (auto): {config.collisions.carve.finishAutoDepthMult.toFixed(2)}x</span>
+                      <input type="range" bind:value={config.collisions.carve.finishAutoDepthMult} min="0" max="4" step="0.05" />
+                    </label>
+                    <label class="control-row">
+                      <span class="setting-title">Depth (auto, exact)</span>
+                      <input type="number" bind:value={config.collisions.carve.finishAutoDepthMult} min="0" max="20" step="0.05" />
+                    </label>
+                  {/if}
+                </div>
+              {/if}
               <div style="font-size: 0.75rem; color: #a9a9b3; line-height: 1.2;">
                 One-way priority is based on palette weights: higher weight carves lower.
               </div>

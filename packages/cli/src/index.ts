@@ -99,6 +99,8 @@ program
   .option('--collisions-margin <px>', 'Collision carve margin in px')
   .option('--collisions-edge <edge>', 'Collision carve edge (hard, soft)')
   .option('--collisions-feather <px>', 'Collision carve feather (soft edge) in px')
+  .option('--collisions-finish <finish>', 'Collision carve finish volume (none, wallsCap)')
+  .option('--collisions-finish-depth-mult <number>', 'Finish depth auto multiplier')
 
   // spheres3d
   .option('--spheres-distribution <mode>', 'Spheres distribution (jitteredGrid, scatter, layeredDepth)')
@@ -552,6 +554,14 @@ function buildConfigAndFormat(options: any, command: Command): { config: Wallpap
   if (fromCli('collisionsFeather') && options.collisionsFeather != null) {
     const v = parseFloat(options.collisionsFeather);
     if (Number.isFinite(v)) config.collisions.carve.featherPx = Math.max(0, v);
+  }
+  if (fromCli('collisionsFinish') && options.collisionsFinish != null) {
+    const f = String(options.collisionsFinish);
+    config.collisions.carve.finish = f === 'wallsCap' ? 'wallsCap' : 'none';
+  }
+  if (fromCli('collisionsFinishDepthMult') && options.collisionsFinishDepthMult != null) {
+    const v = parseFloat(options.collisionsFinishDepthMult);
+    if (Number.isFinite(v)) config.collisions.carve.finishAutoDepthMult = Math.max(0, v);
   }
 
   // Shared palette config for types that support it.

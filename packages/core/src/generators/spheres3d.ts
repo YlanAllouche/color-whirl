@@ -160,10 +160,19 @@ function makeSolidRedTexture01(): THREE.DataTexture {
 
 export function createSpheres3DScene(
   config: Spheres3DConfig,
-  options?: { canvas?: HTMLCanvasElement; preserveDrawingBuffer?: boolean; pixelRatio?: number }
+  options?: {
+    canvas?: HTMLCanvasElement;
+    preserveDrawingBuffer?: boolean;
+    pixelRatio?: number;
+    collisionMaskScale?: number;
+  }
 ): { scene: THREE.Scene; camera: THREE.OrthographicCamera; renderer: THREE.WebGLRenderer } {
   const scene = new THREE.Scene();
   scene.background = null;
+
+  if (typeof options?.collisionMaskScale === 'number') {
+    (scene.userData as any).__wmCollisionMaskScale = options.collisionMaskScale;
+  }
 
   const aspect = config.width / config.height;
   const frustumSize = 10;
@@ -293,8 +302,17 @@ export function createSpheres3DScene(
 
     const size = new THREE.Vector2();
     renderer.getDrawingBufferSize(size);
-    let rtW = Math.max(1, Math.round(size.x));
-    let rtH = Math.max(1, Math.round(size.y));
+    let screenW = Math.max(1, Math.round(size.x));
+    let screenH = Math.max(1, Math.round(size.y));
+
+    const getMaskScale = () => {
+      const v = Number((scene.userData as any).__wmCollisionMaskScale ?? 1);
+      if (!Number.isFinite(v)) return 1;
+      return Math.max(0.2, Math.min(1, v));
+    };
+
+    let rtW = Math.max(1, Math.round(screenW * getMaskScale()));
+    let rtH = Math.max(1, Math.round(screenH * getMaskScale()));
 
     const makeRT = () => {
       const rt = new THREE.WebGLRenderTarget(rtW, rtH, {
@@ -338,6 +356,12 @@ export function createSpheres3DScene(
 
       const otherDepth = otherIndicesByPalette[pi].map((j) => depthRTs[j].depthTexture);
       const mat = perColor[pi].mat;
+
+      const finishEnabled = config.collisions.mode === 'carve' && config.collisions.carve.finish === 'wallsCap' ? 1 : 0;
+      const finishDepthPx =
+        (Math.max(0, Number(config.collisions.carve.marginPx) || 0) +
+          (config.collisions.carve.edge === 'soft' ? Math.max(0, Number(config.collisions.carve.featherPx) || 0) : 0)) *
+        Math.max(0, Number(config.collisions.carve.finishAutoDepthMult) || 0);
       if (softEdge) {
         mat.transparent = true;
         mat.depthWrite = false;
@@ -346,10 +370,12 @@ export function createSpheres3DScene(
       chainOnBeforeCompile(
         mat,
         (shader) => {
-          shader.uniforms.wmCollideRes = { value: new THREE.Vector2(rtW, rtH) };
+          shader.uniforms.wmCollideRes = { value: new THREE.Vector2(screenW, screenH) };
           shader.uniforms.wmCollideMarginPx = { value: marginPx };
           shader.uniforms.wmCollideFeatherPx = { value: featherPx };
           shader.uniforms.wmCollideSoftEdge = { value: softEdge ? 1 : 0 };
+          shader.uniforms.wmFinishEnabled = { value: finishEnabled };
+          shader.uniforms.wmFinishDepthPx = { value: finishDepthPx };
           shader.uniforms.wmOtherDepthCount = { value: otherDepth.length };
           shader.uniforms.wmOtherDepth0 = { value: (otherDepth[0] as any) ?? dummy };
           shader.uniforms.wmOtherDepth1 = { value: (otherDepth[1] as any) ?? dummy };
@@ -362,11 +388,13 @@ export function createSpheres3DScene(
           (mat.userData as any).__wmCollisionShader = shader;
 
           const headerGlobal = `
-uniform vec2 wmCollideRes;
-uniform float wmCollideMarginPx;
-uniform float wmCollideFeatherPx;
-uniform float wmCollideSoftEdge;
-uniform int wmOtherDepthCount;
+ uniform vec2 wmCollideRes;
+ uniform float wmCollideMarginPx;
+ uniform float wmCollideFeatherPx;
+ uniform float wmCollideSoftEdge;
+uniform float wmFinishEnabled;
+uniform float wmFinishDepthPx;
+ uniform int wmOtherDepthCount;
 uniform sampler2D wmOtherDepth0;
 uniform sampler2D wmOtherDepth1;
 uniform sampler2D wmOtherDepth2;
@@ -421,18 +449,41 @@ void wmApplyCollisionMask(inout vec4 col) {
   float margin = max(0.0, wmCollideMarginPx);
   float feather = max(0.0, wmCollideFeatherPx);
 
-  float cut = 1.0;
-  if (wmAnyInFront(uv, margin, curZ) > 0.5) cut = 0.0;
+  float hit0 = wmAnyInFront(uv, 0.0, curZ);
+  if (hit0 > 0.5) {
+    discard;
+  }
+
+  float hitM = wmAnyInFront(uv, margin, curZ);
+  if (hitM <= 0.5) {
+    return;
+  }
+
+  float carveAmt = 1.0;
+  if (wmCollideSoftEdge > 0.5 && feather > 0.0) {
+    float cut = 0.0;
+    if (wmAnyInFront(uv, margin + feather * 0.25, curZ) > 0.5) cut = max(cut, 0.25);
+    if (wmAnyInFront(uv, margin + feather * 0.50, curZ) > 0.5) cut = max(cut, 0.50);
+    if (wmAnyInFront(uv, margin + feather * 0.75, curZ) > 0.5) cut = max(cut, 0.75);
+    if (wmAnyInFront(uv, margin + feather, curZ) > 0.5) cut = max(cut, 1.00);
+    carveAmt = 1.0 - cut;
+  }
+
+  if (wmFinishEnabled > 0.5) {
+    float wallThickness = max(2.0, min(30.0, wmFinishDepthPx * 0.35));
+    float wall = wmAnyInFront(uv, max(0.0, margin - wallThickness), curZ);
+    vec3 capCol = col.rgb * 0.14;
+    vec3 wallCol = col.rgb * 0.30;
+    vec3 inside = mix(capCol, wallCol, wall);
+    col.rgb = mix(col.rgb, inside, carveAmt);
+    return;
+  }
 
   if (wmCollideSoftEdge > 0.5 && feather > 0.0) {
-    if (wmAnyInFront(uv, margin + feather * 0.25, curZ) > 0.5) cut = min(cut, 0.25);
-    if (wmAnyInFront(uv, margin + feather * 0.50, curZ) > 0.5) cut = min(cut, 0.50);
-    if (wmAnyInFront(uv, margin + feather * 0.75, curZ) > 0.5) cut = min(cut, 0.75);
-    if (wmAnyInFront(uv, margin + feather, curZ) > 0.5) cut = min(cut, 1.00);
-    col.a *= cut;
+    col.a *= max(0.0, 1.0 - carveAmt);
     if (col.a <= 0.001) discard;
   } else {
-    if (cut <= 0.0) discard;
+    discard;
   }
 }
 `;
@@ -454,12 +505,14 @@ void wmApplyCollisionMask(inout vec4 col) {
     (scene.userData as any).__wmBeforeRender = (r: THREE.WebGLRenderer, s: THREE.Scene, camera: THREE.Camera) => {
       const sz = new THREE.Vector2();
       r.getDrawingBufferSize(sz);
-      const nextW = Math.max(1, Math.round(sz.x));
-      const nextH = Math.max(1, Math.round(sz.y));
+      const nextScreenW = Math.max(1, Math.round(sz.x));
+      const nextScreenH = Math.max(1, Math.round(sz.y));
+      const nextRTW = Math.max(1, Math.round(nextScreenW * getMaskScale()));
+      const nextRTH = Math.max(1, Math.round(nextScreenH * getMaskScale()));
 
-      if (nextW !== rtW || nextH !== rtH) {
-        rtW = nextW;
-        rtH = nextH;
+      if (nextRTW !== rtW || nextRTH !== rtH) {
+        rtW = nextRTW;
+        rtH = nextRTH;
         for (const rt of depthRTs) rt.dispose();
         depthRTs = Array.from({ length: nColors }, () => makeRT());
 
@@ -467,7 +520,7 @@ void wmApplyCollisionMask(inout vec4 col) {
           const mat = perColor[pi].mat;
           const shader = (mat.userData as any).__wmCollisionShader;
           if (!shader) continue;
-          shader.uniforms.wmCollideRes.value.set(rtW, rtH);
+          shader.uniforms.wmCollideRes.value.set(nextScreenW, nextScreenH);
 
           const idxs = otherIndicesByPalette[pi] ?? [];
           shader.uniforms.wmOtherDepthCount.value = idxs.length;
@@ -486,8 +539,11 @@ void wmApplyCollisionMask(inout vec4 col) {
         const mat = perColor[pi].mat;
         const shader = (mat.userData as any).__wmCollisionShader;
         if (!shader) continue;
-        shader.uniforms.wmCollideRes.value.set(rtW, rtH);
+        shader.uniforms.wmCollideRes.value.set(nextScreenW, nextScreenH);
       }
+
+      screenW = nextScreenW;
+      screenH = nextScreenH;
 
       const prevTarget = r.getRenderTarget();
       const prevOverride = (s as any).overrideMaterial;

@@ -93,12 +93,17 @@ export interface BloomConfig {
 export type CollisionsMode = 'none' | 'carve';
 export type CollisionsCarveDirection = 'oneWay' | 'twoWay';
 export type CollisionsCarveEdge = 'hard' | 'soft';
+export type CollisionsCarveFinish = 'none' | 'wallsCap';
 
 export interface CollisionsCarveConfig {
   direction: CollisionsCarveDirection;
   marginPx: number;
   edge: CollisionsCarveEdge;
   featherPx: number;
+  /** How to render the carved volume in 3D (A-mode). */
+  finish: CollisionsCarveFinish;
+  /** Depth multiplier when finish is enabled and using auto depth. */
+  finishAutoDepthMult: number;
 }
 
 export interface CollisionsConfig {
@@ -457,7 +462,9 @@ export const DEFAULT_POPSICLE_CONFIG: PopsicleConfig = {
       direction: 'oneWay',
       marginPx: 0,
       edge: 'hard',
-      featherPx: 0
+      featherPx: 0,
+      finish: 'none',
+      finishAutoDepthMult: 1
     }
   },
   stickCount: 12,
@@ -934,7 +941,9 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
         direction: chance(0.25) ? 'twoWay' : 'oneWay',
         marginPx: Math.round(tri(0, DEFAULT_POPSICLE_CONFIG.collisions.carve.marginPx, 44)),
         edge: collisionsEdge,
-        featherPx: collisionsFeather
+        featherPx: collisionsFeather,
+        finish: chance(0.3) ? 'wallsCap' : 'none',
+        finishAutoDepthMult: tri(0.2, DEFAULT_POPSICLE_CONFIG.collisions.carve.finishAutoDepthMult, 3.5)
       }
     },
     lighting: {

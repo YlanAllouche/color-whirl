@@ -109,6 +109,30 @@ function clamp01(n: number): number {
   return Math.max(0, Math.min(1, n));
 }
 
+function chainOnBeforeCompile(material: THREE.Material, fn: (shader: any) => void, keyPart: string): void {
+  const prev = material.onBeforeCompile;
+  material.onBeforeCompile = (shader: any, renderer: any) => {
+    (prev as any)?.(shader, renderer);
+    fn(shader);
+  };
+
+  const prevKey = (material as any).customProgramCacheKey;
+  (material as any).customProgramCacheKey = () => {
+    const a = typeof prevKey === 'function' ? String(prevKey.call(material)) : '';
+    return a ? `${a}|${keyPart}` : keyPart;
+  };
+  material.needsUpdate = true;
+}
+
+function makeSolidRedTexture01(): THREE.DataTexture {
+  const tex = new THREE.DataTexture(new Uint8Array([255]), 1, 1, THREE.RedFormat);
+  tex.colorSpace = THREE.NoColorSpace;
+  tex.needsUpdate = true;
+  tex.minFilter = THREE.NearestFilter;
+  tex.magFilter = THREE.NearestFilter;
+  return tex;
+}
+
 function createProceduralEnvironment(
   renderer: THREE.WebGLRenderer,
   style: EnvironmentStyle,
@@ -252,7 +276,12 @@ function getStackingOffset(
 
 export function createPopsicleScene(
   config: PopsicleConfig,
-  options?: { canvas?: HTMLCanvasElement; preserveDrawingBuffer?: boolean; pixelRatio?: number }
+  options?: {
+    canvas?: HTMLCanvasElement;
+    preserveDrawingBuffer?: boolean;
+    pixelRatio?: number;
+    collisionMaskScale?: number;
+  }
 ): {
   scene: THREE.Scene;
   camera: THREE.OrthographicCamera;
@@ -287,6 +316,10 @@ export function createPopsicleScene(
   
   const scene = new THREE.Scene();
   scene.background = null;
+
+  if (typeof options?.collisionMaskScale === 'number') {
+    (scene.userData as any).__wmCollisionMaskScale = options.collisionMaskScale;
+  }
   
   const aspect = width / height;
   const frustumSize = 10;
@@ -369,10 +402,14 @@ export function createPopsicleScene(
     return m;
   };
 
+  const nColors = Math.max(1, colors.length);
+  const baseMeshesByPalette: THREE.Mesh[][] = Array.from({ length: nColors }, () => []);
+
   for (let i = 0; i < stickCount; i++) {
     const paletteIndex = i % colors.length;
     const hex = colors[paletteIndex];
     const mesh = new THREE.Mesh(geo, getMat(paletteIndex, hex));
+    (mesh.userData as any).__wmPaletteIndex = paletteIndex;
     mesh.castShadow = useShadows;
     mesh.receiveShadow = useShadows;
 
@@ -380,12 +417,15 @@ export function createPopsicleScene(
     mesh.position.set(offset.x, offset.y, offset.z);
     mesh.rotation.z = offset.rotationZ;
     group.add(mesh);
+
+    baseMeshesByPalette[paletteIndex % nColors].push(mesh);
   }
 
   const box = new THREE.Box3().setFromObject(group);
   const center = box.getCenter(new THREE.Vector3());
   group.position.sub(center);
 
+  let outlineGroup: THREE.Group | null = null;
   if (config.edges.outline.enabled) {
     const oc = config.edges.outline;
     const outlineMat = new THREE.MeshBasicMaterial({
@@ -396,7 +436,7 @@ export function createPopsicleScene(
       depthWrite: false
     });
     const thickness = Math.max(0, Math.min(0.2, Number(oc.thickness) || 0));
-    const outlineGroup = new THREE.Group();
+    outlineGroup = new THREE.Group();
     for (const child of group.children) {
       if (!(child as any).isMesh) continue;
       const mesh = child as THREE.Mesh;
@@ -455,6 +495,303 @@ export function createPopsicleScene(
     scene.environment = null;
   }
 
+  // Palette-group collision masking (3D): build per-group depth textures and apply shader discard/finish.
+  if (config.collisions.mode === 'carve' && nColors <= 8) {
+    const depthMat = new THREE.MeshDepthMaterial();
+    const dummy = makeSolidRedTexture01();
+
+    const size = new THREE.Vector2();
+    renderer.getDrawingBufferSize(size);
+    let screenW = Math.max(1, Math.round(size.x));
+    let screenH = Math.max(1, Math.round(size.y));
+
+    const getMaskScale = () => {
+      const v = Number((scene.userData as any).__wmCollisionMaskScale ?? 1);
+      if (!Number.isFinite(v)) return 1;
+      return Math.max(0.2, Math.min(1, v));
+    };
+
+    let rtW = Math.max(1, Math.round(screenW * getMaskScale()));
+    let rtH = Math.max(1, Math.round(screenH * getMaskScale()));
+
+    const makeRT = () => {
+      const rt = new THREE.WebGLRenderTarget(rtW, rtH, {
+        minFilter: THREE.NearestFilter,
+        magFilter: THREE.NearestFilter,
+        format: THREE.RGBAFormat,
+        depthBuffer: true,
+        stencilBuffer: false
+      });
+      rt.depthTexture = new THREE.DepthTexture(rtW, rtH);
+      rt.depthTexture.format = THREE.DepthFormat;
+      rt.depthTexture.type = THREE.UnsignedShortType;
+      rt.depthTexture.minFilter = THREE.NearestFilter;
+      rt.depthTexture.magFilter = THREE.NearestFilter;
+      return rt;
+    };
+
+    let depthRTs = Array.from({ length: nColors }, () => makeRT());
+
+    const marginPx = Math.max(0, Number(config.collisions.carve.marginPx) || 0);
+    const featherPx = config.collisions.carve.edge === 'soft' ? Math.max(0, Number(config.collisions.carve.featherPx) || 0) : 0;
+    const softEdge = config.collisions.carve.edge === 'soft' && featherPx > 0;
+
+    const finishEnabled = config.collisions.carve.finish === 'wallsCap' ? 1 : 0;
+    const finishDepthPx = (marginPx + featherPx) * Math.max(0, Number(config.collisions.carve.finishAutoDepthMult) || 0);
+
+    // Popsicle has no explicit weights; use palette index as priority.
+    const weights = Array.from({ length: nColors }, (_, i) => i);
+
+    const otherIndicesByPalette: number[][] = [];
+    for (let pi = 0; pi < nColors; pi++) {
+      const others: number[] = [];
+      for (let j = 0; j < nColors; j++) {
+        if (j === pi) continue;
+        if (config.collisions.carve.direction === 'twoWay') {
+          others.push(j);
+          continue;
+        }
+        if ((weights[j] ?? 0) > (weights[pi] ?? 0)) others.push(j);
+      }
+      others.sort((a, b) => (weights[b] ?? 0) - (weights[a] ?? 0));
+      otherIndicesByPalette[pi] = others.slice(0, 7);
+    }
+
+    const patched = new WeakSet<THREE.Material>();
+    const patchMaterial = (mat: THREE.Material, pi: number) => {
+      if (patched.has(mat)) return;
+      patched.add(mat);
+
+      if (softEdge) {
+        mat.transparent = true;
+        mat.depthWrite = false;
+      }
+
+      const idxs = otherIndicesByPalette[pi] ?? [];
+      const otherDepth = idxs.map((j) => depthRTs[j].depthTexture);
+
+      chainOnBeforeCompile(
+        mat,
+        (shader) => {
+          shader.uniforms.wmCollideRes = { value: new THREE.Vector2(screenW, screenH) };
+          shader.uniforms.wmCollideMarginPx = { value: marginPx };
+          shader.uniforms.wmCollideFeatherPx = { value: featherPx };
+          shader.uniforms.wmCollideSoftEdge = { value: softEdge ? 1 : 0 };
+          shader.uniforms.wmFinishEnabled = { value: finishEnabled };
+          shader.uniforms.wmFinishDepthPx = { value: finishDepthPx };
+          shader.uniforms.wmOtherDepthCount = { value: otherDepth.length };
+          shader.uniforms.wmOtherDepth0 = { value: (otherDepth[0] as any) ?? dummy };
+          shader.uniforms.wmOtherDepth1 = { value: (otherDepth[1] as any) ?? dummy };
+          shader.uniforms.wmOtherDepth2 = { value: (otherDepth[2] as any) ?? dummy };
+          shader.uniforms.wmOtherDepth3 = { value: (otherDepth[3] as any) ?? dummy };
+          shader.uniforms.wmOtherDepth4 = { value: (otherDepth[4] as any) ?? dummy };
+          shader.uniforms.wmOtherDepth5 = { value: (otherDepth[5] as any) ?? dummy };
+          shader.uniforms.wmOtherDepth6 = { value: (otherDepth[6] as any) ?? dummy };
+
+          (mat.userData as any).__wmCollisionShader = shader;
+
+          const headerGlobal = `
+uniform vec2 wmCollideRes;
+uniform float wmCollideMarginPx;
+uniform float wmCollideFeatherPx;
+uniform float wmCollideSoftEdge;
+uniform float wmFinishEnabled;
+uniform float wmFinishDepthPx;
+uniform int wmOtherDepthCount;
+uniform sampler2D wmOtherDepth0;
+uniform sampler2D wmOtherDepth1;
+uniform sampler2D wmOtherDepth2;
+uniform sampler2D wmOtherDepth3;
+uniform sampler2D wmOtherDepth4;
+uniform sampler2D wmOtherDepth5;
+uniform sampler2D wmOtherDepth6;
+
+float wmDepth01(sampler2D d, vec2 uv) {
+  return texture2D(d, clamp(uv, 0.0, 1.0)).x;
+}
+
+float wmInFront01(sampler2D d, vec2 uv, float curZ) {
+  float z = wmDepth01(d, uv);
+  if (z >= 0.999999) return 0.0;
+  return z < (curZ - 0.00001) ? 1.0 : 0.0;
+}
+
+float wmInFrontAtRadius(sampler2D d, vec2 uv, float radiusPx, float curZ) {
+  float p = wmInFront01(d, uv, curZ);
+  if (radiusPx <= 0.0) return p;
+  vec2 px = 1.0 / wmCollideRes;
+  vec2 o = vec2(radiusPx, 0.0) * px;
+  p = max(p, wmInFront01(d, uv + vec2( o.x, 0.0), curZ));
+  p = max(p, wmInFront01(d, uv + vec2(-o.x, 0.0), curZ));
+  p = max(p, wmInFront01(d, uv + vec2(0.0,  o.x), curZ));
+  p = max(p, wmInFront01(d, uv + vec2(0.0, -o.x), curZ));
+  p = max(p, wmInFront01(d, uv + vec2( o.x,  o.x), curZ));
+  p = max(p, wmInFront01(d, uv + vec2(-o.x,  o.x), curZ));
+  p = max(p, wmInFront01(d, uv + vec2( o.x, -o.x), curZ));
+  p = max(p, wmInFront01(d, uv + vec2(-o.x, -o.x), curZ));
+  return p;
+}
+
+float wmAnyInFront(vec2 uv, float radiusPx, float curZ) {
+  float p = 0.0;
+  if (wmOtherDepthCount > 0) p = max(p, wmInFrontAtRadius(wmOtherDepth0, uv, radiusPx, curZ));
+  if (wmOtherDepthCount > 1) p = max(p, wmInFrontAtRadius(wmOtherDepth1, uv, radiusPx, curZ));
+  if (wmOtherDepthCount > 2) p = max(p, wmInFrontAtRadius(wmOtherDepth2, uv, radiusPx, curZ));
+  if (wmOtherDepthCount > 3) p = max(p, wmInFrontAtRadius(wmOtherDepth3, uv, radiusPx, curZ));
+  if (wmOtherDepthCount > 4) p = max(p, wmInFrontAtRadius(wmOtherDepth4, uv, radiusPx, curZ));
+  if (wmOtherDepthCount > 5) p = max(p, wmInFrontAtRadius(wmOtherDepth5, uv, radiusPx, curZ));
+  if (wmOtherDepthCount > 6) p = max(p, wmInFrontAtRadius(wmOtherDepth6, uv, radiusPx, curZ));
+  return p;
+}
+
+void wmApplyCollisionMask(inout vec4 col) {
+  if (wmOtherDepthCount <= 0) return;
+  vec2 uv = gl_FragCoord.xy / wmCollideRes;
+  float curZ = gl_FragCoord.z;
+  float margin = max(0.0, wmCollideMarginPx);
+  float feather = max(0.0, wmCollideFeatherPx);
+
+  float hit0 = wmAnyInFront(uv, 0.0, curZ);
+  if (hit0 > 0.5) {
+    discard;
+  }
+
+  float hitM = wmAnyInFront(uv, margin, curZ);
+  if (hitM <= 0.5) {
+    return;
+  }
+
+  float carveAmt = 1.0;
+  if (wmCollideSoftEdge > 0.5 && feather > 0.0) {
+    float cut = 0.0;
+    if (wmAnyInFront(uv, margin + feather * 0.25, curZ) > 0.5) cut = max(cut, 0.25);
+    if (wmAnyInFront(uv, margin + feather * 0.50, curZ) > 0.5) cut = max(cut, 0.50);
+    if (wmAnyInFront(uv, margin + feather * 0.75, curZ) > 0.5) cut = max(cut, 0.75);
+    if (wmAnyInFront(uv, margin + feather, curZ) > 0.5) cut = max(cut, 1.00);
+    carveAmt = 1.0 - cut;
+  }
+
+  if (wmFinishEnabled > 0.5) {
+    float wallThickness = max(2.0, min(30.0, wmFinishDepthPx * 0.35));
+    float wall = wmAnyInFront(uv, max(0.0, margin - wallThickness), curZ);
+    vec3 capCol = col.rgb * 0.14;
+    vec3 wallCol = col.rgb * 0.30;
+    vec3 inside = mix(capCol, wallCol, wall);
+    col.rgb = mix(col.rgb, inside, carveAmt);
+    return;
+  }
+
+  if (wmCollideSoftEdge > 0.5 && feather > 0.0) {
+    col.a *= max(0.0, 1.0 - carveAmt);
+    if (col.a <= 0.001) discard;
+  } else {
+    discard;
+  }
+}
+`;
+
+          let fs = shader.fragmentShader;
+          if (fs.includes('#include <common>')) {
+            fs = fs.replace('#include <common>', `#include <common>\n${headerGlobal}\n`);
+          } else {
+            fs = fs.replace('void main() {', `${headerGlobal}\nvoid main() {`);
+          }
+          fs = fs.replace('#include <dithering_fragment>', `wmApplyCollisionMask(gl_FragColor);\n#include <dithering_fragment>`);
+          shader.fragmentShader = fs;
+        },
+        `collide-v1:${config.collisions.carve.direction}:${config.collisions.carve.edge}:${marginPx.toFixed(2)}:${featherPx.toFixed(2)}:${finishEnabled}:${finishDepthPx.toFixed(2)}:${otherDepth.length}`
+      );
+    };
+
+    for (let pi = 0; pi < nColors; pi++) {
+      for (const mesh of baseMeshesByPalette[pi] ?? []) {
+        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        for (const m of mats) patchMaterial(m, pi);
+      }
+    }
+
+    const baseMeshes = baseMeshesByPalette.flat();
+    (scene.userData as any).__wmBeforeRender = (r: THREE.WebGLRenderer, s: THREE.Scene, cam: THREE.Camera) => {
+      const sz = new THREE.Vector2();
+      r.getDrawingBufferSize(sz);
+      const nextScreenW = Math.max(1, Math.round(sz.x));
+      const nextScreenH = Math.max(1, Math.round(sz.y));
+      const nextRTW = Math.max(1, Math.round(nextScreenW * getMaskScale()));
+      const nextRTH = Math.max(1, Math.round(nextScreenH * getMaskScale()));
+
+      if (nextRTW !== rtW || nextRTH !== rtH) {
+        rtW = nextRTW;
+        rtH = nextRTH;
+        for (const rt of depthRTs) rt.dispose();
+        depthRTs = Array.from({ length: nColors }, () => makeRT());
+
+        for (const mesh of baseMeshes) {
+          const pi = Number((mesh.userData as any).__wmPaletteIndex ?? 0) % nColors;
+          const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+          for (const m of mats) {
+            const sh = (m.userData as any).__wmCollisionShader;
+            if (!sh) continue;
+            const idxs = otherIndicesByPalette[pi] ?? [];
+            sh.uniforms.wmOtherDepthCount.value = idxs.length;
+            sh.uniforms.wmOtherDepth0.value = (depthRTs[idxs[0]]?.depthTexture as any) ?? dummy;
+            sh.uniforms.wmOtherDepth1.value = (depthRTs[idxs[1]]?.depthTexture as any) ?? dummy;
+            sh.uniforms.wmOtherDepth2.value = (depthRTs[idxs[2]]?.depthTexture as any) ?? dummy;
+            sh.uniforms.wmOtherDepth3.value = (depthRTs[idxs[3]]?.depthTexture as any) ?? dummy;
+            sh.uniforms.wmOtherDepth4.value = (depthRTs[idxs[4]]?.depthTexture as any) ?? dummy;
+            sh.uniforms.wmOtherDepth5.value = (depthRTs[idxs[5]]?.depthTexture as any) ?? dummy;
+            sh.uniforms.wmOtherDepth6.value = (depthRTs[idxs[6]]?.depthTexture as any) ?? dummy;
+          }
+        }
+      }
+
+      for (const mesh of baseMeshes) {
+        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        for (const m of mats) {
+          const sh = (m.userData as any).__wmCollisionShader;
+          if (sh?.uniforms?.wmCollideRes) sh.uniforms.wmCollideRes.value.set(nextScreenW, nextScreenH);
+        }
+      }
+      screenW = nextScreenW;
+      screenH = nextScreenH;
+
+      const prevTarget = r.getRenderTarget();
+      const prevOverride = (s as any).overrideMaterial;
+      const clearCol = r.getClearColor(new THREE.Color());
+      const clearA = r.getClearAlpha();
+      const vis = baseMeshes.map((m) => m.visible);
+      const outlineVis = outlineGroup ? outlineGroup.visible : true;
+
+      r.setClearColor(0x000000, 0);
+      (s as any).overrideMaterial = depthMat;
+      if (outlineGroup) outlineGroup.visible = false;
+
+      for (let pi = 0; pi < nColors; pi++) {
+        for (let i = 0; i < baseMeshes.length; i++) baseMeshes[i].visible = false;
+        for (const mesh of baseMeshesByPalette[pi] ?? []) mesh.visible = true;
+        r.setRenderTarget(depthRTs[pi]);
+        r.clear(true, true, false);
+        r.render(s, cam);
+      }
+
+      (s as any).overrideMaterial = prevOverride;
+      if (outlineGroup) outlineGroup.visible = outlineVis;
+      for (let i = 0; i < baseMeshes.length; i++) baseMeshes[i].visible = vis[i];
+      r.setRenderTarget(prevTarget);
+      r.setClearColor(clearCol, clearA);
+    };
+
+    (scene.userData as any).__wmDisposeCollisionMasking = () => {
+      try {
+        for (const rt of depthRTs) rt.dispose();
+        depthMat.dispose();
+        dummy.dispose();
+      } catch {
+        // Ignore
+      }
+      delete (scene.userData as any).__wmBeforeRender;
+    };
+  }
+
   // No shadow catcher: keep shadows stick-to-stick only.
   void envDisposable;
   
@@ -474,6 +811,7 @@ export function renderPopsicleToCanvas(
     height: config.height,
     bloom: config.bloom
   });
+  (scene.userData as any).__wmDisposeCollisionMasking?.();
   (scene.userData as any).__wmDisposeProceduralEnvironment?.();
   delete (scene.userData as any).__wmDisposeProceduralEnvironment;
   return renderer.domElement;

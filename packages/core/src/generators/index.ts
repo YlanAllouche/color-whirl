@@ -20,7 +20,16 @@ import { renderHexGrid2DToCanvas } from './hexgrid2d.js';
 
 export function createWallpaperScene(
   config: WallpaperConfig,
-  options?: { canvas?: HTMLCanvasElement; preserveDrawingBuffer?: boolean; pixelRatio?: number }
+  options?: {
+    canvas?: HTMLCanvasElement;
+    preserveDrawingBuffer?: boolean;
+    pixelRatio?: number;
+    /**
+     * Optional scale factor for collision masking depth targets (3D only).
+     * Keeps previews snappy without affecting export.
+     */
+    collisionMaskScale?: number;
+  }
 ): {
   scene: THREE.Scene;
   camera: THREE.Camera;
