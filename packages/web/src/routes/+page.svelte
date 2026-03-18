@@ -172,10 +172,11 @@
       config.type === 'spheres3d' ||
       config.type === 'triangles3d' ||
       config.type === 'circles2d' ||
+      config.type === 'polygon2d' ||
       config.type === 'triangles2d'
   );
   let showEmissionSection = $derived(
-    supportsEmission && (config.type === 'circles2d' || config.type === 'triangles2d' ? config.bloom.enabled : true)
+    supportsEmission && (config.type === 'circles2d' || config.type === 'polygon2d' || config.type === 'triangles2d' ? config.bloom.enabled : true)
   );
 
   type FallbackQuality = 'interactive' | 'final';
@@ -579,6 +580,40 @@
             croissant: { ...src.circles.croissant }
           }
         };
+      case 'polygon2d':
+        return {
+          ...src,
+          colors: [...src.colors],
+          textureParams: {
+            drywall: { ...src.textureParams.drywall },
+            glass: { ...src.textureParams.glass },
+            cel: { ...src.textureParams.cel }
+          },
+          edges: {
+            tint: { ...src.edges.tint },
+            material: { ...src.edges.material },
+            wear: { ...src.edges.wear },
+            rimLight: { ...src.edges.rimLight },
+            outline: { ...src.edges.outline }
+          },
+          emission: { ...src.emission },
+          bloom: { ...src.bloom },
+          collisions: { ...src.collisions, carve: { ...src.collisions.carve } },
+          lighting: {
+            ...src.lighting,
+            position: { ...src.lighting.position }
+          },
+          camera: { ...src.camera },
+          environment: { ...src.environment },
+          shadows: { ...src.shadows },
+          rendering: { ...src.rendering },
+          geometry: { ...src.geometry },
+          polygons: {
+            ...src.polygons,
+            stroke: { ...src.polygons.stroke },
+            colorWeights: [...src.polygons.colorWeights]
+          }
+        };
       case 'triangles2d':
         return {
           ...src,
@@ -723,7 +758,7 @@
     schedulePreviewRender();
   }
 
-  type WeightTarget = 'spheres' | 'circles' | 'triangles2d' | 'prisms' | 'hexgrid';
+  type WeightTarget = 'spheres' | 'circles' | 'polygons' | 'triangles2d' | 'prisms' | 'hexgrid';
 
   function setEqualWeights(target: WeightTarget) {
     const n = Math.max(0, config.colors.length);
@@ -731,6 +766,7 @@
 
     if (target === 'spheres' && config.type === 'spheres3d') config.spheres.colorWeights = w;
     if (target === 'circles' && config.type === 'circles2d') config.circles.colorWeights = w;
+    if (target === 'polygons' && config.type === 'polygon2d') config.polygons.colorWeights = w;
     if (target === 'triangles2d' && config.type === 'triangles2d') config.triangles.colorWeights = w;
     if (target === 'prisms' && config.type === 'triangles3d') config.prisms.colorWeights = w;
     if (target === 'hexgrid' && config.type === 'hexgrid2d') config.hexgrid.coloring.weights = w;
@@ -742,6 +778,7 @@
 
     if (target === 'spheres' && config.type === 'spheres3d') config.spheres.colorWeights = w;
     if (target === 'circles' && config.type === 'circles2d') config.circles.colorWeights = w;
+    if (target === 'polygons' && config.type === 'polygon2d') config.polygons.colorWeights = w;
     if (target === 'triangles2d' && config.type === 'triangles2d') config.triangles.colorWeights = w;
     if (target === 'prisms' && config.type === 'triangles3d') config.prisms.colorWeights = w;
     if (target === 'hexgrid' && config.type === 'hexgrid2d') config.hexgrid.coloring.weights = w;
@@ -761,6 +798,12 @@
       const a = [...(config.circles.colorWeights ?? [])];
       a[i] = v;
       config.circles.colorWeights = a;
+    }
+
+    if (target === 'polygons' && config.type === 'polygon2d') {
+      const a = [...(config.polygons.colorWeights ?? [])];
+      a[i] = v;
+      config.polygons.colorWeights = a;
     }
 
     if (target === 'triangles2d' && config.type === 'triangles2d') {
@@ -976,6 +1019,21 @@
       void c.circles.croissant.offset;
       void c.circles.croissant.angleJitterDeg;
     }
+    if (c.type === 'polygon2d') {
+      void c.polygons.count;
+      void c.polygons.edges;
+      void c.polygons.rMinPx;
+      void c.polygons.rMaxPx;
+      void c.polygons.jitter;
+      void c.polygons.rotateJitterDeg;
+      void c.polygons.fillOpacity;
+      void c.polygons.stroke.enabled;
+      void c.polygons.stroke.widthPx;
+      void c.polygons.stroke.color;
+      void c.polygons.stroke.opacity;
+      void c.polygons.paletteMode;
+      void c.polygons.colorWeights.join(',');
+    }
     if (c.type === 'triangles2d') {
       void c.triangles.mode;
       void c.triangles.density;
@@ -1076,7 +1134,7 @@
 
   $effect(() => {
     // Avoid no-op toggles: emission for 2D types needs bloom; hexgrid doesn't support either.
-    if (config.type === 'circles2d' || config.type === 'triangles2d') {
+    if (config.type === 'circles2d' || config.type === 'polygon2d' || config.type === 'triangles2d') {
       if (config.emission.enabled && !config.bloom.enabled) {
         config.bloom.enabled = true;
       }
@@ -1208,6 +1266,7 @@
               <option value="popsicle">Popsicle</option>
               <option value="spheres3d">Spheres (3D)</option>
               <option value="circles2d">Circles (2D)</option>
+              <option value="polygon2d">Polygon (2D)</option>
               <option value="triangles2d">Triangles (2D)</option>
               <option value="triangles3d">Triangles (3D)</option>
               <option value="hexgrid2d">Hex Grid (2D)</option>
@@ -1738,6 +1797,97 @@
                     value={config.circles.colorWeights[i] ?? 1}
                     oninput={(e) => {
                       updateWeight('circles', i, Number((e.currentTarget as HTMLInputElement).value));
+                    }}
+                  />
+                </label>
+              {/each}
+            {/if}
+          </details>
+        </section>
+       {:else if config.type === 'polygon2d'}
+        <section class="control-section">
+          <h3>Polygon (2D)</h3>
+
+          <label class="control-row slider">
+            <span class="setting-title">Count: {config.polygons.count}</span>
+            <input type="range" bind:value={config.polygons.count} min="0" max="4000" step="10" />
+          </label>
+
+          <label class="control-row slider">
+            <span class="setting-title">Edges: {Math.round(config.polygons.edges)}</span>
+            <input type="range" bind:value={config.polygons.edges} min="3" max="16" step="1" />
+          </label>
+
+          <label class="control-row slider">
+            <span class="setting-title">Radius min: {Math.round(config.polygons.rMinPx)}px</span>
+            <input type="range" bind:value={config.polygons.rMinPx} min="1" max="240" step="1" />
+          </label>
+          <label class="control-row slider">
+            <span class="setting-title">Radius max: {Math.round(config.polygons.rMaxPx)}px</span>
+            <input type="range" bind:value={config.polygons.rMaxPx} min="1" max="420" step="1" />
+          </label>
+
+          <label class="control-row slider">
+            <span class="setting-title">Jitter: {config.polygons.jitter.toFixed(2)}</span>
+            <input type="range" bind:value={config.polygons.jitter} min="0" max="1" step="0.01" />
+          </label>
+
+          <label class="control-row slider">
+            <span class="setting-title">Rotate jitter: {Math.round(config.polygons.rotateJitterDeg)}deg</span>
+            <input type="range" bind:value={config.polygons.rotateJitterDeg} min="0" max="360" step="1" />
+          </label>
+
+          <label class="control-row slider">
+            <span class="setting-title">Fill opacity: {config.polygons.fillOpacity.toFixed(2)}</span>
+            <input type="range" bind:value={config.polygons.fillOpacity} min="0" max="1" step="0.01" />
+          </label>
+
+          <details class="control-details">
+            <summary class="control-details-summary">Stroke</summary>
+            <label class="control-row checkbox">
+              <input type="checkbox" bind:checked={config.polygons.stroke.enabled} />
+              <span class="setting-title">Enable</span>
+            </label>
+            <label class="control-row slider">
+              <span class="setting-title">Width: {Math.round(config.polygons.stroke.widthPx)}px</span>
+              <input type="range" bind:value={config.polygons.stroke.widthPx} min="0" max="24" step="1" disabled={!config.polygons.stroke.enabled} />
+            </label>
+            <label class="control-row">
+              <span class="setting-title">Color</span>
+              <input type="color" bind:value={config.polygons.stroke.color} disabled={!config.polygons.stroke.enabled} />
+            </label>
+            <label class="control-row slider">
+              <span class="setting-title">Opacity: {config.polygons.stroke.opacity.toFixed(2)}</span>
+              <input type="range" bind:value={config.polygons.stroke.opacity} min="0" max="1" step="0.01" disabled={!config.polygons.stroke.enabled} />
+            </label>
+          </details>
+
+          <details class="control-details">
+            <summary class="control-details-summary">Palette</summary>
+            <label class="control-row">
+              <span class="setting-title">Mode</span>
+              <select bind:value={config.polygons.paletteMode}>
+                <option value="cycle">Cycle</option>
+                <option value="weighted">Weighted</option>
+              </select>
+            </label>
+
+            {#if config.polygons.paletteMode === 'weighted'}
+              <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-top:0.5rem;">
+                <button type="button" onclick={() => setEqualWeights('polygons')}>Equal weights</button>
+                <button type="button" onclick={() => setRandomWeights('polygons')}>Random weights</button>
+              </div>
+              {#each config.colors as c, i}
+                <label class="control-row slider">
+                  <span class="setting-title">w{i + 1}: {(config.polygons.colorWeights[i] ?? 1).toFixed(2)} {c}</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="5"
+                    step="0.05"
+                    value={config.polygons.colorWeights[i] ?? 1}
+                    oninput={(e) => {
+                      updateWeight('polygons', i, Number((e.currentTarget as HTMLInputElement).value));
                     }}
                   />
                 </label>
