@@ -156,7 +156,14 @@ export interface GeometryConfig {
   quality: number;
 }
 
-export type WallpaperType = 'popsicle' | 'spheres3d' | 'circles2d' | 'triangles2d' | 'triangles3d' | 'hexgrid2d';
+export type WallpaperType =
+  | 'popsicle'
+  | 'spheres3d'
+  | 'circles2d'
+  | 'polygon2d'
+  | 'triangles2d'
+  | 'triangles3d'
+  | 'hexgrid2d';
 
 export interface BaseWallpaperConfig {
   type: WallpaperType;
@@ -261,6 +268,31 @@ export interface Circles2DConfig extends BaseWallpaperConfig {
   };
 }
 
+export interface Polygon2DConfig extends BaseWallpaperConfig {
+  type: 'polygon2d';
+  polygons: {
+    count: number;
+    /** Polygon edge count (>= 3) */
+    edges: number;
+    rMinPx: number;
+    rMaxPx: number;
+    /** 0..1 */
+    jitter: number;
+    rotateJitterDeg: number;
+    /** 0..1 */
+    fillOpacity: number;
+    stroke: {
+      enabled: boolean;
+      widthPx: number;
+      color: string;
+      /** 0..1 */
+      opacity: number;
+    };
+    paletteMode: PaletteAssignMode;
+    colorWeights: number[];
+  };
+}
+
 export type Triangles2DMode = 'tessellation' | 'scatter' | 'lowpoly';
 
 export interface Triangles2DConfig extends BaseWallpaperConfig {
@@ -362,7 +394,14 @@ export interface HexGrid2DConfig extends BaseWallpaperConfig {
   };
 }
 
-export type WallpaperConfig = PopsicleConfig | Spheres3DConfig | Circles2DConfig | Triangles2DConfig | Triangles3DConfig | HexGrid2DConfig;
+export type WallpaperConfig =
+  | PopsicleConfig
+  | Spheres3DConfig
+  | Circles2DConfig
+  | Polygon2DConfig
+  | Triangles2DConfig
+  | Triangles3DConfig
+  | HexGrid2DConfig;
 
 export const RESOLUTION_PRESETS = {
   '1080p': { width: 1920, height: 1080 },
@@ -503,6 +542,23 @@ export const DEFAULT_CIRCLES2D_CONFIG: Circles2DConfig = {
   }
 };
 
+export const DEFAULT_POLYGON2D_CONFIG: Polygon2DConfig = {
+  ...DEFAULT_POPSICLE_CONFIG,
+  type: 'polygon2d',
+  polygons: {
+    count: 200,
+    edges: 6,
+    rMinPx: 18,
+    rMaxPx: 130,
+    jitter: 1.0,
+    rotateJitterDeg: 180,
+    fillOpacity: 0.95,
+    stroke: { enabled: false, widthPx: 2, color: '#0b0b10', opacity: 0.7 },
+    paletteMode: 'weighted',
+    colorWeights: [0.34, 0.28, 0.18, 0.12, 0.08]
+  }
+};
+
 export const DEFAULT_TRIANGLES2D_CONFIG: Triangles2DConfig = {
   ...DEFAULT_POPSICLE_CONFIG,
   type: 'triangles2d',
@@ -558,6 +614,7 @@ export const DEFAULT_CONFIG_BY_TYPE: Record<WallpaperType, WallpaperConfig> = {
   popsicle: DEFAULT_POPSICLE_CONFIG,
   spheres3d: DEFAULT_SPHERES3D_CONFIG,
   circles2d: DEFAULT_CIRCLES2D_CONFIG,
+  polygon2d: DEFAULT_POLYGON2D_CONFIG,
   triangles2d: DEFAULT_TRIANGLES2D_CONFIG,
   triangles3d: DEFAULT_TRIANGLES3D_CONFIG,
   hexgrid2d: DEFAULT_HEXGRID2D_CONFIG
@@ -877,6 +934,23 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
             offset: clamp(randomWeighted(rng, 0.05, 0.8, 0.35), 0, 1),
             angleJitterDeg: randomWeighted(rng, 0, 360, 180)
           }
+        }
+      };
+    case 'polygon2d':
+      return {
+        ...base,
+        type: 'polygon2d',
+        polygons: {
+          count: Math.round(randomWeighted(rng, 10, 1600, 240)),
+          edges: Math.max(3, Math.min(16, Math.round(randomWeighted(rng, 3, 12, 6)))),
+          rMinPx: Math.round(randomWeighted(rng, 6, 40, 18)),
+          rMaxPx: Math.round(randomWeighted(rng, 30, 280, 130)),
+          jitter: clamp(randomWeighted(rng, 0, 1, 1), 0, 1),
+          rotateJitterDeg: randomWeighted(rng, 0, 360, 180),
+          fillOpacity: clamp(randomWeighted(rng, 0.2, 1, 0.95), 0, 1),
+          stroke: { enabled: rng() < 0.25, widthPx: 2, color: '#0b0b10', opacity: 0.7 },
+          paletteMode: rng() < 0.65 ? 'weighted' : 'cycle',
+          colorWeights: [0.34, 0.28, 0.18, 0.12, 0.08]
         }
       };
     case 'triangles2d':

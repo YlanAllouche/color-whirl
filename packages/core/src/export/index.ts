@@ -147,6 +147,8 @@ function generateSVGContent(config: WallpaperConfig): string {
       return generatePopsicleSVG(config);
     case 'circles2d':
       return generateCircles2DSVG(config);
+    case 'polygon2d':
+      return generatePolygon2DSVG(config);
     case 'triangles2d':
       return generateTriangles2DSVG(config);
     case 'hexgrid2d':
@@ -321,6 +323,69 @@ function generateCircles2DSVG(config: Extract<WallpaperConfig, { type: 'circles2
         svg += `  <circle cx="${cx}" cy="${cy}" r="${r}" fill="${color}" fill-opacity="${fillOpacity}"${strokeAttr}/>\n`;
       }
     }
+  }
+
+  svg += svgEnd();
+  return svg;
+}
+
+function generatePolygon2DSVG(config: Extract<WallpaperConfig, { type: 'polygon2d' }>): string {
+  const { width, height, colors, backgroundColor } = config;
+  const n = Math.max(1, colors.length);
+  const count = Math.max(0, Math.round(config.polygons.count));
+  const edges = Math.max(3, Math.round(Number(config.polygons.edges) || 3));
+  const rMin = Math.max(0.1, Number(config.polygons.rMinPx) || 1);
+  const rMax = Math.max(rMin, Number(config.polygons.rMaxPx) || rMin);
+
+  const seed = config.seed >>> 0;
+  const rand01 = (i: number, ch: number) => {
+    const x = ((seed ^ (i * 0x9e3779b1)) + ch * 0x85ebca6b) >>> 0;
+    let t = x;
+    t ^= t >>> 16;
+    t = Math.imul(t, 0x7feb352d);
+    t ^= t >>> 15;
+    t = Math.imul(t, 0x846ca68b);
+    t ^= t >>> 16;
+    return (t >>> 0) / 4294967296;
+  };
+
+  const w = normalizeWeights(config.polygons.colorWeights, n);
+  const pickIndex = (i: number) => {
+    if (config.polygons.paletteMode === 'cycle') return i % n;
+    return sampleWeightedIndex01(rand01(i, 1), w);
+  };
+
+  const fillOpacity = clamp01(Number(config.polygons.fillOpacity) || 0);
+  const j = clamp01(Number(config.polygons.jitter) || 0);
+  const rotJ = ((Number(config.polygons.rotateJitterDeg) || 0) * Math.PI) / 180;
+
+  const strokeEnabled = !!config.polygons.stroke.enabled;
+  const strokeW = Math.max(0, Number(config.polygons.stroke.widthPx) || 0);
+  const strokeOpacity = clamp01(Number(config.polygons.stroke.opacity) || 0);
+  const strokeAttr = strokeEnabled && strokeW > 0 && strokeOpacity > 0
+    ? ` stroke="${config.polygons.stroke.color}" stroke-width="${strokeW}" stroke-opacity="${strokeOpacity}" stroke-linejoin="round"`
+    : '';
+
+  let svg = svgStart(width, height, backgroundColor);
+
+  for (let i = 0; i < count; i++) {
+    const r = rMin + rand01(i, 2) * (rMax - rMin);
+    const cx0 = rand01(i, 3) * width;
+    const cy0 = rand01(i, 4) * height;
+    const cx = cx0 + (rand01(i, 6) - 0.5) * r * 2 * j;
+    const cy = cy0 + (rand01(i, 7) - 0.5) * r * 2 * j;
+    const theta = (rand01(i, 8) - 0.5) * rotJ;
+
+    const idx = pickIndex(i);
+    const color = colors[idx] ?? '#ffffff';
+
+    const pts: string[] = [];
+    for (let k = 0; k < edges; k++) {
+      const a = theta + (k / edges) * Math.PI * 2;
+      pts.push(`${cx + Math.cos(a) * r},${cy + Math.sin(a) * r}`);
+    }
+
+    svg += `  <polygon points="${pts.join(' ')}" fill="${color}" fill-opacity="${fillOpacity}"${strokeAttr}/>` + '\n';
   }
 
   svg += svgEnd();

@@ -6,6 +6,7 @@ export * from './generators/popsicle.js';
 export * from './generators/spheres3d.js';
 export * from './generators/triangles3d.js';
 export * from './generators/circles2d.js';
+export * from './generators/polygon2d.js';
 export * from './generators/triangles2d.js';
 export * from './generators/hexgrid2d.js';
 export * from './export/index.js';
