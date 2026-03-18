@@ -1328,7 +1328,11 @@
               </label>
               <label class="control-row slider">
                 <span class="setting-title">Margin: {Math.round(config.collisions.carve.marginPx)}px</span>
-                <input type="range" bind:value={config.collisions.carve.marginPx} min="0" max="80" step="1" />
+                <input type="range" bind:value={config.collisions.carve.marginPx} min="0" max="400" step="1" />
+              </label>
+              <label class="control-row">
+                <span class="setting-title">Margin (exact)</span>
+                <input type="number" bind:value={config.collisions.carve.marginPx} min="0" max="2000" step="1" />
               </label>
               <label class="control-row">
                 <span class="setting-title">Edge</span>
@@ -1343,7 +1347,18 @@
                   type="range"
                   bind:value={config.collisions.carve.featherPx}
                   min="0"
-                  max="40"
+                  max="200"
+                  step="1"
+                  disabled={config.collisions.carve.edge !== 'soft'}
+                />
+              </label>
+              <label class="control-row">
+                <span class="setting-title">Feather (exact)</span>
+                <input
+                  type="number"
+                  bind:value={config.collisions.carve.featherPx}
+                  min="0"
+                  max="2000"
                   step="1"
                   disabled={config.collisions.carve.edge !== 'soft'}
                 />

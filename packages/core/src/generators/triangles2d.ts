@@ -172,7 +172,7 @@ export function renderTriangles2DToCanvas(config: Triangles2DConfig, canvas?: HT
     }
 
     if (f > 0) {
-      const steps = Math.max(1, Math.min(12, Math.round(f)));
+      const steps = Math.max(1, Math.min(64, Math.round(f)));
       target.lineJoin = 'round';
       target.lineCap = 'round';
       for (let i = 1; i <= steps; i++) {
@@ -219,7 +219,7 @@ export function renderTriangles2DToCanvas(config: Triangles2DConfig, canvas?: HT
     const marginPx = carveMargin;
     mctx.filter = blurPx > 0 ? `blur(${blurPx.toFixed(2)}px)` : 'none';
     if (marginPx > 0) {
-      const samples = Math.max(8, Math.min(32, Math.round(marginPx * 1.25)));
+      const samples = Math.max(8, Math.min(64, Math.round(marginPx * 1.25)));
       for (let i = 0; i < samples; i++) {
         const a = (i / samples) * Math.PI * 2;
         const dx = Math.cos(a) * marginPx;
