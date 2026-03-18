@@ -177,7 +177,7 @@ function chainOnBeforeCompile(
 
   const prevKey = (material as any).customProgramCacheKey;
   (material as any).customProgramCacheKey = () => {
-    const a = typeof prevKey === 'function' ? String(prevKey()) : '';
+    const a = typeof prevKey === 'function' ? String(prevKey.call(material)) : '';
     return a ? `${a}|${keyPart}` : keyPart;
   };
   material.needsUpdate = true;

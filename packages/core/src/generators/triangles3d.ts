@@ -196,7 +196,7 @@ function chainOnBeforeCompile(material: THREE.Material, fn: (shader: any) => voi
 
   const prevKey = (material as any).customProgramCacheKey;
   (material as any).customProgramCacheKey = () => {
-    const a = typeof prevKey === 'function' ? String(prevKey()) : '';
+    const a = typeof prevKey === 'function' ? String(prevKey.call(material)) : '';
     return a ? `${a}|${keyPart}` : keyPart;
   };
   material.needsUpdate = true;
@@ -414,7 +414,7 @@ export function createTriangles3DScene(
 
           (mat.userData as any).__wmCollisionShader = shader;
 
-          const header = `
+          const headerGlobal = `
 uniform vec2 wmCollideRes;
 uniform float wmCollideMarginPx;
 uniform float wmCollideFeatherPx;
@@ -428,53 +428,59 @@ uniform sampler2D wmOtherDepth4;
 uniform sampler2D wmOtherDepth5;
 uniform sampler2D wmOtherDepth6;
 
-float wmPresentDepth(sampler2D d, vec2 uv) {
-  float z = texture2D(d, clamp(uv, 0.0, 1.0)).x;
-  return z < 0.999999 ? 1.0 : 0.0;
+float wmDepth01(sampler2D d, vec2 uv) {
+  return texture2D(d, clamp(uv, 0.0, 1.0)).x;
 }
 
-float wmPresentAtRadius(sampler2D d, vec2 uv, float radiusPx) {
-  float p = wmPresentDepth(d, uv);
+float wmInFront01(sampler2D d, vec2 uv, float curZ) {
+  float z = wmDepth01(d, uv);
+  if (z >= 0.999999) return 0.0;
+  return z < (curZ - 0.00001) ? 1.0 : 0.0;
+}
+
+float wmInFrontAtRadius(sampler2D d, vec2 uv, float radiusPx, float curZ) {
+  float p = wmInFront01(d, uv, curZ);
   if (radiusPx <= 0.0) return p;
   vec2 px = 1.0 / wmCollideRes;
   vec2 o = vec2(radiusPx, 0.0) * px;
-  p = max(p, wmPresentDepth(d, uv + vec2( o.x, 0.0)));
-  p = max(p, wmPresentDepth(d, uv + vec2(-o.x, 0.0)));
-  p = max(p, wmPresentDepth(d, uv + vec2(0.0,  o.x)));
-  p = max(p, wmPresentDepth(d, uv + vec2(0.0, -o.x)));
-  p = max(p, wmPresentDepth(d, uv + vec2( o.x,  o.x)));
-  p = max(p, wmPresentDepth(d, uv + vec2(-o.x,  o.x)));
-  p = max(p, wmPresentDepth(d, uv + vec2( o.x, -o.x)));
-  p = max(p, wmPresentDepth(d, uv + vec2(-o.x, -o.x)));
+  p = max(p, wmInFront01(d, uv + vec2( o.x, 0.0), curZ));
+  p = max(p, wmInFront01(d, uv + vec2(-o.x, 0.0), curZ));
+  p = max(p, wmInFront01(d, uv + vec2(0.0,  o.x), curZ));
+  p = max(p, wmInFront01(d, uv + vec2(0.0, -o.x), curZ));
+  p = max(p, wmInFront01(d, uv + vec2( o.x,  o.x), curZ));
+  p = max(p, wmInFront01(d, uv + vec2(-o.x,  o.x), curZ));
+  p = max(p, wmInFront01(d, uv + vec2( o.x, -o.x), curZ));
+  p = max(p, wmInFront01(d, uv + vec2(-o.x, -o.x), curZ));
   return p;
 }
 
-float wmAnyPresent(vec2 uv, float radiusPx) {
+float wmAnyInFront(vec2 uv, float radiusPx, float curZ) {
   float p = 0.0;
-  if (wmOtherDepthCount > 0) p = max(p, wmPresentAtRadius(wmOtherDepth0, uv, radiusPx));
-  if (wmOtherDepthCount > 1) p = max(p, wmPresentAtRadius(wmOtherDepth1, uv, radiusPx));
-  if (wmOtherDepthCount > 2) p = max(p, wmPresentAtRadius(wmOtherDepth2, uv, radiusPx));
-  if (wmOtherDepthCount > 3) p = max(p, wmPresentAtRadius(wmOtherDepth3, uv, radiusPx));
-  if (wmOtherDepthCount > 4) p = max(p, wmPresentAtRadius(wmOtherDepth4, uv, radiusPx));
-  if (wmOtherDepthCount > 5) p = max(p, wmPresentAtRadius(wmOtherDepth5, uv, radiusPx));
-  if (wmOtherDepthCount > 6) p = max(p, wmPresentAtRadius(wmOtherDepth6, uv, radiusPx));
+  if (wmOtherDepthCount > 0) p = max(p, wmInFrontAtRadius(wmOtherDepth0, uv, radiusPx, curZ));
+  if (wmOtherDepthCount > 1) p = max(p, wmInFrontAtRadius(wmOtherDepth1, uv, radiusPx, curZ));
+  if (wmOtherDepthCount > 2) p = max(p, wmInFrontAtRadius(wmOtherDepth2, uv, radiusPx, curZ));
+  if (wmOtherDepthCount > 3) p = max(p, wmInFrontAtRadius(wmOtherDepth3, uv, radiusPx, curZ));
+  if (wmOtherDepthCount > 4) p = max(p, wmInFrontAtRadius(wmOtherDepth4, uv, radiusPx, curZ));
+  if (wmOtherDepthCount > 5) p = max(p, wmInFrontAtRadius(wmOtherDepth5, uv, radiusPx, curZ));
+  if (wmOtherDepthCount > 6) p = max(p, wmInFrontAtRadius(wmOtherDepth6, uv, radiusPx, curZ));
   return p;
 }
 
 void wmApplyCollisionMask(inout vec4 col) {
   if (wmOtherDepthCount <= 0) return;
   vec2 uv = gl_FragCoord.xy / wmCollideRes;
+  float curZ = gl_FragCoord.z;
   float margin = max(0.0, wmCollideMarginPx);
   float feather = max(0.0, wmCollideFeatherPx);
 
   float cut = 1.0;
-  if (wmAnyPresent(uv, margin) > 0.5) cut = 0.0;
+  if (wmAnyInFront(uv, margin, curZ) > 0.5) cut = 0.0;
 
   if (wmCollideSoftEdge > 0.5 && feather > 0.0) {
-    if (wmAnyPresent(uv, margin + feather * 0.25) > 0.5) cut = min(cut, 0.25);
-    if (wmAnyPresent(uv, margin + feather * 0.50) > 0.5) cut = min(cut, 0.50);
-    if (wmAnyPresent(uv, margin + feather * 0.75) > 0.5) cut = min(cut, 0.75);
-    if (wmAnyPresent(uv, margin + feather) > 0.5) cut = min(cut, 1.00);
+    if (wmAnyInFront(uv, margin + feather * 0.25, curZ) > 0.5) cut = min(cut, 0.25);
+    if (wmAnyInFront(uv, margin + feather * 0.50, curZ) > 0.5) cut = min(cut, 0.50);
+    if (wmAnyInFront(uv, margin + feather * 0.75, curZ) > 0.5) cut = min(cut, 0.75);
+    if (wmAnyInFront(uv, margin + feather, curZ) > 0.5) cut = min(cut, 1.00);
     col.a *= cut;
     if (col.a <= 0.001) discard;
   } else {
@@ -483,10 +489,14 @@ void wmApplyCollisionMask(inout vec4 col) {
 }
 `;
 
-          shader.fragmentShader = shader.fragmentShader.replace(
-            '#include <dithering_fragment>',
-            `${header}\nwmApplyCollisionMask(gl_FragColor);\n#include <dithering_fragment>`
-          );
+          let fs = shader.fragmentShader;
+          if (fs.includes('#include <common>')) {
+            fs = fs.replace('#include <common>', `#include <common>\n${headerGlobal}\n`);
+          } else {
+            fs = fs.replace('void main() {', `${headerGlobal}\nvoid main() {`);
+          }
+          fs = fs.replace('#include <dithering_fragment>', `wmApplyCollisionMask(gl_FragColor);\n#include <dithering_fragment>`);
+          shader.fragmentShader = fs;
         },
         `collide-v1:${config.collisions.carve.direction}:${config.collisions.carve.edge}:${marginPx.toFixed(2)}:${featherPx.toFixed(2)}:${otherDepth.length}`
       );
@@ -541,7 +551,7 @@ void wmApplyCollisionMask(inout vec4 col) {
       for (let i = 0; i < nColors; i++) {
         for (let j = 0; j < nColors; j++) paletteMeshes[j].visible = j === i;
         r.setRenderTarget(depthRTs[i]);
-        r.clear();
+        r.clear(true, true, false);
         r.render(s, camera);
       }
       (s as any).overrideMaterial = prevOverride;

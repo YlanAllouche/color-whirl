@@ -34,9 +34,26 @@ async function generateRaster(
     headless: 'new',
     args: ['--no-sandbox', '--disable-setuid-sandbox']
   });
-  
+
+  let pageErrors: string[] = [];
   try {
     const page = await browser.newPage();
+
+    pageErrors = [];
+    page.on('console', (msg) => {
+      try {
+        const txt = msg.text();
+        if (txt) pageErrors.push(`[console:${msg.type()}] ${txt}`);
+      } catch {
+        // Ignore
+      }
+    });
+    page.on('pageerror', (err) => {
+      pageErrors.push(`[pageerror] ${String((err as any)?.stack || err)}`);
+    });
+    page.on('error', (err) => {
+      pageErrors.push(`[error] ${String((err as any)?.stack || err)}`);
+    });
 
     await page.goto(`${server.url}/index.html?cfg=${encodeURIComponent(cfg)}`, { waitUntil: 'domcontentloaded' });
     
@@ -46,9 +63,24 @@ async function generateRaster(
       deviceScaleFactor: 1
     });
     
-    await page.waitForFunction(() => {
-      return (globalThis as any).wallpaperRendered === true;
-    }, { timeout: 30000 });
+    await page.waitForFunction(
+      () => {
+        return (globalThis as any).wallpaperRendered === true;
+      },
+      { timeout: 30000 }
+    );
+
+    // If the renderer hit runtime errors, don't silently output a blank image.
+    const hardErrors = pageErrors.filter((l) => {
+      if (l.startsWith('[pageerror]')) return true;
+      if (!l.startsWith('[console:error]')) return false;
+      // Ignore benign browser noise (e.g. favicon 404).
+      if (l.includes('Failed to load resource') && l.includes('404')) return false;
+      return true;
+    });
+    if (hardErrors.length) {
+      throw new Error(`Renderer runtime errors:\n${hardErrors.join('\n')}`);
+    }
     
     const screenshotOptions: any = {
       type: format === 'jpg' ? 'jpeg' : format,
@@ -68,6 +100,10 @@ async function generateRaster(
       format,
       mimeType
     };
+  } catch (err: any) {
+    // Bubble up renderer issues with browser-side logs.
+    const details = (err?.stack || String(err)) + (pageErrors.length ? `\n\nRenderer logs:\n${pageErrors.join('\n')}` : '');
+    throw new Error(details);
   } finally {
     await browser.close();
     await server.close();
