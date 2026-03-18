@@ -104,6 +104,18 @@ export function renderTriangles2DToCanvas(config: Triangles2DConfig, canvas?: HT
   ctx.fillStyle = config.backgroundColor;
   ctx.fillRect(0, 0, c.width, c.height);
 
+  const collisionsEnabled = config.collisions.mode === 'carve' && Math.max(0, config.colors.length) <= 8;
+  const direction = config.collisions.carve.direction;
+
+  const shapes = collisionsEnabled ? document.createElement('canvas') : null;
+  if (shapes) {
+    shapes.width = c.width;
+    shapes.height = c.height;
+  }
+  const sctx = (shapes ? shapes.getContext('2d') : ctx) as CanvasRenderingContext2D | null;
+  if (!sctx) throw new Error('2D canvas not available');
+  if (shapes) sctx.clearRect(0, 0, shapes.width, shapes.height);
+
   const rng = createRng(config.seed);
   const nColors = Math.max(1, config.colors.length);
   const weights = normalizeWeights(config.triangles.colorWeights, nColors);
@@ -125,18 +137,116 @@ export function renderTriangles2DToCanvas(config: Triangles2DConfig, canvas?: HT
   const gctx = glow.getContext('2d');
   if (!gctx) throw new Error('2D canvas not available');
 
+  const carveMargin = Math.max(0, Number(config.collisions.carve.marginPx) || 0);
+  const carveFeather = config.collisions.carve.edge === 'soft' ? Math.max(0, Number(config.collisions.carve.featherPx) || 0) : 0;
+
+  const applyCarve = (target: CanvasRenderingContext2D, path: Path2D) => {
+    if (!collisionsEnabled) return;
+    const m = carveMargin;
+    const f = carveFeather;
+
+    target.save();
+    target.globalCompositeOperation = 'destination-out';
+    target.globalAlpha = 1;
+    target.fill(path);
+
+    if (m > 0) {
+      target.lineJoin = 'round';
+      target.lineCap = 'round';
+      target.lineWidth = m * 2;
+      target.stroke(path);
+    }
+
+    if (f > 0) {
+      const steps = Math.max(1, Math.min(12, Math.round(f)));
+      target.lineJoin = 'round';
+      target.lineCap = 'round';
+      for (let i = 1; i <= steps; i++) {
+        const t = i / steps;
+        const r = m + t * f;
+        target.globalAlpha = 1 - t;
+        target.lineWidth = r * 2;
+        target.stroke(path);
+      }
+    }
+
+    target.restore();
+  };
+
+  const mask = collisionsEnabled && direction === 'twoWay' ? document.createElement('canvas') : null;
+  if (mask) {
+    mask.width = c.width;
+    mask.height = c.height;
+  }
+  const mctx = mask ? mask.getContext('2d') : null;
+
+  const temp = collisionsEnabled && direction === 'twoWay' ? document.createElement('canvas') : null;
+  if (temp) {
+    temp.width = c.width;
+    temp.height = c.height;
+  }
+  const tctx = temp ? temp.getContext('2d') : null;
+
+  const tempGlow = collisionsEnabled && direction === 'twoWay' ? document.createElement('canvas') : null;
+  if (tempGlow) {
+    tempGlow.width = c.width;
+    tempGlow.height = c.height;
+  }
+  const tgctx = tempGlow ? tempGlow.getContext('2d') : null;
+
+  const renderPresenceMask = () => {
+    if (!mask || !mctx || !shapes) return;
+    mctx.setTransform(1, 0, 0, 1, 0, 0);
+    mctx.clearRect(0, 0, mask.width, mask.height);
+    mctx.globalCompositeOperation = 'source-over';
+    mctx.globalAlpha = 1;
+
+    const blurPx = carveFeather;
+    const marginPx = carveMargin;
+    mctx.filter = blurPx > 0 ? `blur(${blurPx.toFixed(2)}px)` : 'none';
+    if (marginPx > 0) {
+      const samples = Math.max(8, Math.min(32, Math.round(marginPx * 1.25)));
+      for (let i = 0; i < samples; i++) {
+        const a = (i / samples) * Math.PI * 2;
+        const dx = Math.cos(a) * marginPx;
+        const dy = Math.sin(a) * marginPx;
+        mctx.drawImage(shapes, dx, dy);
+      }
+    }
+    mctx.drawImage(shapes, 0, 0);
+    mctx.filter = 'none';
+  };
+
   const lightRad = ((Number(config.triangles.shading.lightDeg) || 0) * Math.PI) / 180;
   const lx = Math.cos(lightRad);
   const ly = Math.sin(lightRad);
   const shadeStrength = clamp(config.triangles.shading.strength, 0, 1);
 
-  const drawTri = (ax: number, ay: number, bx: number, by: number, cx: number, cy: number, idx: number) => {
+  const drawTo = (target: CanvasRenderingContext2D, path: Path2D, fill: string) => {
+    target.fillStyle = rgba(fill, fillOpacity);
+    target.fill(path);
+    if (strokeEnabled && strokeW > 0 && strokeOpacity > 0) {
+      target.lineWidth = strokeW;
+      target.lineJoin = 'round';
+      target.strokeStyle = rgba(config.triangles.stroke.color, strokeOpacity);
+      target.stroke(path);
+    }
+  };
+
+  const drawGlow = (target: CanvasRenderingContext2D, path: Path2D, fill: string) => {
+    if (!config.emission.enabled || !config.bloom.enabled) return;
+    const emit = Math.max(0, Number(config.emission.intensity) || 0);
+    if (!(emit > 0)) return;
+    target.fillStyle = rgba(fill, clamp(0.04 + emit * 0.02, 0, 1));
+    target.fill(path);
+  };
+
+  const drawTri = (ax: number, ay: number, bx: number, by: number, cx1: number, cy1: number, idx: number) => {
     const base = config.colors[idx] ?? '#ffffff';
     let fill = base;
     if (config.triangles.shading.enabled) {
-      const mx = (ax + bx + cx) / 3;
-      const my = (ay + by + cy) / 3;
-      // Fake “facet normal” from centroid direction vs light.
+      const mx = (ax + bx + cx1) / 3;
+      const my = (ay + by + cy1) / 3;
       const nx = (mx - c.width * 0.5) / Math.max(1, c.width);
       const ny = (my - c.height * 0.5) / Math.max(1, c.height);
       const d = clamp(nx * lx + ny * ly, -1, 1);
@@ -147,26 +257,53 @@ export function renderTriangles2DToCanvas(config: Triangles2DConfig, canvas?: HT
     const p = new Path2D();
     p.moveTo(ax, ay);
     p.lineTo(bx, by);
-    p.lineTo(cx, cy);
+    p.lineTo(cx1, cy1);
     p.closePath();
 
-    ctx.fillStyle = rgba(fill, fillOpacity);
-    ctx.fill(p);
+    const emitIdx = Math.round(config.emission.paletteIndex);
+    const wantsGlow = config.emission.enabled && idx === emitIdx && config.bloom.enabled;
 
-    if (strokeEnabled && strokeW > 0 && strokeOpacity > 0) {
-      ctx.lineWidth = strokeW;
-      ctx.lineJoin = 'round';
-      ctx.strokeStyle = rgba(config.triangles.stroke.color, strokeOpacity);
-      ctx.stroke(p);
+    if (!collisionsEnabled) {
+      drawTo(sctx, p, fill);
+      if (wantsGlow) drawGlow(gctx, p, fill);
+      return;
     }
 
-    if (config.emission.enabled && idx === Math.round(config.emission.paletteIndex) && config.bloom.enabled) {
-      const emit = Math.max(0, Number(config.emission.intensity) || 0);
-      if (emit > 0) {
-        gctx.fillStyle = rgba(fill, clamp(0.04 + emit * 0.02, 0, 1));
-        gctx.fill(p);
-      }
+    if (direction === 'twoWay' && shapes && mask && mctx && temp && tctx && tempGlow && tgctx) {
+      renderPresenceMask();
+
+      tctx.setTransform(1, 0, 0, 1, 0, 0);
+      tctx.clearRect(0, 0, temp.width, temp.height);
+      drawTo(tctx, p, fill);
+      tctx.globalCompositeOperation = 'destination-out';
+      tctx.globalAlpha = 1;
+      tctx.drawImage(mask, 0, 0);
+      tctx.globalCompositeOperation = 'source-over';
+
+      tgctx.setTransform(1, 0, 0, 1, 0, 0);
+      tgctx.clearRect(0, 0, tempGlow.width, tempGlow.height);
+      if (wantsGlow) drawGlow(tgctx, p, fill);
+      tgctx.globalCompositeOperation = 'destination-out';
+      tgctx.globalAlpha = 1;
+      tgctx.drawImage(mask, 0, 0);
+      tgctx.globalCompositeOperation = 'source-over';
+
+      applyCarve(sctx, p);
+      applyCarve(gctx, p);
+
+      sctx.globalCompositeOperation = 'source-over';
+      sctx.globalAlpha = 1;
+      sctx.drawImage(temp, 0, 0);
+      gctx.globalCompositeOperation = 'source-over';
+      gctx.globalAlpha = 1;
+      gctx.drawImage(tempGlow, 0, 0);
+      return;
     }
+
+    applyCarve(sctx, p);
+    applyCarve(gctx, p);
+    drawTo(sctx, p, fill);
+    if (wantsGlow) drawGlow(gctx, p, fill);
   };
 
   const mode = config.triangles.mode;
@@ -191,17 +328,15 @@ export function renderTriangles2DToCanvas(config: Triangles2DConfig, canvas?: HT
       const ay = cy0 + Math.sin(theta) * s;
       const bx = cx0 + Math.cos(theta + (2 * Math.PI) / 3) * s;
       const by = cy0 + Math.sin(theta + (2 * Math.PI) / 3) * s;
-      const cx = cx0 + Math.cos(theta + (4 * Math.PI) / 3) * s;
-      const cy = cy0 + Math.sin(theta + (4 * Math.PI) / 3) * s;
+      const cx1 = cx0 + Math.cos(theta + (4 * Math.PI) / 3) * s;
+      const cy1 = cy0 + Math.sin(theta + (4 * Math.PI) / 3) * s;
 
-      drawTri(ax, ay, bx, by, cx, cy, idx);
+      drawTri(ax, ay, bx, by, cx1, cy1, idx);
     }
   } else {
-    // tessellation / lowpoly
     const sqrt3 = 1.7320508075688772;
 
     if (mode === 'lowpoly') {
-      // Jittered grid points, split quads into two triangles.
       const step = Math.max(12, scale);
       const cols = Math.ceil((c.width - inset * 2) / step) + 2;
       const rows = Math.ceil((c.height - inset * 2) / step) + 2;
@@ -236,7 +371,6 @@ export function renderTriangles2DToCanvas(config: Triangles2DConfig, canvas?: HT
         }
       }
     } else {
-      // Equilateral triangle grid.
       const s = scale;
       const h = (s * sqrt3) / 2;
       const cols = Math.ceil((c.width - inset * 2) / s) + 3;
@@ -251,7 +385,6 @@ export function renderTriangles2DToCanvas(config: Triangles2DConfig, canvas?: HT
           const jx = (rng() - 0.5) * s * jitter;
           const jy = (rng() - 0.5) * h * jitter;
 
-          // Up triangle
           const a1x = x0 + jx;
           const a1y = y0 + jy;
           const b1x = x0 + s / 2 + jx;
@@ -260,7 +393,6 @@ export function renderTriangles2DToCanvas(config: Triangles2DConfig, canvas?: HT
           const c1y = y0 + h + jy;
           drawTri(a1x, a1y, b1x, b1y, c1x, c1y, pickIndex(t++));
 
-          // Down triangle
           const a2x = x0 + jx;
           const a2y = y0 + 2 * h + jy;
           const b2x = x0 + s / 2 + jx;
@@ -271,6 +403,10 @@ export function renderTriangles2DToCanvas(config: Triangles2DConfig, canvas?: HT
         }
       }
     }
+  }
+
+  if (shapes) {
+    ctx.drawImage(shapes, 0, 0);
   }
 
   if (config.bloom.enabled) {
