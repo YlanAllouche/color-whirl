@@ -688,24 +688,30 @@ export function createRng(seed: number): RNG {
   };
 }
 
-export function randomWeighted(rng: RNG, min: number, max: number, normal: number): number {
-  // Use a simple weighted distribution: randomly pick between uniform and normal-biased
-  // This gives more weight to values near `normal` while still allowing the full range
-  const useNormal = rng() < 0.7; // 70% chance to use normal-weighted
-  
-  if (useNormal) {
-    // Box-Muller transform for normal distribution centered at normal
-    const u1 = Math.max(1e-12, rng());
-    const u2 = rng();
-    const z0 = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
-    // Normalize the range: spread is (max - min) / 4 to keep values mostly in range
-    const spread = (max - min) / 4;
-    const value = normal + z0 * spread;
-    return Math.max(min, Math.min(max, value));
-  } else {
-    // Uniform distribution
-    return min + rng() * (max - min);
+/**
+ * Sample a triangular distribution over [min, max] with a peak at `mode`.
+ * This is a simple "biased random" sampler where `mode` acts as the normal value.
+ */
+export function randomTriangular(rng: RNG, min: number, mode: number, max: number): number {
+  const a = Number(min);
+  const b = Number(max);
+  const c = clamp(Number(mode), Math.min(a, b), Math.max(a, b));
+
+  if (!Number.isFinite(a) || !Number.isFinite(b) || !Number.isFinite(c) || a === b) return a;
+  const lo = Math.min(a, b);
+  const hi = Math.max(a, b);
+  const m = clamp(c, lo, hi);
+  const u = clamp(rng(), 0, 1);
+  const fc = (m - lo) / (hi - lo);
+  if (u < fc) {
+    return lo + Math.sqrt(u * (hi - lo) * (m - lo));
   }
+  return hi - Math.sqrt((1 - u) * (hi - lo) * (hi - m));
+}
+
+// Back-compat alias (historical name)
+export function randomWeighted(rng: RNG, min: number, max: number, normal: number): number {
+  return randomTriangular(rng, min, normal, max);
 }
 
 function clamp(n: number, min: number, max: number): number {
@@ -827,7 +833,7 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
 
   const theme = generateRandomColorThemeFromSeed(seed ^ 0x9e3779b9, 5);
 
-  const textures: TextureType[] = ['glossy', 'matte', 'metallic', 'drywall', 'glass', 'mirror'];
+  const textures: TextureType[] = ['glossy', 'matte', 'metallic', 'drywall', 'glass', 'mirror', 'cel'];
 
   // Opacity distribution:
   // - Very likely fully opaque (1)
@@ -843,7 +849,20 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
     // Extremely rare: quite transparent.
     return clamp(randomWeighted(rng, 0.15, 0.5, 0.35), 0, 1);
   };
-  
+
+  const tri = (min: number, mode: number, max: number): number => randomTriangular(rng, min, mode, max);
+  const chance = (p: number): boolean => rng() < clamp(p, 0, 1);
+
+  const emissionEnabled = chance(0.22);
+  const bloomEnabled = chance(0.35);
+
+  const collisionsMode = chance(0.18) ? 'carve' : 'none';
+  const collisionsEdge = chance(0.35) ? 'soft' : 'hard';
+  const collisionsFeather =
+    collisionsEdge === 'soft'
+      ? Math.round(tri(0, DEFAULT_POPSICLE_CONFIG.collisions.carve.featherPx, 32))
+      : 0;
+
   const base: BaseWallpaperConfig = {
     type,
     seed,
@@ -853,46 +872,104 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
     texture: textures[Math.floor(rng() * textures.length)],
     textureParams: {
       drywall: {
-        grainAmount: clamp(randomWeighted(rng, 0.15, 1.0, 0.65), 0, 1),
-        grainScale: clamp(randomWeighted(rng, 0.6, 6.0, 2.5), 0.1, 50)
+        grainAmount: clamp(tri(0.0, DEFAULT_POPSICLE_CONFIG.textureParams.drywall.grainAmount, 1.0), 0, 1),
+        grainScale: clamp(tri(0.6, DEFAULT_POPSICLE_CONFIG.textureParams.drywall.grainScale, 6.5), 0.1, 50)
       },
       glass: {
         style: (['simple', 'frosted', 'thick', 'stylized'] as const)[Math.floor(rng() * 4)]
       },
       cel: {
-        bands: Math.max(2, Math.min(8, Math.round(randomWeighted(rng, 2, 8, 4)))),
-        halftone: rng() < 0.25
+        bands: Math.max(2, Math.min(8, Math.round(tri(2, DEFAULT_POPSICLE_CONFIG.textureParams.cel.bands, 8)))),
+        halftone: chance(0.25)
       }
     },
     backgroundColor: theme.backgroundColor,
     edges: {
-      tint: { ...DEFAULT_POPSICLE_CONFIG.edges.tint },
-      material: { ...DEFAULT_POPSICLE_CONFIG.edges.material },
-      wear: { ...DEFAULT_POPSICLE_CONFIG.edges.wear },
-      rimLight: { ...DEFAULT_POPSICLE_CONFIG.edges.rimLight },
-      outline: { ...DEFAULT_POPSICLE_CONFIG.edges.outline }
-    },
-    emission: { ...DEFAULT_POPSICLE_CONFIG.emission },
-    bloom: { ...DEFAULT_POPSICLE_CONFIG.bloom },
-    collisions: { ...DEFAULT_POPSICLE_CONFIG.collisions, carve: { ...DEFAULT_POPSICLE_CONFIG.collisions.carve } },
-    lighting: {
-      enabled: rng() > 0.2,
-      intensity: randomWeighted(rng, 0.5, 3, 1.5),
-      position: {
-        x: randomWeighted(rng, -10, 10, 5),
-        y: randomWeighted(rng, -10, 10, 5),
-        z: randomWeighted(rng, 0, 20, 5)
+      tint: {
+        enabled: chance(0.18),
+        color: DEFAULT_POPSICLE_CONFIG.edges.tint.color,
+        amount: clamp(tri(0, DEFAULT_POPSICLE_CONFIG.edges.tint.amount, 0.9), 0, 1)
       },
-      ambientIntensity: randomWeighted(rng, 0.1, 1, 0.3)
+      material: {
+        enabled: chance(0.18),
+        roughness: clamp(tri(0, DEFAULT_POPSICLE_CONFIG.edges.material.roughness, 1), 0, 1),
+        metalness: clamp(tri(0, DEFAULT_POPSICLE_CONFIG.edges.material.metalness, 1), 0, 1),
+        clearcoat: clamp(tri(0, DEFAULT_POPSICLE_CONFIG.edges.material.clearcoat, 1), 0, 1),
+        envIntensityMult: clamp(tri(0, DEFAULT_POPSICLE_CONFIG.edges.material.envIntensityMult, 3), 0, 3)
+      },
+      wear: {
+        enabled: chance(0.12),
+        intensity: clamp(tri(0, DEFAULT_POPSICLE_CONFIG.edges.wear.intensity, 1), 0, 1),
+        width: clamp(tri(0, DEFAULT_POPSICLE_CONFIG.edges.wear.width, 1), 0, 1),
+        noise: clamp(tri(0, DEFAULT_POPSICLE_CONFIG.edges.wear.noise, 1), 0, 1),
+        colorShift: DEFAULT_POPSICLE_CONFIG.edges.wear.colorShift
+      },
+      rimLight: {
+        enabled: chance(0.25),
+        color: DEFAULT_POPSICLE_CONFIG.edges.rimLight.color,
+        intensity: clamp(tri(0, DEFAULT_POPSICLE_CONFIG.edges.rimLight.intensity, 2.5), 0, 5),
+        power: clamp(tri(0.5, DEFAULT_POPSICLE_CONFIG.edges.rimLight.power, 8), 0.5, 8)
+      },
+      outline: {
+        enabled: chance(0.10),
+        color: DEFAULT_POPSICLE_CONFIG.edges.outline.color,
+        thickness: clamp(tri(0, DEFAULT_POPSICLE_CONFIG.edges.outline.thickness, 0.12), 0, 0.2),
+        opacity: clamp(tri(0.2, DEFAULT_POPSICLE_CONFIG.edges.outline.opacity, 1.0), 0, 1)
+      }
+    },
+    emission: {
+      enabled: emissionEnabled,
+      paletteIndex: Math.floor(rng() * Math.max(1, theme.colors.length)),
+      intensity: clamp(tri(0, DEFAULT_POPSICLE_CONFIG.emission.intensity, 14), 0, 20)
+    },
+    bloom: {
+      enabled: bloomEnabled,
+      strength: clamp(tri(0, DEFAULT_POPSICLE_CONFIG.bloom.strength, 2.5), 0, 10),
+      radius: clamp(tri(0, DEFAULT_POPSICLE_CONFIG.bloom.radius, 1.2), 0, 10),
+      threshold: clamp(tri(0.5, DEFAULT_POPSICLE_CONFIG.bloom.threshold, 0.99), 0, 1)
+    },
+    collisions: {
+      mode: collisionsMode,
+      carve: {
+        direction: chance(0.25) ? 'twoWay' : 'oneWay',
+        marginPx: Math.round(tri(0, DEFAULT_POPSICLE_CONFIG.collisions.carve.marginPx, 44)),
+        edge: collisionsEdge,
+        featherPx: collisionsFeather
+      }
+    },
+    lighting: {
+      enabled: chance(0.8),
+      intensity: tri(0.2, DEFAULT_POPSICLE_CONFIG.lighting.intensity, 3.5),
+      position: {
+        x: tri(-10, DEFAULT_POPSICLE_CONFIG.lighting.position.x, 10),
+        y: tri(-10, DEFAULT_POPSICLE_CONFIG.lighting.position.y, 10),
+        z: tri(0, DEFAULT_POPSICLE_CONFIG.lighting.position.z, 20)
+      },
+      ambientIntensity: tri(0.0, DEFAULT_POPSICLE_CONFIG.lighting.ambientIntensity, 1.0)
     },
     camera: {
-      distance: randomWeighted(rng, 5, 50, 17.3),
-      azimuth: randomWeighted(rng, 0, 360, 45),
-      elevation: randomWeighted(rng, -80, 80, 35.3)
+      distance: tri(5, DEFAULT_POPSICLE_CONFIG.camera.distance, 50),
+      azimuth: tri(0, DEFAULT_POPSICLE_CONFIG.camera.azimuth, 360),
+      elevation: tri(-80, DEFAULT_POPSICLE_CONFIG.camera.elevation, 80)
     },
-    environment: { ...DEFAULT_POPSICLE_CONFIG.environment },
-    shadows: { ...DEFAULT_POPSICLE_CONFIG.shadows },
-    rendering: { ...DEFAULT_POPSICLE_CONFIG.rendering },
+    environment: {
+      enabled: chance(0.85),
+      intensity: tri(0.0, DEFAULT_POPSICLE_CONFIG.environment.intensity, 2.8),
+      rotation: tri(0, DEFAULT_POPSICLE_CONFIG.environment.rotation, 360),
+      style: (['studio', 'overcast', 'sunset'] as const)[chance(0.7) ? 0 : chance(0.65) ? 1 : 2]
+    },
+    shadows: {
+      enabled: chance(0.75),
+      type: chance(0.2) ? 'vsm' : 'pcfsoft',
+      mapSize: ([512, 1024, 2048, 4096] as const)[Math.max(0, Math.min(3, Math.round(tri(0, 2, 3))))],
+      bias: tri(-0.005, DEFAULT_POPSICLE_CONFIG.shadows.bias, 0.001),
+      normalBias: tri(0.0, DEFAULT_POPSICLE_CONFIG.shadows.normalBias, 0.08)
+    },
+    rendering: {
+      toneMapping: chance(0.88) ? 'aces' : 'none',
+      exposure: tri(0.6, DEFAULT_POPSICLE_CONFIG.rendering.exposure, 1.8)
+    },
+    // Do not randomize geometry.quality here (parameter-like).
     geometry: { ...DEFAULT_POPSICLE_CONFIG.geometry }
   };
 
@@ -917,6 +994,7 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
     case 'circles2d':
       return {
         ...base,
+        bloom: base.emission.enabled ? { ...base.bloom, enabled: true } : { ...base.bloom },
         type: 'circles2d',
         circles: {
           mode: rng() < 0.7 ? 'scatter' : 'grid',
@@ -939,6 +1017,7 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
     case 'polygon2d':
       return {
         ...base,
+        bloom: base.emission.enabled ? { ...base.bloom, enabled: true } : { ...base.bloom },
         type: 'polygon2d',
         polygons: {
           count: Math.round(randomWeighted(rng, 10, 1600, 240)),
@@ -956,6 +1035,7 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
     case 'triangles2d':
       return {
         ...base,
+        bloom: base.emission.enabled ? { ...base.bloom, enabled: true } : { ...base.bloom },
         type: 'triangles2d',
         triangles: {
           mode: (['tessellation', 'scatter', 'lowpoly'] as const)[Math.floor(rng() * 3)],
@@ -980,7 +1060,7 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
           count: Math.round(randomWeighted(rng, 10, 1500, 200)),
           radius: randomWeighted(rng, 0.06, 0.6, 0.22),
           height: randomWeighted(rng, 0.06, 1.2, 0.5),
-          wallBulge: 0,
+          wallBulge: clamp(tri(-1, 0, 1), -1, 1),
           spread: randomWeighted(rng, 0.8, 6.5, 4.4),
           jitter: clamp(randomWeighted(rng, 0, 1, 0.65), 0, 1),
           paletteMode: rng() < 0.55 ? 'weighted' : 'cycle',
@@ -991,6 +1071,8 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
     case 'hexgrid2d':
       return {
         ...base,
+        emission: { ...base.emission, enabled: false },
+        bloom: { ...base.bloom, enabled: false },
         type: 'hexgrid2d',
         hexgrid: {
           radiusPx: Math.round(randomWeighted(rng, 14, 120, 56)),
