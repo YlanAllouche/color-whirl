@@ -306,6 +306,8 @@ export interface Triangles3DConfig extends BaseWallpaperConfig {
     radius: number;
     /** Scene units */
     height: number;
+    /** -1..1: concave (<0) to convex (>0) prism walls */
+    wallBulge: number;
     /** Scene units */
     spread: number;
     /** 0..1 */
@@ -527,6 +529,7 @@ export const DEFAULT_TRIANGLES3D_CONFIG: Triangles3DConfig = {
     count: 160,
     radius: 0.22,
     height: 0.5,
+    wallBulge: 0,
     spread: 4.4,
     jitter: 0.65,
     paletteMode: 'weighted',
@@ -903,6 +906,7 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
           count: Math.round(randomWeighted(rng, 10, 1500, 200)),
           radius: randomWeighted(rng, 0.06, 0.6, 0.22),
           height: randomWeighted(rng, 0.06, 1.2, 0.5),
+          wallBulge: 0,
           spread: randomWeighted(rng, 0.8, 6.5, 4.4),
           jitter: clamp(randomWeighted(rng, 0, 1, 0.65), 0, 1),
           paletteMode: rng() < 0.55 ? 'weighted' : 'cycle',

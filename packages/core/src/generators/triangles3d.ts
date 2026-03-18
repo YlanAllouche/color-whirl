@@ -16,6 +16,59 @@ function degToRad(deg: number): number {
   return (deg * Math.PI) / 180;
 }
 
+function createBulgedTrianglePrismGeometry(options: { wallBulge: number; curveSegments: number }): THREE.BufferGeometry {
+  const bulge = clamp(Number(options.wallBulge) || 0, -1, 1);
+  const curveSegments = Math.max(2, Math.round(Number(options.curveSegments) || 2));
+
+  const r = 1;
+  // Match the historical CylinderGeometry(3) orientation (rotated by pi/6).
+  const a0 = Math.PI / 6;
+  const angles = [a0, a0 + (2 * Math.PI) / 3, a0 + (4 * Math.PI) / 3];
+  const v = angles.map((a) => new THREE.Vector2(Math.cos(a) * r, Math.sin(a) * r));
+
+  const shape = new THREE.Shape();
+  shape.moveTo(v[0].x, v[0].y);
+
+  const ctrlScale = 0.35; // tuned for a subtle but visible bulge
+  for (let i = 0; i < 3; i++) {
+    const a = v[i];
+    const b = v[(i + 1) % 3];
+    const mid = new THREE.Vector2().addVectors(a, b).multiplyScalar(0.5);
+    const edge = new THREE.Vector2().subVectors(b, a);
+    let n = new THREE.Vector2(-edge.y, edge.x);
+    const len = Math.hypot(n.x, n.y) || 1;
+    n.multiplyScalar(1 / len);
+
+    // Ensure "outward" points away from center.
+    if (n.dot(mid) < 0) n.multiplyScalar(-1);
+
+    if (Math.abs(bulge) < 1e-6) {
+      shape.lineTo(b.x, b.y);
+    } else {
+      const ctrl = mid.clone().addScaledVector(n, bulge * ctrlScale);
+      shape.quadraticCurveTo(ctrl.x, ctrl.y, b.x, b.y);
+    }
+  }
+  shape.closePath();
+
+  const geom = new THREE.ExtrudeGeometry(shape, {
+    depth: 1,
+    steps: 1,
+    curveSegments,
+    bevelEnabled: false
+  });
+
+  // ExtrudeGeometry extrudes along +Z; rotate so the prism height is along +Y.
+  geom.rotateX(-Math.PI / 2);
+  // Center like CylinderGeometry (y in [-0.5, +0.5]).
+  geom.translate(0, -0.5, 0);
+
+  geom.computeBoundingBox();
+  geom.computeBoundingSphere();
+  geom.computeVertexNormals();
+  return geom;
+}
+
 function cameraZoomFromDistance(distance: number): number {
   const referenceDistance = 17.3;
   const safeDistance = Math.max(0.1, distance);
@@ -244,10 +297,8 @@ export function createTriangles3DScene(
   const radius = Math.max(0.0001, Number(config.prisms.radius) || 0.2);
   const height = Math.max(0.0001, Number(config.prisms.height) || 0.5);
 
-  const geometry = new THREE.CylinderGeometry(1, 1, 1, 3, 1, false);
-  geometry.rotateY(Math.PI / 6);
-  geometry.computeBoundingBox();
-  geometry.computeBoundingSphere();
+  const curveSegments = Math.round(2 + clamp(config.geometry.quality, 0, 1) * 14);
+  const geometry = createBulgedTrianglePrismGeometry({ wallBulge: config.prisms.wallBulge, curveSegments });
   const tmpMat = new THREE.Matrix4();
   const tmpPos = new THREE.Vector3();
   const tmpQuat = new THREE.Quaternion();

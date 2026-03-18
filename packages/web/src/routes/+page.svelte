@@ -999,6 +999,7 @@
       void c.prisms.count;
       void c.prisms.radius;
       void c.prisms.height;
+      void c.prisms.wallBulge;
       void c.prisms.spread;
       void c.prisms.jitter;
       void c.prisms.paletteMode;
@@ -1887,6 +1888,11 @@
           <label class="control-row slider">
             <span class="setting-title">Height: {config.prisms.height.toFixed(2)}</span>
             <input type="range" bind:value={config.prisms.height} min="0.02" max="3.0" step="0.01" />
+          </label>
+
+          <label class="control-row slider">
+            <span class="setting-title">Wall bulge: {config.prisms.wallBulge.toFixed(2)}</span>
+            <input type="range" bind:value={config.prisms.wallBulge} min="-1" max="1" step="0.01" />
           </label>
 
           <label class="control-row slider">
