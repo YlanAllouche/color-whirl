@@ -118,6 +118,20 @@ program
   .option('--croissant-offset <number>', 'Croissant inner offset (0..1)')
   .option('--croissant-angle-jitter <deg>', 'Croissant angle jitter (deg)')
 
+  // polygon2d
+  .option('--polygon-count <number>', 'Polygon count')
+  .option('--polygon-edges <number>', 'Polygon edge count (>= 3)')
+  .option('--polygon-r-min <px>', 'Polygon min radius (px)')
+  .option('--polygon-r-max <px>', 'Polygon max radius (px)')
+  .option('--polygon-jitter <number>', 'Polygon jitter (0..1)')
+  .option('--polygon-rotate <deg>', 'Polygon rotate jitter (deg)')
+  .option('--polygon-fill-opacity <number>', 'Polygon fill opacity (0..1)')
+  .option('--polygon-stroke', 'Enable polygon stroke')
+  .option('--no-polygon-stroke', 'Disable polygon stroke')
+  .option('--polygon-stroke-width <px>', 'Polygon stroke width (px)')
+  .option('--polygon-stroke-color <hex>', 'Polygon stroke color (hex)')
+  .option('--polygon-stroke-opacity <number>', 'Polygon stroke opacity (0..1)')
+
   // triangles2d
   .option('--triangles2d-mode <mode>', 'Triangles2D mode (tessellation, scatter, lowpoly)')
   .option('--triangles-density <number>', 'Triangles2D density')
@@ -264,7 +278,7 @@ function buildConfigAndFormat(options: any, command: Command): { config: Wallpap
   }
 
   const typeRaw = String(options.type ?? 'popsicle') as WallpaperType;
-  const type: WallpaperType = (typeRaw === 'popsicle' || typeRaw === 'spheres3d' || typeRaw === 'circles2d' || typeRaw === 'triangles2d' || typeRaw === 'triangles3d' || typeRaw === 'hexgrid2d')
+  const type: WallpaperType = (typeRaw === 'popsicle' || typeRaw === 'spheres3d' || typeRaw === 'circles2d' || typeRaw === 'polygon2d' || typeRaw === 'triangles2d' || typeRaw === 'triangles3d' || typeRaw === 'hexgrid2d')
     ? typeRaw
     : 'popsicle';
 
@@ -517,6 +531,7 @@ function buildConfigAndFormat(options: any, command: Command): { config: Wallpap
     const mode = m === 'weighted' ? 'weighted' : 'cycle';
     if (config.type === 'spheres3d') config.spheres.paletteMode = mode;
     if (config.type === 'circles2d') config.circles.paletteMode = mode;
+    if (config.type === 'polygon2d') config.polygons.paletteMode = mode;
     if (config.type === 'triangles2d') config.triangles.paletteMode = mode;
     if (config.type === 'triangles3d') config.prisms.paletteMode = mode;
   }
@@ -525,6 +540,7 @@ function buildConfigAndFormat(options: any, command: Command): { config: Wallpap
     const weights = parseNumberList(options.weights);
     if (config.type === 'spheres3d') config.spheres.colorWeights = weights;
     if (config.type === 'circles2d') config.circles.colorWeights = weights;
+    if (config.type === 'polygon2d') config.polygons.colorWeights = weights;
     if (config.type === 'triangles2d') config.triangles.colorWeights = weights;
     if (config.type === 'triangles3d') config.prisms.colorWeights = weights;
   }
@@ -534,6 +550,7 @@ function buildConfigAndFormat(options: any, command: Command): { config: Wallpap
     if (op != null) {
       if (config.type === 'spheres3d') config.spheres.opacity = op;
       if (config.type === 'circles2d') config.circles.fillOpacity = op;
+      if (config.type === 'polygon2d') config.polygons.fillOpacity = op;
       if (config.type === 'triangles2d') config.triangles.fillOpacity = op;
       if (config.type === 'triangles3d') config.prisms.opacity = op;
       if (config.type === 'hexgrid2d') config.hexgrid.fillOpacity = op;
@@ -636,6 +653,47 @@ function buildConfigAndFormat(options: any, command: Command): { config: Wallpap
     if (fromCli('croissantAngleJitter') && options.croissantAngleJitter != null) {
       const v = parseFloat(options.croissantAngleJitter);
       if (Number.isFinite(v)) config.circles.croissant.angleJitterDeg = v;
+    }
+  }
+
+  if (config.type === 'polygon2d') {
+    if (fromCli('count') && options.count != null) config.polygons.count = parseInt(options.count, 10);
+    if (fromCli('polygonCount') && options.polygonCount != null) config.polygons.count = parseInt(options.polygonCount, 10);
+
+    if (fromCli('polygonEdges') && options.polygonEdges != null) {
+      const v = Math.round(parseFloat(options.polygonEdges));
+      if (Number.isFinite(v)) config.polygons.edges = clamp(v, 3, 128);
+    }
+    if (fromCli('polygonRMin') && options.polygonRMin != null) {
+      const v = parseFloat(options.polygonRMin);
+      if (Number.isFinite(v)) config.polygons.rMinPx = v;
+    }
+    if (fromCli('polygonRMax') && options.polygonRMax != null) {
+      const v = parseFloat(options.polygonRMax);
+      if (Number.isFinite(v)) config.polygons.rMaxPx = v;
+    }
+    if (fromCli('polygonJitter') && options.polygonJitter != null) {
+      const v = parseOpacity01(options.polygonJitter);
+      if (v != null) config.polygons.jitter = v;
+    }
+    if (fromCli('polygonRotate') && options.polygonRotate != null) {
+      const v = parseFloat(options.polygonRotate);
+      if (Number.isFinite(v)) config.polygons.rotateJitterDeg = v;
+    }
+    if (fromCli('polygonFillOpacity') && options.polygonFillOpacity != null) {
+      const v = parseOpacity01(options.polygonFillOpacity);
+      if (v != null) config.polygons.fillOpacity = v;
+    }
+
+    if (fromCli('polygonStroke')) config.polygons.stroke.enabled = Boolean(options.polygonStroke);
+    if (fromCli('polygonStrokeWidth') && options.polygonStrokeWidth != null) {
+      const v = parseFloat(options.polygonStrokeWidth);
+      if (Number.isFinite(v)) config.polygons.stroke.widthPx = v;
+    }
+    if (fromCli('polygonStrokeColor') && options.polygonStrokeColor != null) config.polygons.stroke.color = String(options.polygonStrokeColor);
+    if (fromCli('polygonStrokeOpacity') && options.polygonStrokeOpacity != null) {
+      const v = parseOpacity01(options.polygonStrokeOpacity);
+      if (v != null) config.polygons.stroke.opacity = v;
     }
   }
 
