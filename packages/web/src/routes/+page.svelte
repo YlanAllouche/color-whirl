@@ -1,9 +1,5 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import * as THREE from 'three';
-  import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
-  import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
-  import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
   import { 
     DEFAULT_CONFIG, 
     DEFAULT_CONFIG_BY_TYPE,
@@ -21,11 +17,11 @@
     exportToWebP,
     exportToSVG,
     downloadFile,
-    createWallpaperScene,
     renderWallpaperToCanvas
   } from '@wallpaper-maker/core';
 
   import { PopsiclePreview, type PreviewRenderMode } from '$lib/popsicle/preview';
+  import { Basic3DPreview, type Basic3DType } from '$lib/basic3d/preview';
 
   type PopsicleConfig = Extract<WallpaperConfig, { type: 'popsicle' }>;
 
@@ -36,14 +32,15 @@
   let config = $state<WallpaperConfig>(cloneDefaultConfig());
   
   let canvasContainer: HTMLDivElement;
+  let canvasHost: HTMLDivElement;
   let preview: PopsiclePreview | null = null;
+  let basic3dPreview: Basic3DPreview | null = null;
   let fallbackCanvas: HTMLCanvasElement | null = null;
-  let fallbackRenderer: THREE.WebGLRenderer | null = null;
-  let fallbackComposer: EffectComposer | null = null;
-  let fallbackScene: THREE.Scene | null = null;
   let renderMode = $state<PreviewRenderMode>('raster');
 
   let collisionDragActive = $state(false);
+  let cameraDragActive = $state(false);
+  let canvasHoverActive = $state(false);
 
   let renderRaf = 0;
   let renderSettleTimer = 0;
@@ -211,63 +208,26 @@
     return { previewWidth, previewHeight, cssWidth, cssHeight };
   }
 
-  function disposeFallback3DResources(res: {
-    renderer: THREE.WebGLRenderer | null;
-    composer: EffectComposer | null;
-    scene: THREE.Scene | null;
-  }) {
-    if (res.composer) {
-      try {
-        res.composer.dispose();
-      } catch {
-        // Ignore
-      }
+  function ensureBasic3DPreview(type: Basic3DType): Basic3DPreview {
+    if (!canvasHost) {
+      // Should not happen; render calls are guarded.
+      throw new Error('canvasHost not ready');
     }
-
-    if (res.scene) {
-      try {
-        (res.scene.userData as any).__wmDisposeCollisionMasking?.();
-        (res.scene.userData as any).__wmDisposeProceduralEnvironment?.();
-      } catch {
-        // Ignore
-      }
-      try {
-        res.scene.traverse((obj) => {
-          const mesh = obj as any;
-          if (mesh.geometry?.dispose) mesh.geometry.dispose();
-          if (mesh.material) {
-            if (Array.isArray(mesh.material)) mesh.material.forEach((m: any) => m?.dispose?.());
-            else mesh.material?.dispose?.();
-          }
-        });
-      } catch {
-        // Ignore
-      }
+    if (!basic3dPreview) {
+      basic3dPreview = new Basic3DPreview(canvasHost, type);
+      return basic3dPreview;
     }
-
-    if (res.renderer) {
-      try {
-        (res.renderer as any).forceContextLoss?.();
-      } catch {
-        // Ignore
-      }
-      try {
-        res.renderer.dispose();
-      } catch {
-        // Ignore
-      }
-    }
+    basic3dPreview.setType(type);
+    return basic3dPreview;
   }
 
-  function disposeFallback3D() {
-    disposeFallback3DResources({ renderer: fallbackRenderer, composer: fallbackComposer, scene: fallbackScene });
-    fallbackComposer = null;
-    fallbackScene = null;
-    fallbackRenderer = null;
+  function disposeBasic3DPreview() {
+    basic3dPreview?.dispose();
+    basic3dPreview = null;
   }
 
-  function renderNonPopsicleOnce(quality: FallbackQuality) {
-    if (!canvasContainer) return;
+  function renderBasic3DOnce(quality: FallbackQuality, opts?: { cameraOnly?: boolean }) {
+    if (!canvasContainer || !canvasHost) return;
 
     const aspect = config.width / config.height;
     const { previewWidth, previewHeight, cssWidth, cssHeight } = getFallbackPreviewSize(aspect, quality);
@@ -275,90 +235,45 @@
     let effective: WallpaperConfig = { ...config, width: previewWidth, height: previewHeight } as any;
 
     // 3D collision masking is expensive; keep interactive renders snappy by previewing without collisions.
-    if (
-      quality === 'interactive' &&
-      effective.collisions?.mode === 'carve' &&
-      (effective.type === 'spheres3d' || effective.type === 'triangles3d')
-    ) {
+    if (quality === 'interactive' && effective.collisions?.mode === 'carve') {
       effective = {
         ...(effective as any),
         collisions: { ...effective.collisions, mode: 'none', carve: { ...effective.collisions.carve } }
       } as any;
     }
 
-    if (effective.type === 'spheres3d' || effective.type === 'triangles3d') {
-      fallbackCanvas = null;
+    const type = effective.type as Basic3DType;
+    const p = ensureBasic3DPreview(type);
+    p.renderOnce(effective as any, quality, { cameraOnly: !!opts?.cameraOnly });
 
-      const prev = { renderer: fallbackRenderer, composer: fallbackComposer, scene: fallbackScene };
-
-      try {
-        const collisionMaskScale = effective.collisions?.mode === 'carve' ? 0.6 : 1;
-        const { scene, camera, renderer } = createWallpaperScene(effective, {
-          preserveDrawingBuffer: true,
-          pixelRatio: 1,
-          collisionMaskScale
-        });
-
-        renderer.domElement.style.width = `${Math.max(1, Math.round(cssWidth))}px`;
-        renderer.domElement.style.height = `${Math.max(1, Math.round(cssHeight))}px`;
-
-        try {
-          (scene.userData as any).__wmBeforeRender?.(renderer, scene, camera);
-        } catch {
-          // Ignore
-        }
-
-        let composer: EffectComposer | null = null;
-        if (effective.bloom.enabled) {
-          composer = new EffectComposer(renderer);
-          composer.setSize(previewWidth, previewHeight);
-          composer.addPass(new RenderPass(scene, camera as any));
-          const bloom = new UnrealBloomPass(
-            new THREE.Vector2(previewWidth, previewHeight),
-            effective.bloom.strength,
-            effective.bloom.radius,
-            effective.bloom.threshold
-          );
-          composer.addPass(bloom);
-          composer.render();
-        } else {
-          renderer.render(scene, camera);
-        }
-
-        const next = renderer.domElement;
-        if (!next.parentElement) {
-          canvasContainer.innerHTML = '';
-          canvasContainer.appendChild(next);
-        }
-
-        fallbackRenderer = renderer;
-        fallbackScene = scene;
-        fallbackComposer = composer;
-
-        disposeFallback3DResources(prev);
-      } catch (err) {
-        console.error('3D preview render failed:', err);
-      }
-      return;
+    const el = p.getDomElement();
+    if (el) {
+      el.style.width = `${Math.max(1, Math.round(cssWidth))}px`;
+      el.style.height = `${Math.max(1, Math.round(cssHeight))}px`;
     }
+  }
 
-    // 2D types (and any non-popsicle that can be drawn to a 2D canvas)
-    disposeFallback3D();
+  function render2DOnce(quality: FallbackQuality) {
+    if (!canvasContainer || !canvasHost) return;
+
+    const aspect = config.width / config.height;
+    const { previewWidth, previewHeight, cssWidth, cssHeight } = getFallbackPreviewSize(aspect, quality);
+    const effective: WallpaperConfig = { ...config, width: previewWidth, height: previewHeight } as any;
 
     const next = renderWallpaperToCanvas(effective, fallbackCanvas ?? undefined);
     next.style.width = `${Math.max(1, Math.round(cssWidth))}px`;
     next.style.height = `${Math.max(1, Math.round(cssHeight))}px`;
     fallbackCanvas = next;
     if (!next.parentElement) {
-      canvasContainer.innerHTML = '';
-      canvasContainer.appendChild(next);
+      canvasHost.innerHTML = '';
+      canvasHost.appendChild(next);
     }
   }
 
-  function schedulePreviewRender() {
-    if (renderRaf) cancelAnimationFrame(renderRaf);
-    renderRaf = requestAnimationFrame(() => {
-      if (config.type === 'popsicle') {
+  function renderCurrentOnce(quality: FallbackQuality, opts?: { cameraOnly?: boolean }) {
+    if (config.type === 'popsicle') {
+      // Popsicle has its own persistent preview.
+      if (quality === 'interactive') {
         if (config.collisions.mode === 'carve' && config.colors.length <= 8) {
           const c = {
             ...(config as any),
@@ -369,21 +284,137 @@
           preview?.renderOnce(config as PopsicleConfig, 'interactive');
         }
       } else {
-        renderNonPopsicleOnce('interactive');
+        preview?.renderOnce(config as PopsicleConfig, 'final');
       }
+      return;
+    }
+
+    if (config.type === 'spheres3d' || config.type === 'triangles3d') {
+      fallbackCanvas = null;
+      renderBasic3DOnce(quality, opts);
+      return;
+    }
+
+    // 2D types
+    disposeBasic3DPreview();
+    render2DOnce(quality);
+  }
+
+  function schedulePreviewRender() {
+    if (renderRaf) cancelAnimationFrame(renderRaf);
+    renderRaf = requestAnimationFrame(() => {
+      renderCurrentOnce('interactive', { cameraOnly: cameraDragActive });
     });
 
     if (renderSettleTimer) window.clearTimeout(renderSettleTimer);
 
-    if (!collisionDragActive) {
+    if (!collisionDragActive && !cameraDragActive) {
       renderSettleTimer = window.setTimeout(() => {
-        if (config.type === 'popsicle') {
-          preview?.renderOnce(config as PopsicleConfig, 'final');
-        } else {
-          renderNonPopsicleOnce('final');
-        }
+        renderCurrentOnce('final');
       }, RENDER_SETTLE_MS);
     }
+  }
+
+  const CAMERA_DISTANCE_MIN = 5;
+  const CAMERA_DISTANCE_MAX = 50;
+  const CAMERA_ELEVATION_MIN = -80;
+  const CAMERA_ELEVATION_MAX = 80;
+
+  function clamp(n: number, min: number, max: number): number {
+    return Math.max(min, Math.min(max, n));
+  }
+
+  function wrapDeg360(deg: number): number {
+    const d = deg % 360;
+    return d < 0 ? d + 360 : d;
+  }
+
+  let camDragPointerId = -1;
+  let camDragStartX = 0;
+  let camDragStartY = 0;
+  let camDragStartAzimuth = 0;
+  let camDragStartElevation = 0;
+
+  function resetCamera() {
+    config.camera.distance = DEFAULT_CONFIG.camera.distance;
+    config.camera.azimuth = DEFAULT_CONFIG.camera.azimuth;
+    config.camera.elevation = DEFAULT_CONFIG.camera.elevation;
+  }
+
+  function nudgeCamera(kind: 'azimuth' | 'elevation' | 'distance', delta: number, e?: MouseEvent) {
+    const mult = e?.shiftKey ? 10 : 1;
+    if (kind === 'azimuth') {
+      config.camera.azimuth = wrapDeg360(config.camera.azimuth + delta * mult);
+    } else if (kind === 'elevation') {
+      config.camera.elevation = clamp(config.camera.elevation + delta * mult, CAMERA_ELEVATION_MIN, CAMERA_ELEVATION_MAX);
+    } else {
+      config.camera.distance = clamp(config.camera.distance + delta * mult, CAMERA_DISTANCE_MIN, CAMERA_DISTANCE_MAX);
+    }
+  }
+
+  function handleCanvasPointerDown(e: PointerEvent) {
+    if (!is3DType) return;
+    if (e.button !== 0) return;
+    const target = e.target as HTMLElement | null;
+    if (target?.closest?.('.camera-overlay')) return;
+
+    cameraDragActive = true;
+    camDragPointerId = e.pointerId;
+    camDragStartX = e.clientX;
+    camDragStartY = e.clientY;
+    camDragStartAzimuth = config.camera.azimuth;
+    camDragStartElevation = config.camera.elevation;
+
+    canvasHoverActive = true;
+    if (renderSettleTimer) window.clearTimeout(renderSettleTimer);
+
+    try {
+      (e.currentTarget as HTMLElement)?.setPointerCapture?.(e.pointerId);
+    } catch {
+      // Ignore.
+    }
+    e.preventDefault();
+  }
+
+  function handleCanvasPointerMove(e: PointerEvent) {
+    if (!cameraDragActive) return;
+    if (e.pointerId !== camDragPointerId) return;
+
+    const dx = e.clientX - camDragStartX;
+    const dy = e.clientY - camDragStartY;
+
+    const sensitivity = e.shiftKey ? 0.08 : 0.22; // deg/px
+    config.camera.azimuth = wrapDeg360(camDragStartAzimuth + dx * sensitivity);
+    config.camera.elevation = clamp(camDragStartElevation - dy * sensitivity, CAMERA_ELEVATION_MIN, CAMERA_ELEVATION_MAX);
+
+    // Rendering is scheduled via reactive effects.
+    e.preventDefault();
+  }
+
+  function handleCanvasPointerUp(e: PointerEvent) {
+    if (!cameraDragActive) return;
+    if (camDragPointerId !== -1 && e.pointerId !== camDragPointerId) return;
+    cameraDragActive = false;
+    camDragPointerId = -1;
+    try {
+      (e.currentTarget as HTMLElement)?.releasePointerCapture?.(e.pointerId);
+    } catch {
+      // Ignore.
+    }
+    schedulePreviewRender();
+    e.preventDefault();
+  }
+
+  function handleCanvasWheel(e: WheelEvent) {
+    if (!is3DType) return;
+    const target = e.target as HTMLElement | null;
+    if (target?.closest?.('.camera-overlay')) return;
+
+    // Smooth, multiplicative zoom.
+    const factor = Math.pow(1.0015, e.deltaY);
+    const next = clamp(config.camera.distance * factor, CAMERA_DISTANCE_MIN, CAMERA_DISTANCE_MAX);
+    config.camera.distance = next;
+    e.preventDefault();
   }
   
   // 3D rendering is handled by PopsiclePreview.
@@ -982,14 +1013,15 @@
   $effect(() => {
     if (!urlSyncEnabled) return;
     if (!canvasContainer) return;
+    if (!canvasHost) return;
     void config.type;
 
     if (config.type === 'popsicle') {
       if (!preview) {
-        disposeFallback3D();
+        disposeBasic3DPreview();
         fallbackCanvas = null;
-        canvasContainer.innerHTML = '';
-        preview = new PopsiclePreview(canvasContainer);
+        canvasHost.innerHTML = '';
+        preview = new PopsiclePreview(canvasHost);
         preview.setMode(renderMode);
       }
       return;
@@ -1000,9 +1032,8 @@
       preview = null;
     }
     fallbackCanvas = null;
-    disposeFallback3D();
     renderMode = 'raster';
-    renderNonPopsicleOnce('final');
+    renderCurrentOnce('final');
   });
   
   $effect(() => {
@@ -1260,15 +1291,16 @@
 
     preview?.dispose();
     preview = null;
+    disposeBasic3DPreview();
     fallbackCanvas = null;
-    disposeFallback3D();
+    if (canvasHost) canvasHost.innerHTML = '';
 
     if (config.type === 'popsicle') {
-      preview = new PopsiclePreview(canvasContainer);
+      preview = new PopsiclePreview(canvasHost);
       preview.setMode(renderMode);
     } else {
       renderMode = 'raster';
-      renderNonPopsicleOnce('final');
+      renderCurrentOnce('final');
     }
 
     schedulePreviewRender();
@@ -1287,8 +1319,9 @@
       if (renderSettleTimer) window.clearTimeout(renderSettleTimer);
       preview?.dispose();
       preview = null;
-      disposeFallback3D();
+      disposeBasic3DPreview();
       fallbackCanvas = null;
+      if (canvasHost) canvasHost.innerHTML = '';
     };
   });
 </script>
@@ -2432,19 +2465,21 @@
       {#if is3DType}
         <!-- Camera View -->
         <section class="control-section">
-          <h3>Camera View</h3>
-          <label class="control-row slider">
-            <button type="button" class="setting-title" class:locked={locks.cameraAzimuth} onclick={() => toggleLock('cameraAzimuth')} title="Click to lock/unlock for randomize">Azimuth: {config.camera.azimuth}°</button>
-            <input type="range" bind:value={config.camera.azimuth} min="0" max="360" step="5" />
-          </label>
-          <label class="control-row slider">
-            <button type="button" class="setting-title" class:locked={locks.cameraElevation} onclick={() => toggleLock('cameraElevation')} title="Click to lock/unlock for randomize">Elevation: {config.camera.elevation}°</button>
-            <input type="range" bind:value={config.camera.elevation} min="-80" max="80" step="5" />
-          </label>
-          <label class="control-row slider">
-            <button type="button" class="setting-title" class:locked={locks.cameraDistance} onclick={() => toggleLock('cameraDistance')} title="Click to lock/unlock for randomize">Distance: {config.camera.distance.toFixed(1)}</button>
-            <input type="range" bind:value={config.camera.distance} min="5" max="50" step="0.1" />
-          </label>
+          <details class="control-details">
+            <summary class="control-details-summary">Camera</summary>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={locks.cameraAzimuth} onclick={() => toggleLock('cameraAzimuth')} title="Click to lock/unlock for randomize">Azimuth: {config.camera.azimuth}°</button>
+              <input type="range" bind:value={config.camera.azimuth} min="0" max="360" step="5" />
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={locks.cameraElevation} onclick={() => toggleLock('cameraElevation')} title="Click to lock/unlock for randomize">Elevation: {config.camera.elevation}°</button>
+              <input type="range" bind:value={config.camera.elevation} min="-80" max="80" step="5" />
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={locks.cameraDistance} onclick={() => toggleLock('cameraDistance')} title="Click to lock/unlock for randomize">Distance: {config.camera.distance.toFixed(1)}</button>
+              <input type="range" bind:value={config.camera.distance} min="5" max="50" step="0.1" />
+            </label>
+          </details>
         </section>
       {/if}
       
@@ -2676,7 +2711,48 @@
   </aside>
   
   <main class="preview-area">
-    <div bind:this={canvasContainer} class="canvas-container" style={`background: ${config.backgroundColor}`}></div>
+    <div
+      bind:this={canvasContainer}
+      class="canvas-container"
+      role="application"
+      tabindex="0"
+      aria-label="Preview canvas"
+      style={`background: ${config.backgroundColor}`}
+      onmouseenter={() => {
+        canvasHoverActive = true;
+      }}
+      onmouseleave={() => {
+        canvasHoverActive = false;
+      }}
+      onpointerdown={handleCanvasPointerDown}
+      onpointermove={handleCanvasPointerMove}
+      onpointerup={handleCanvasPointerUp}
+      onpointercancel={handleCanvasPointerUp}
+      onwheel={handleCanvasWheel}
+    >
+      <div bind:this={canvasHost} class="canvas-host"></div>
+
+      {#if is3DType}
+        <div class="camera-overlay" class:visible={canvasHoverActive || cameraDragActive} aria-hidden={!(canvasHoverActive || cameraDragActive)}>
+          <div class="camera-overlay-row">
+            <button type="button" class="camera-btn" onclick={(e) => nudgeCamera('elevation', +1, e)} title="Tilt up (Shift = 10x)">Up</button>
+          </div>
+          <div class="camera-overlay-row">
+            <button type="button" class="camera-btn" onclick={(e) => nudgeCamera('azimuth', -1, e)} title="Rotate left (Shift = 10x)">Left</button>
+            <button type="button" class="camera-btn" onclick={() => resetCamera()} title="Reset camera">Reset</button>
+            <button type="button" class="camera-btn" onclick={(e) => nudgeCamera('azimuth', +1, e)} title="Rotate right (Shift = 10x)">Right</button>
+          </div>
+          <div class="camera-overlay-row">
+            <button type="button" class="camera-btn" onclick={(e) => nudgeCamera('elevation', -1, e)} title="Tilt down (Shift = 10x)">Down</button>
+          </div>
+          <div class="camera-overlay-row camera-overlay-zoom">
+            <button type="button" class="camera-btn" onclick={(e) => nudgeCamera('distance', -0.2, e)} title="Zoom in (Shift = 10x)">+</button>
+            <button type="button" class="camera-btn" onclick={(e) => nudgeCamera('distance', +0.2, e)} title="Zoom out (Shift = 10x)">-</button>
+          </div>
+          <div class="camera-overlay-hint">Drag to orbit, wheel to zoom</div>
+        </div>
+      {/if}
+    </div>
   </main>
 </div>
 
@@ -3189,6 +3265,16 @@
     background: #0f0f15;
     border-radius: 12px;
     border: 1px solid #1a1a24;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .canvas-host {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
   
   .canvas-container :global(canvas) {
@@ -3196,6 +3282,74 @@
     max-height: 100%;
     object-fit: contain;
     border-radius: 4px;
+    touch-action: none;
+  }
+
+  .camera-overlay {
+    position: absolute;
+    right: 14px;
+    bottom: 14px;
+    display: grid;
+    gap: 8px;
+    padding: 10px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(10, 10, 15, 0.72);
+    backdrop-filter: blur(10px);
+    opacity: 0;
+    transform: translateY(6px);
+    pointer-events: none;
+    transition: opacity 140ms ease, transform 160ms ease;
+    user-select: none;
+  }
+
+  .camera-overlay.visible {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+
+  .camera-overlay-row {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+  }
+
+  .camera-overlay-zoom {
+    justify-content: space-between;
+  }
+
+  .camera-btn {
+    min-width: 72px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+
+  .camera-btn:hover {
+    background: rgba(255, 255, 255, 0.12);
+  }
+
+  .camera-btn:active {
+    background: rgba(255, 255, 255, 0.16);
+  }
+
+  .camera-overlay-hint {
+    font-size: 0.72rem;
+    opacity: 0.78;
+    text-align: center;
+  }
+
+  @media (hover: none) {
+    .camera-overlay {
+      opacity: 1;
+      transform: none;
+      pointer-events: auto;
+    }
   }
   
   @media (max-width: 768px) {
