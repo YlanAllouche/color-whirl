@@ -53,6 +53,7 @@
   // URL sync + CLI preview
   let urlSyncEnabled = $state(false);
   let cliCommand = $state('');
+  let cliViewMode = $state<'bash' | 'json'>('bash');
 
   function randomSeedU32(): number {
     try {
@@ -931,10 +932,17 @@
   function buildCliCommandString(): string {
     const parts: string[] = [];
     parts.push('pnpm', 'cli', 'generate');
-    // Prefer JSON for CLI usage; it is more inspectable than base64url.
     // The CLI accepts either a full app-state object or just the config; we pass the config.
     parts.push('--config', quoteCliArg(JSON.stringify(config)));
     return parts.join(' ');
+  }
+
+  function buildCliJsonString(): string {
+    return JSON.stringify(config, null, 2);
+  }
+
+  function buildCliWidgetText(): string {
+    return cliViewMode === 'json' ? buildCliJsonString() : buildCliCommandString();
   }
 
   async function copyCliCommand() {
@@ -956,7 +964,8 @@
   }
 
   $effect(() => {
-    cliCommand = buildCliCommandString();
+    void cliViewMode;
+    cliCommand = buildCliWidgetText();
   });
 
   $effect(() => {
@@ -2851,8 +2860,19 @@
       <section class="control-section">
         <h3>CLI</h3>
         <div class="cli-controls">
-          <textarea class="cli-text" readonly rows="4">{cliCommand}</textarea>
-          <button class="cli-copy" onclick={copyCliCommand}>Copy</button>
+          <textarea class="cli-text" readonly rows={cliViewMode === 'json' ? 10 : 4}>{cliCommand}</textarea>
+          <div class="cli-buttons">
+            <button
+              class="cli-toggle"
+              onclick={() => {
+                cliViewMode = cliViewMode === 'bash' ? 'json' : 'bash';
+              }}
+              title={cliViewMode === 'bash' ? 'Show raw JSON' : 'Show bash command'}
+            >
+              {cliViewMode === 'bash' ? 'JSON' : 'Bash'}
+            </button>
+            <button class="cli-copy" onclick={copyCliCommand}>Copy</button>
+          </div>
         </div>
       </section>
 
@@ -3093,6 +3113,29 @@
     line-height: 1.25;
     resize: vertical;
     min-height: 4.5rem;
+  }
+
+  .cli-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .cli-toggle {
+    padding: 0.5rem 0.75rem;
+    border-radius: 6px;
+    border: 1px solid #333;
+    background: #1a1a24;
+    color: #d7d7e3;
+    font-weight: 600;
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: background 0.2s;
+    white-space: nowrap;
+  }
+
+  .cli-toggle:hover {
+    background: #2a2a36;
   }
 
   .cli-copy {
