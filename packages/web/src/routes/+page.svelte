@@ -64,63 +64,17 @@
     }
   }
 
-  type LockState = {
-    colors: boolean;
-    backgroundColor: boolean;
-    texture: boolean;
-    stickCount: boolean;
-    stickOverhang: boolean;
-    rotationCenterOffsetX: boolean;
-    rotationCenterOffsetY: boolean;
-    stickGap: boolean;
-    stickSize: boolean;
-    stickRatio: boolean;
-    stickThickness: boolean;
-    stickRoundness: boolean;
-    stickBevel: boolean;
-    stickOpacity: boolean;
-    cameraDistance: boolean;
-    cameraAzimuth: boolean;
-    cameraElevation: boolean;
-    lightingEnabled: boolean;
-    lightingIntensity: boolean;
-    lightingX: boolean;
-    lightingY: boolean;
-    lightingZ: boolean;
-    lightingAmbient: boolean;
-  };
-
-  type LockKey = keyof LockState;
+  type LockMap = Record<string, boolean>;
 
   // UI-only: locks are not synced to URL.
-  let locks = $state<LockState>({
-    colors: false,
-    backgroundColor: false,
-    texture: false,
-    stickCount: false,
-    stickOverhang: false,
-    rotationCenterOffsetX: false,
-    rotationCenterOffsetY: false,
-    stickGap: false,
-    stickSize: false,
-    stickRatio: false,
-    stickThickness: false,
-    stickRoundness: false,
-    stickBevel: false,
-    stickOpacity: false,
-    cameraDistance: false,
-    cameraAzimuth: false,
-    cameraElevation: false,
-    lightingEnabled: false,
-    lightingIntensity: false,
-    lightingX: false,
-    lightingY: false,
-    lightingZ: false,
-    lightingAmbient: false
-  });
+  let locks = $state<LockMap>({});
 
-  function toggleLock(key: LockKey) {
-    locks = { ...locks, [key]: !locks[key] };
+  function isLocked(path: string): boolean {
+    return !!locks[path];
+  }
+
+  function toggleLock(path: string) {
+    locks = { ...locks, [path]: !locks[path] };
   }
 
   const colorPresetGroups: Array<{ group: string; presets: ColorPreset[] }> = COLOR_PRESET_GROUPS
@@ -549,35 +503,52 @@
     // Geometry quality is not randomized; always preserve the current value.
     merged.geometry = { ...current.geometry };
 
-     if (locks.colors) merged.colors = [...current.colors];
-     if (locks.backgroundColor) merged.backgroundColor = current.backgroundColor;
+    const cloneAny = <T>(value: T): T => {
+      try {
+        return structuredClone(value);
+      } catch {
+        return JSON.parse(JSON.stringify(value));
+      }
+    };
 
-     if (locks.texture) merged.texture = current.texture;
+    const getAtPath = (obj: any, path: string): any => {
+      const parts = path.split('.').filter(Boolean);
+      let cur = obj;
+      for (const p of parts) {
+        if (cur == null) return undefined;
+        cur = cur[p];
+      }
+      return cur;
+    };
 
-    if (current.type === 'popsicle' && merged.type === 'popsicle') {
-      if (locks.stickCount) merged.stickCount = current.stickCount;
-      if (locks.stickOverhang) merged.stickOverhang = current.stickOverhang;
-      if (locks.rotationCenterOffsetX) merged.rotationCenterOffsetX = current.rotationCenterOffsetX;
-      if (locks.rotationCenterOffsetY) merged.rotationCenterOffsetY = current.rotationCenterOffsetY;
-      if (locks.stickGap) merged.stickGap = current.stickGap;
-      if (locks.stickSize) merged.stickSize = current.stickSize;
-      if (locks.stickRatio) merged.stickRatio = current.stickRatio;
-      if (locks.stickThickness) merged.stickThickness = current.stickThickness;
-      if (locks.stickRoundness) merged.stickRoundness = current.stickRoundness;
-      if (locks.stickBevel) merged.stickBevel = current.stickBevel;
-      if (locks.stickOpacity) merged.stickOpacity = current.stickOpacity;
+    const setAtPath = (obj: any, path: string, value: any) => {
+      const parts = path.split('.').filter(Boolean);
+      if (parts.length === 0) return;
+      let cur = obj;
+      for (let i = 0; i < parts.length - 1; i++) {
+        const p = parts[i];
+        if (cur[p] == null || typeof cur[p] !== 'object') cur[p] = {};
+        cur = cur[p];
+      }
+      cur[parts[parts.length - 1]] = value;
+    };
+
+    // 3D collisions are not randomized; preserve them when the type stays 3D.
+    const currentIs3D = current.type === 'popsicle' || current.type === 'spheres3d' || current.type === 'triangles3d';
+    const nextIs3D = merged.type === 'popsicle' || merged.type === 'spheres3d' || merged.type === 'triangles3d';
+    if (currentIs3D && nextIs3D) {
+      merged.collisions = cloneAny(current.collisions);
     }
 
-    if (locks.cameraDistance) merged.camera.distance = current.camera.distance;
-    if (locks.cameraAzimuth) merged.camera.azimuth = current.camera.azimuth;
-    if (locks.cameraElevation) merged.camera.elevation = current.camera.elevation;
-
-    if (locks.lightingEnabled) merged.lighting.enabled = current.lighting.enabled;
-    if (locks.lightingIntensity) merged.lighting.intensity = current.lighting.intensity;
-    if (locks.lightingX) merged.lighting.position.x = current.lighting.position.x;
-    if (locks.lightingY) merged.lighting.position.y = current.lighting.position.y;
-    if (locks.lightingZ) merged.lighting.position.z = current.lighting.position.z;
-    if (locks.lightingAmbient) merged.lighting.ambientIntensity = current.lighting.ambientIntensity;
+    // Apply UI locks (by config path). Skip paths that don't exist on either config.
+    for (const [path, locked] of Object.entries(locks)) {
+      if (!locked) continue;
+      const curVal = getAtPath(current as any, path);
+      if (typeof curVal === 'undefined') continue;
+      const nextVal = getAtPath(merged as any, path);
+      if (typeof nextVal === 'undefined') continue;
+      setAtPath(merged as any, path, cloneAny(curVal));
+    }
 
     return merged;
   }
@@ -1402,132 +1373,10 @@
           </label>
         </section>
 
-        {#if supportsCollisions}
-          <section class="control-section">
-            <h3>Collisions</h3>
-            <label class="control-row">
-              <span class="setting-title">Mode</span>
-              <select bind:value={config.collisions.mode} disabled={config.colors.length > 8}>
-                <option value="none">None</option>
-                <option value="carve">Carve</option>
-              </select>
-            </label>
-
-            {#if config.colors.length > 8}
-              <div style="font-size: 0.75rem; color: #a9a9b3; line-height: 1.2;">
-                Collision masking is disabled when the palette has more than 8 colors.
-              </div>
-            {/if}
-
-            {#if config.collisions.mode === 'carve' && config.colors.length <= 8}
-              <label class="control-row">
-                <span class="setting-title">Direction</span>
-                <select bind:value={config.collisions.carve.direction}>
-                  <option value="oneWay">One-way</option>
-                  <option value="twoWay">Two-way</option>
-                </select>
-              </label>
-              <label class="control-row slider">
-                <span class="setting-title">Margin: {Math.round(config.collisions.carve.marginPx)}px</span>
-                <input
-                  type="range"
-                  bind:value={config.collisions.carve.marginPx}
-                  min="0"
-                  max="400"
-                  step="1"
-                  onpointerdown={() => {
-                    collisionDragActive = true;
-                    if (renderSettleTimer) window.clearTimeout(renderSettleTimer);
-                  }}
-                  onpointerup={() => {
-                    collisionDragActive = false;
-                    schedulePreviewRender();
-                  }}
-                  onpointercancel={() => {
-                    collisionDragActive = false;
-                    schedulePreviewRender();
-                  }}
-                />
-              </label>
-              <label class="control-row">
-                <span class="setting-title">Margin (exact)</span>
-                <input type="number" bind:value={config.collisions.carve.marginPx} min="0" max="2000" step="1" />
-              </label>
-              <label class="control-row">
-                <span class="setting-title">Edge</span>
-                <select bind:value={config.collisions.carve.edge}>
-                  <option value="hard">Hard</option>
-                  <option value="soft">Soft</option>
-                </select>
-              </label>
-              <label class="control-row slider">
-                <span class="setting-title">Feather: {Math.round(config.collisions.carve.featherPx)}px</span>
-                <input
-                  type="range"
-                  bind:value={config.collisions.carve.featherPx}
-                  min="0"
-                  max="200"
-                  step="1"
-                  disabled={config.collisions.carve.edge !== 'soft'}
-                  onpointerdown={() => {
-                    collisionDragActive = true;
-                    if (renderSettleTimer) window.clearTimeout(renderSettleTimer);
-                  }}
-                  onpointerup={() => {
-                    collisionDragActive = false;
-                    schedulePreviewRender();
-                  }}
-                  onpointercancel={() => {
-                    collisionDragActive = false;
-                    schedulePreviewRender();
-                  }}
-                />
-              </label>
-              <label class="control-row">
-                <span class="setting-title">Feather (exact)</span>
-                <input
-                  type="number"
-                  bind:value={config.collisions.carve.featherPx}
-                  min="0"
-                  max="2000"
-                  step="1"
-                  disabled={config.collisions.carve.edge !== 'soft'}
-                />
-              </label>
-
-              {#if is3DType}
-                <div style="border-top: 1px solid #333; margin-top: 0.75rem; padding-top: 0.75rem;">
-                  <label class="control-row">
-                    <span class="setting-title">Finish Volume</span>
-                    <select bind:value={config.collisions.carve.finish}>
-                      <option value="none">None</option>
-                      <option value="wallsCap">Walls + Cap</option>
-                    </select>
-                  </label>
-
-                  {#if config.collisions.carve.finish === 'wallsCap'}
-                    <label class="control-row slider">
-                      <span class="setting-title">Depth (auto): {config.collisions.carve.finishAutoDepthMult.toFixed(2)}x</span>
-                      <input type="range" bind:value={config.collisions.carve.finishAutoDepthMult} min="0" max="4" step="0.05" />
-                    </label>
-                    <label class="control-row">
-                      <span class="setting-title">Depth (auto, exact)</span>
-                      <input type="number" bind:value={config.collisions.carve.finishAutoDepthMult} min="0" max="20" step="0.05" />
-                    </label>
-                  {/if}
-                </div>
-              {/if}
-              <div style="font-size: 0.75rem; color: #a9a9b3; line-height: 1.2;">
-                One-way priority is based on palette weights: higher weight carves lower.
-              </div>
-            {/if}
-          </section>
-        {/if}
-          
       <!-- Colors Section -->
       <section class="control-section">
         <h3>
-          <button type="button" class="setting-title" class:locked={locks.colors} onclick={() => toggleLock('colors')} title="Click to lock/unlock for randomize">
+          <button type="button" class="setting-title" class:locked={isLocked('colors')} onclick={() => toggleLock('colors')} title="Click to lock/unlock for randomize">
             Colors
           </button>
         </h3>
@@ -1574,7 +1423,7 @@
         <h3>Appearance</h3>
         {#if is3DType}
           <label class="control-row">
-            <button type="button" class="setting-title" class:locked={locks.texture} onclick={() => toggleLock('texture')} title="Click to lock/unlock for randomize">Texture</button>
+            <button type="button" class="setting-title" class:locked={isLocked('texture')} onclick={() => toggleLock('texture')} title="Click to lock/unlock for randomize">Texture</button>
             <select bind:value={config.texture}>
               <option value="glossy">Glossy</option>
               <option value="matte">Matte</option>
@@ -1588,18 +1437,18 @@
 
           {#if config.texture === 'drywall'}
             <label class="control-row slider">
-              <span class="setting-title">Grain: {config.textureParams.drywall.grainAmount.toFixed(2)}</span>
+              <button type="button" class="setting-title" class:locked={isLocked('textureParams.drywall.grainAmount')} onclick={() => toggleLock('textureParams.drywall.grainAmount')} title="Click to lock/unlock for randomize">Grain: {config.textureParams.drywall.grainAmount.toFixed(2)}</button>
               <input type="range" bind:value={config.textureParams.drywall.grainAmount} min="0" max="1" step="0.01" />
             </label>
             <label class="control-row slider">
-              <span class="setting-title">Grain Scale: {config.textureParams.drywall.grainScale.toFixed(2)}</span>
+              <button type="button" class="setting-title" class:locked={isLocked('textureParams.drywall.grainScale')} onclick={() => toggleLock('textureParams.drywall.grainScale')} title="Click to lock/unlock for randomize">Grain Scale: {config.textureParams.drywall.grainScale.toFixed(2)}</button>
               <input type="range" bind:value={config.textureParams.drywall.grainScale} min="0.5" max="8" step="0.05" />
             </label>
           {/if}
 
           {#if config.texture === 'glass'}
             <label class="control-row">
-              <span class="setting-title">Glass Style</span>
+              <button type="button" class="setting-title" class:locked={isLocked('textureParams.glass.style')} onclick={() => toggleLock('textureParams.glass.style')} title="Click to lock/unlock for randomize">Glass Style</button>
               <select bind:value={config.textureParams.glass.style}>
                 <option value="simple">Simple</option>
                 <option value="frosted">Frosted</option>
@@ -1611,17 +1460,28 @@
 
           {#if config.texture === 'cel'}
             <label class="control-row slider">
-              <span class="setting-title">Bands: {Math.round(config.textureParams.cel.bands)}</span>
+              <button type="button" class="setting-title" class:locked={isLocked('textureParams.cel.bands')} onclick={() => toggleLock('textureParams.cel.bands')} title="Click to lock/unlock for randomize">Bands: {Math.round(config.textureParams.cel.bands)}</button>
               <input type="range" bind:value={config.textureParams.cel.bands} min="2" max="8" step="1" />
             </label>
             <label class="control-row checkbox">
               <input type="checkbox" bind:checked={config.textureParams.cel.halftone} />
-              <span class="setting-title">Halftone</span>
+              <button
+                type="button"
+                class="setting-title"
+                class:locked={isLocked('textureParams.cel.halftone')}
+                onclick={(e) => {
+                  e.preventDefault();
+                  toggleLock('textureParams.cel.halftone');
+                }}
+                title="Click to lock/unlock for randomize"
+              >
+                Halftone
+              </button>
             </label>
           {/if}
         {/if}
          <label class="control-row">
-           <button type="button" class="setting-title" class:locked={locks.backgroundColor} onclick={() => toggleLock('backgroundColor')} title="Click to lock/unlock for randomize">Background</button>
+           <button type="button" class="setting-title" class:locked={isLocked('backgroundColor')} onclick={() => toggleLock('backgroundColor')} title="Click to lock/unlock for randomize">Background</button>
            <input type="color" bind:value={config.backgroundColor} />
          </label>
        </section>
@@ -1632,11 +1492,22 @@
           <h3>Emission</h3>
           <label class="control-row checkbox">
             <input type="checkbox" bind:checked={config.emission.enabled} />
-            <span class="setting-title">Enable</span>
+            <button
+              type="button"
+              class="setting-title"
+              class:locked={isLocked('emission.enabled')}
+              onclick={(e) => {
+                e.preventDefault();
+                toggleLock('emission.enabled');
+              }}
+              title="Click to lock/unlock for randomize"
+            >
+              Enable
+            </button>
           </label>
 
           <label class="control-row">
-            <span class="setting-title">Palette Index</span>
+            <button type="button" class="setting-title" class:locked={isLocked('emission.paletteIndex')} onclick={() => toggleLock('emission.paletteIndex')} title="Click to lock/unlock for randomize">Palette Index</button>
             <select bind:value={config.emission.paletteIndex} disabled={!config.emission.enabled}>
               {#each config.colors as c, i}
                 <option value={i}>{i}: {c}</option>
@@ -1645,7 +1516,7 @@
           </label>
 
           <label class="control-row slider">
-            <span class="setting-title">Intensity: {config.emission.intensity.toFixed(2)}</span>
+            <button type="button" class="setting-title" class:locked={isLocked('emission.intensity')} onclick={() => toggleLock('emission.intensity')} title="Click to lock/unlock for randomize">Intensity: {config.emission.intensity.toFixed(2)}</button>
             <input type="range" bind:value={config.emission.intensity} min="0" max="20" step="0.05" disabled={!config.emission.enabled} />
           </label>
         </section>
@@ -1660,18 +1531,29 @@
           <summary class="control-details-summary">Rim light</summary>
           <label class="control-row checkbox">
             <input type="checkbox" bind:checked={config.edges.rimLight.enabled} />
-            <span class="setting-title">Enable</span>
+            <button
+              type="button"
+              class="setting-title"
+              class:locked={isLocked('edges.rimLight.enabled')}
+              onclick={(e) => {
+                e.preventDefault();
+                toggleLock('edges.rimLight.enabled');
+              }}
+              title="Click to lock/unlock for randomize"
+            >
+              Enable
+            </button>
           </label>
           <label class="control-row">
-            <span class="setting-title">Color</span>
+            <button type="button" class="setting-title" class:locked={isLocked('edges.rimLight.color')} onclick={() => toggleLock('edges.rimLight.color')} title="Click to lock/unlock for randomize">Color</button>
             <input type="color" bind:value={config.edges.rimLight.color} disabled={!config.edges.rimLight.enabled} />
           </label>
           <label class="control-row slider">
-            <span class="setting-title">Intensity: {config.edges.rimLight.intensity.toFixed(2)}</span>
+            <button type="button" class="setting-title" class:locked={isLocked('edges.rimLight.intensity')} onclick={() => toggleLock('edges.rimLight.intensity')} title="Click to lock/unlock for randomize">Intensity: {config.edges.rimLight.intensity.toFixed(2)}</button>
             <input type="range" bind:value={config.edges.rimLight.intensity} min="0" max="5" step="0.01" disabled={!config.edges.rimLight.enabled} />
           </label>
           <label class="control-row slider">
-            <span class="setting-title">Power: {config.edges.rimLight.power.toFixed(2)}</span>
+            <button type="button" class="setting-title" class:locked={isLocked('edges.rimLight.power')} onclick={() => toggleLock('edges.rimLight.power')} title="Click to lock/unlock for randomize">Power: {config.edges.rimLight.power.toFixed(2)}</button>
             <input type="range" bind:value={config.edges.rimLight.power} min="0.5" max="8" step="0.05" disabled={!config.edges.rimLight.enabled} />
           </label>
         </details>
@@ -1680,14 +1562,25 @@
           <summary class="control-details-summary">Edge tint</summary>
           <label class="control-row checkbox">
             <input type="checkbox" bind:checked={config.edges.tint.enabled} />
-            <span class="setting-title">Enable</span>
+            <button
+              type="button"
+              class="setting-title"
+              class:locked={isLocked('edges.tint.enabled')}
+              onclick={(e) => {
+                e.preventDefault();
+                toggleLock('edges.tint.enabled');
+              }}
+              title="Click to lock/unlock for randomize"
+            >
+              Enable
+            </button>
           </label>
           <label class="control-row">
-            <span class="setting-title">Tint</span>
+            <button type="button" class="setting-title" class:locked={isLocked('edges.tint.color')} onclick={() => toggleLock('edges.tint.color')} title="Click to lock/unlock for randomize">Tint</button>
             <input type="color" bind:value={config.edges.tint.color} disabled={!config.edges.tint.enabled} />
           </label>
           <label class="control-row slider">
-            <span class="setting-title">Amount: {config.edges.tint.amount.toFixed(2)}</span>
+            <button type="button" class="setting-title" class:locked={isLocked('edges.tint.amount')} onclick={() => toggleLock('edges.tint.amount')} title="Click to lock/unlock for randomize">Amount: {config.edges.tint.amount.toFixed(2)}</button>
             <input type="range" bind:value={config.edges.tint.amount} min="0" max="1" step="0.01" disabled={!config.edges.tint.enabled} />
           </label>
         </details>
@@ -1696,22 +1589,33 @@
           <summary class="control-details-summary">Edge material</summary>
           <label class="control-row checkbox">
             <input type="checkbox" bind:checked={config.edges.material.enabled} />
-            <span class="setting-title">Enable</span>
+            <button
+              type="button"
+              class="setting-title"
+              class:locked={isLocked('edges.material.enabled')}
+              onclick={(e) => {
+                e.preventDefault();
+                toggleLock('edges.material.enabled');
+              }}
+              title="Click to lock/unlock for randomize"
+            >
+              Enable
+            </button>
           </label>
           <label class="control-row slider">
-            <span class="setting-title">Roughness: {config.edges.material.roughness.toFixed(2)}</span>
+            <button type="button" class="setting-title" class:locked={isLocked('edges.material.roughness')} onclick={() => toggleLock('edges.material.roughness')} title="Click to lock/unlock for randomize">Roughness: {config.edges.material.roughness.toFixed(2)}</button>
             <input type="range" bind:value={config.edges.material.roughness} min="0" max="1" step="0.01" disabled={!config.edges.material.enabled} />
           </label>
           <label class="control-row slider">
-            <span class="setting-title">Metalness: {config.edges.material.metalness.toFixed(2)}</span>
+            <button type="button" class="setting-title" class:locked={isLocked('edges.material.metalness')} onclick={() => toggleLock('edges.material.metalness')} title="Click to lock/unlock for randomize">Metalness: {config.edges.material.metalness.toFixed(2)}</button>
             <input type="range" bind:value={config.edges.material.metalness} min="0" max="1" step="0.01" disabled={!config.edges.material.enabled} />
           </label>
           <label class="control-row slider">
-            <span class="setting-title">Clearcoat: {config.edges.material.clearcoat.toFixed(2)}</span>
+            <button type="button" class="setting-title" class:locked={isLocked('edges.material.clearcoat')} onclick={() => toggleLock('edges.material.clearcoat')} title="Click to lock/unlock for randomize">Clearcoat: {config.edges.material.clearcoat.toFixed(2)}</button>
             <input type="range" bind:value={config.edges.material.clearcoat} min="0" max="1" step="0.01" disabled={!config.edges.material.enabled} />
           </label>
           <label class="control-row slider">
-            <span class="setting-title">Env mult: {config.edges.material.envIntensityMult.toFixed(2)}</span>
+            <button type="button" class="setting-title" class:locked={isLocked('edges.material.envIntensityMult')} onclick={() => toggleLock('edges.material.envIntensityMult')} title="Click to lock/unlock for randomize">Env mult: {config.edges.material.envIntensityMult.toFixed(2)}</button>
             <input type="range" bind:value={config.edges.material.envIntensityMult} min="0" max="3" step="0.01" disabled={!config.edges.material.enabled} />
           </label>
         </details>
@@ -1720,22 +1624,33 @@
           <summary class="control-details-summary">Edge wear</summary>
           <label class="control-row checkbox">
             <input type="checkbox" bind:checked={config.edges.wear.enabled} />
-            <span class="setting-title">Enable</span>
+            <button
+              type="button"
+              class="setting-title"
+              class:locked={isLocked('edges.wear.enabled')}
+              onclick={(e) => {
+                e.preventDefault();
+                toggleLock('edges.wear.enabled');
+              }}
+              title="Click to lock/unlock for randomize"
+            >
+              Enable
+            </button>
           </label>
           <label class="control-row">
-            <span class="setting-title">Shift</span>
+            <button type="button" class="setting-title" class:locked={isLocked('edges.wear.colorShift')} onclick={() => toggleLock('edges.wear.colorShift')} title="Click to lock/unlock for randomize">Shift</button>
             <input type="color" bind:value={config.edges.wear.colorShift} disabled={!config.edges.wear.enabled} />
           </label>
           <label class="control-row slider">
-            <span class="setting-title">Intensity: {config.edges.wear.intensity.toFixed(2)}</span>
+            <button type="button" class="setting-title" class:locked={isLocked('edges.wear.intensity')} onclick={() => toggleLock('edges.wear.intensity')} title="Click to lock/unlock for randomize">Intensity: {config.edges.wear.intensity.toFixed(2)}</button>
             <input type="range" bind:value={config.edges.wear.intensity} min="0" max="1" step="0.01" disabled={!config.edges.wear.enabled} />
           </label>
           <label class="control-row slider">
-            <span class="setting-title">Width: {config.edges.wear.width.toFixed(2)}</span>
+            <button type="button" class="setting-title" class:locked={isLocked('edges.wear.width')} onclick={() => toggleLock('edges.wear.width')} title="Click to lock/unlock for randomize">Width: {config.edges.wear.width.toFixed(2)}</button>
             <input type="range" bind:value={config.edges.wear.width} min="0" max="1" step="0.01" disabled={!config.edges.wear.enabled} />
           </label>
           <label class="control-row slider">
-            <span class="setting-title">Noise: {config.edges.wear.noise.toFixed(2)}</span>
+            <button type="button" class="setting-title" class:locked={isLocked('edges.wear.noise')} onclick={() => toggleLock('edges.wear.noise')} title="Click to lock/unlock for randomize">Noise: {config.edges.wear.noise.toFixed(2)}</button>
             <input type="range" bind:value={config.edges.wear.noise} min="0" max="1" step="0.01" disabled={!config.edges.wear.enabled} />
           </label>
         </details>
@@ -1744,18 +1659,29 @@
           <summary class="control-details-summary">Outline</summary>
           <label class="control-row checkbox">
             <input type="checkbox" bind:checked={config.edges.outline.enabled} />
-            <span class="setting-title">Enable</span>
+            <button
+              type="button"
+              class="setting-title"
+              class:locked={isLocked('edges.outline.enabled')}
+              onclick={(e) => {
+                e.preventDefault();
+                toggleLock('edges.outline.enabled');
+              }}
+              title="Click to lock/unlock for randomize"
+            >
+              Enable
+            </button>
           </label>
           <label class="control-row">
-            <span class="setting-title">Color</span>
+            <button type="button" class="setting-title" class:locked={isLocked('edges.outline.color')} onclick={() => toggleLock('edges.outline.color')} title="Click to lock/unlock for randomize">Color</button>
             <input type="color" bind:value={config.edges.outline.color} disabled={!config.edges.outline.enabled} />
           </label>
           <label class="control-row slider">
-            <span class="setting-title">Thickness: {config.edges.outline.thickness.toFixed(3)}</span>
+            <button type="button" class="setting-title" class:locked={isLocked('edges.outline.thickness')} onclick={() => toggleLock('edges.outline.thickness')} title="Click to lock/unlock for randomize">Thickness: {config.edges.outline.thickness.toFixed(3)}</button>
             <input type="range" bind:value={config.edges.outline.thickness} min="0" max="0.12" step="0.001" disabled={!config.edges.outline.enabled} />
           </label>
           <label class="control-row slider">
-            <span class="setting-title">Opacity: {config.edges.outline.opacity.toFixed(2)}</span>
+            <button type="button" class="setting-title" class:locked={isLocked('edges.outline.opacity')} onclick={() => toggleLock('edges.outline.opacity')} title="Click to lock/unlock for randomize">Opacity: {config.edges.outline.opacity.toFixed(2)}</button>
             <input type="range" bind:value={config.edges.outline.opacity} min="0" max="1" step="0.01" disabled={!config.edges.outline.enabled} />
           </label>
         </details>
@@ -1765,18 +1691,29 @@
           <h3>Outline</h3>
           <label class="control-row checkbox">
             <input type="checkbox" bind:checked={config.edges.outline.enabled} />
-            <span class="setting-title">Enable</span>
+            <button
+              type="button"
+              class="setting-title"
+              class:locked={isLocked('edges.outline.enabled')}
+              onclick={(e) => {
+                e.preventDefault();
+                toggleLock('edges.outline.enabled');
+              }}
+              title="Click to lock/unlock for randomize"
+            >
+              Enable
+            </button>
           </label>
           <label class="control-row">
-            <span class="setting-title">Color</span>
+            <button type="button" class="setting-title" class:locked={isLocked('edges.outline.color')} onclick={() => toggleLock('edges.outline.color')} title="Click to lock/unlock for randomize">Color</button>
             <input type="color" bind:value={config.edges.outline.color} disabled={!config.edges.outline.enabled} />
           </label>
           <label class="control-row slider">
-            <span class="setting-title">Thickness: {config.edges.outline.thickness.toFixed(3)}</span>
+            <button type="button" class="setting-title" class:locked={isLocked('edges.outline.thickness')} onclick={() => toggleLock('edges.outline.thickness')} title="Click to lock/unlock for randomize">Thickness: {config.edges.outline.thickness.toFixed(3)}</button>
             <input type="range" bind:value={config.edges.outline.thickness} min="0" max="0.12" step="0.001" disabled={!config.edges.outline.enabled} />
           </label>
           <label class="control-row slider">
-            <span class="setting-title">Opacity: {config.edges.outline.opacity.toFixed(2)}</span>
+            <button type="button" class="setting-title" class:locked={isLocked('edges.outline.opacity')} onclick={() => toggleLock('edges.outline.opacity')} title="Click to lock/unlock for randomize">Opacity: {config.edges.outline.opacity.toFixed(2)}</button>
             <input type="range" bind:value={config.edges.outline.opacity} min="0" max="1" step="0.01" disabled={!config.edges.outline.enabled} />
           </label>
         </section>
@@ -1787,50 +1724,50 @@
          <section class="control-section">
            <h3>Stick Settings</h3>
           <label class="control-row slider">
-           <button type="button" class="setting-title" class:locked={locks.stickCount} onclick={() => toggleLock('stickCount')} title="Click to lock/unlock for randomize">Count: {config.stickCount}</button>
+           <button type="button" class="setting-title" class:locked={isLocked('stickCount')} onclick={() => toggleLock('stickCount')} title="Click to lock/unlock for randomize">Count: {config.stickCount}</button>
             <input type="range" bind:value={config.stickCount} min="1" max="200" />
           </label>
            <label class="control-row slider">
-            <button type="button" class="setting-title" class:locked={locks.stickGap} onclick={() => toggleLock('stickGap')} title="Click to lock/unlock for randomize">Gap: {config.stickGap.toFixed(2)}</button>
+            <button type="button" class="setting-title" class:locked={isLocked('stickGap')} onclick={() => toggleLock('stickGap')} title="Click to lock/unlock for randomize">Gap: {config.stickGap.toFixed(2)}</button>
              <input type="range" bind:value={config.stickGap} min="0" max="5.0" step="0.01" />
            </label>
            <label class="control-row slider">
-            <button type="button" class="setting-title" class:locked={locks.stickSize} onclick={() => toggleLock('stickSize')} title="Click to lock/unlock for randomize">Size: {config.stickSize.toFixed(2)}</button>
+            <button type="button" class="setting-title" class:locked={isLocked('stickSize')} onclick={() => toggleLock('stickSize')} title="Click to lock/unlock for randomize">Size: {config.stickSize.toFixed(2)}</button>
              <input type="range" bind:value={config.stickSize} min="0.25" max="2.5" step="0.01" />
            </label>
            <label class="control-row slider">
-            <button type="button" class="setting-title" class:locked={locks.stickRatio} onclick={() => toggleLock('stickRatio')} title="Click to lock/unlock for randomize">Ratio: {config.stickRatio.toFixed(2)}</button>
+            <button type="button" class="setting-title" class:locked={isLocked('stickRatio')} onclick={() => toggleLock('stickRatio')} title="Click to lock/unlock for randomize">Ratio: {config.stickRatio.toFixed(2)}</button>
              <input type="range" bind:value={config.stickRatio} min="0.5" max="12" step="0.05" />
            </label>
            <label class="control-row slider">
-            <button type="button" class="setting-title" class:locked={locks.stickThickness} onclick={() => toggleLock('stickThickness')} title="Click to lock/unlock for randomize">Thickness: {config.stickThickness.toFixed(1)}</button>
+            <button type="button" class="setting-title" class:locked={isLocked('stickThickness')} onclick={() => toggleLock('stickThickness')} title="Click to lock/unlock for randomize">Thickness: {config.stickThickness.toFixed(1)}</button>
               <input type="range" bind:value={config.stickThickness} min="0.1" max="3.0" step="0.1" />
             </label>
            <label class="control-row slider">
-            <button type="button" class="setting-title" class:locked={locks.stickRoundness} onclick={() => toggleLock('stickRoundness')} title="Click to lock/unlock for randomize">Roundness: {config.stickRoundness.toFixed(2)}</button>
+            <button type="button" class="setting-title" class:locked={isLocked('stickRoundness')} onclick={() => toggleLock('stickRoundness')} title="Click to lock/unlock for randomize">Roundness: {config.stickRoundness.toFixed(2)}</button>
              <input type="range" bind:value={config.stickRoundness} min="0" max="1" step="0.01" />
            </label>
            <label class="control-row slider">
-            <button type="button" class="setting-title" class:locked={locks.stickBevel} onclick={() => toggleLock('stickBevel')} title="Click to lock/unlock for randomize">Bevel: {config.stickBevel.toFixed(2)}</button>
+            <button type="button" class="setting-title" class:locked={isLocked('stickBevel')} onclick={() => toggleLock('stickBevel')} title="Click to lock/unlock for randomize">Bevel: {config.stickBevel.toFixed(2)}</button>
              <input type="range" bind:value={config.stickBevel} min="0" max="1" step="0.01" />
             </label>
            <label class="control-row slider">
-            <button type="button" class="setting-title" class:locked={locks.stickOpacity} onclick={() => toggleLock('stickOpacity')} title="Click to lock/unlock for randomize">Opacity: {config.stickOpacity.toFixed(2)}</button>
+            <button type="button" class="setting-title" class:locked={isLocked('stickOpacity')} onclick={() => toggleLock('stickOpacity')} title="Click to lock/unlock for randomize">Opacity: {config.stickOpacity.toFixed(2)}</button>
              <input type="range" bind:value={config.stickOpacity} min="0" max="1" step="0.01" />
            </label>
           
           <!-- Helix Settings -->
           <div style="border-top: 1px solid #333; margin-top: 0.75rem; padding-top: 0.75rem;">
              <label class="control-row slider">
-               <button type="button" class="setting-title" class:locked={locks.stickOverhang} onclick={() => toggleLock('stickOverhang')} title="Click to lock/unlock for randomize">Overhang: {config.stickOverhang.toFixed(0)}°</button>
+               <button type="button" class="setting-title" class:locked={isLocked('stickOverhang')} onclick={() => toggleLock('stickOverhang')} title="Click to lock/unlock for randomize">Overhang: {config.stickOverhang.toFixed(0)}°</button>
                <input type="range" bind:value={config.stickOverhang} min="0" max="180" step="1" />
              </label>
              <label class="control-row slider">
-               <button type="button" class="setting-title" class:locked={locks.rotationCenterOffsetX} onclick={() => toggleLock('rotationCenterOffsetX')} title="Click to lock/unlock for randomize">Rotation Center X: {config.rotationCenterOffsetX.toFixed(0)}%</button>
+               <button type="button" class="setting-title" class:locked={isLocked('rotationCenterOffsetX')} onclick={() => toggleLock('rotationCenterOffsetX')} title="Click to lock/unlock for randomize">Rotation Center X: {config.rotationCenterOffsetX.toFixed(0)}%</button>
                <input type="range" bind:value={config.rotationCenterOffsetX} min="-100" max="100" step="5" />
              </label>
              <label class="control-row slider">
-               <button type="button" class="setting-title" class:locked={locks.rotationCenterOffsetY} onclick={() => toggleLock('rotationCenterOffsetY')} title="Click to lock/unlock for randomize">Rotation Center Y: {config.rotationCenterOffsetY.toFixed(0)}%</button>
+               <button type="button" class="setting-title" class:locked={isLocked('rotationCenterOffsetY')} onclick={() => toggleLock('rotationCenterOffsetY')} title="Click to lock/unlock for randomize">Rotation Center Y: {config.rotationCenterOffsetY.toFixed(0)}%</button>
                <input type="range" bind:value={config.rotationCenterOffsetY} min="-100" max="100" step="5" />
              </label>
             </div>
@@ -1840,12 +1777,12 @@
           <h3>Spheres (3D)</h3>
 
           <label class="control-row slider">
-            <span class="setting-title">Count: {config.spheres.count}</span>
+            <button type="button" class="setting-title" class:locked={isLocked('spheres.count')} onclick={() => toggleLock('spheres.count')} title="Click to lock/unlock for randomize">Count: {config.spheres.count}</button>
             <input type="range" bind:value={config.spheres.count} min="1" max="800" step="1" />
           </label>
 
           <label class="control-row">
-            <span class="setting-title">Distribution</span>
+            <button type="button" class="setting-title" class:locked={isLocked('spheres.distribution')} onclick={() => toggleLock('spheres.distribution')} title="Click to lock/unlock for randomize">Distribution</button>
             <select bind:value={config.spheres.distribution}>
               <option value="jitteredGrid">Jittered grid</option>
               <option value="scatter">Scatter</option>
@@ -1854,37 +1791,37 @@
           </label>
 
           <label class="control-row slider">
-            <span class="setting-title">Radius min: {config.spheres.radiusMin.toFixed(2)}</span>
+            <button type="button" class="setting-title" class:locked={isLocked('spheres.radiusMin')} onclick={() => toggleLock('spheres.radiusMin')} title="Click to lock/unlock for randomize">Radius min: {config.spheres.radiusMin.toFixed(2)}</button>
             <input type="range" bind:value={config.spheres.radiusMin} min="0.05" max="2.0" step="0.01" />
           </label>
           <label class="control-row slider">
-            <span class="setting-title">Radius max: {config.spheres.radiusMax.toFixed(2)}</span>
+            <button type="button" class="setting-title" class:locked={isLocked('spheres.radiusMax')} onclick={() => toggleLock('spheres.radiusMax')} title="Click to lock/unlock for randomize">Radius max: {config.spheres.radiusMax.toFixed(2)}</button>
             <input type="range" bind:value={config.spheres.radiusMax} min="0.05" max="3.5" step="0.01" />
           </label>
 
           <label class="control-row slider">
-            <span class="setting-title">Spread: {config.spheres.spread.toFixed(2)}</span>
+            <button type="button" class="setting-title" class:locked={isLocked('spheres.spread')} onclick={() => toggleLock('spheres.spread')} title="Click to lock/unlock for randomize">Spread: {config.spheres.spread.toFixed(2)}</button>
             <input type="range" bind:value={config.spheres.spread} min="0.5" max="20" step="0.05" />
           </label>
           <label class="control-row slider">
-            <span class="setting-title">Depth: {config.spheres.depth.toFixed(2)}</span>
+            <button type="button" class="setting-title" class:locked={isLocked('spheres.depth')} onclick={() => toggleLock('spheres.depth')} title="Click to lock/unlock for randomize">Depth: {config.spheres.depth.toFixed(2)}</button>
             <input type="range" bind:value={config.spheres.depth} min="0" max="20" step="0.05" />
           </label>
 
           <label class="control-row slider">
-            <span class="setting-title">Layers: {config.spheres.layers}</span>
+            <button type="button" class="setting-title" class:locked={isLocked('spheres.layers')} onclick={() => toggleLock('spheres.layers')} title="Click to lock/unlock for randomize">Layers: {config.spheres.layers}</button>
             <input type="range" bind:value={config.spheres.layers} min="1" max="16" step="1" disabled={config.spheres.distribution !== 'layeredDepth'} />
           </label>
 
           <label class="control-row slider">
-            <span class="setting-title">Opacity: {config.spheres.opacity.toFixed(2)}</span>
+            <button type="button" class="setting-title" class:locked={isLocked('spheres.opacity')} onclick={() => toggleLock('spheres.opacity')} title="Click to lock/unlock for randomize">Opacity: {config.spheres.opacity.toFixed(2)}</button>
             <input type="range" bind:value={config.spheres.opacity} min="0" max="1" step="0.01" />
           </label>
 
           <details class="control-details">
             <summary class="control-details-summary">Palette</summary>
             <label class="control-row">
-              <span class="setting-title">Mode</span>
+              <button type="button" class="setting-title" class:locked={isLocked('spheres.paletteMode')} onclick={() => toggleLock('spheres.paletteMode')} title="Click to lock/unlock for randomize">Mode</button>
               <select bind:value={config.spheres.paletteMode}>
                 <option value="cycle">Cycle</option>
                 <option value="weighted">Weighted</option>
@@ -1903,7 +1840,7 @@
               </div>
               {#each config.colors as c, i}
                 <label class="control-row slider">
-                  <span class="setting-title">w{i + 1}: {(config.spheres.colorWeights[i] ?? 1).toFixed(2)} {c}</span>
+                  <button type="button" class="setting-title" class:locked={isLocked('spheres.colorWeights')} onclick={() => toggleLock('spheres.colorWeights')} title="Click to lock/unlock for randomize">w{i + 1}: {(config.spheres.colorWeights[i] ?? 1).toFixed(2)} {c}</button>
                   <input
                     type="range"
                     min="0"
@@ -1924,7 +1861,7 @@
           <h3>Circles (2D)</h3>
 
           <label class="control-row">
-            <span class="setting-title">Mode</span>
+            <button type="button" class="setting-title" class:locked={isLocked('circles.mode')} onclick={() => toggleLock('circles.mode')} title="Click to lock/unlock for randomize">Mode</button>
             <select bind:value={config.circles.mode}>
               <option value="scatter">Scatter</option>
               <option value="grid">Grid</option>
@@ -1932,25 +1869,25 @@
           </label>
 
           <label class="control-row slider">
-            <span class="setting-title">Count: {config.circles.count}</span>
+            <button type="button" class="setting-title" class:locked={isLocked('circles.count')} onclick={() => toggleLock('circles.count')} title="Click to lock/unlock for randomize">Count: {config.circles.count}</button>
             <input type="range" bind:value={config.circles.count} min="0" max="4000" step="10" />
           </label>
 
           <label class="control-row slider">
-            <span class="setting-title">Radius min: {Math.round(config.circles.rMinPx)}px</span>
+            <button type="button" class="setting-title" class:locked={isLocked('circles.rMinPx')} onclick={() => toggleLock('circles.rMinPx')} title="Click to lock/unlock for randomize">Radius min: {Math.round(config.circles.rMinPx)}px</button>
             <input type="range" bind:value={config.circles.rMinPx} min="1" max="240" step="1" />
           </label>
           <label class="control-row slider">
-            <span class="setting-title">Radius max: {Math.round(config.circles.rMaxPx)}px</span>
+            <button type="button" class="setting-title" class:locked={isLocked('circles.rMaxPx')} onclick={() => toggleLock('circles.rMaxPx')} title="Click to lock/unlock for randomize">Radius max: {Math.round(config.circles.rMaxPx)}px</button>
             <input type="range" bind:value={config.circles.rMaxPx} min="1" max="420" step="1" />
           </label>
 
           <label class="control-row slider">
-            <span class="setting-title">Jitter: {config.circles.jitter.toFixed(2)}</span>
+            <button type="button" class="setting-title" class:locked={isLocked('circles.jitter')} onclick={() => toggleLock('circles.jitter')} title="Click to lock/unlock for randomize">Jitter: {config.circles.jitter.toFixed(2)}</button>
             <input type="range" bind:value={config.circles.jitter} min="0" max="1" step="0.01" />
           </label>
           <label class="control-row slider">
-            <span class="setting-title">Fill opacity: {config.circles.fillOpacity.toFixed(2)}</span>
+            <button type="button" class="setting-title" class:locked={isLocked('circles.fillOpacity')} onclick={() => toggleLock('circles.fillOpacity')} title="Click to lock/unlock for randomize">Fill opacity: {config.circles.fillOpacity.toFixed(2)}</button>
             <input type="range" bind:value={config.circles.fillOpacity} min="0" max="1" step="0.01" />
           </label>
 
@@ -1958,18 +1895,29 @@
             <summary class="control-details-summary">Stroke</summary>
             <label class="control-row checkbox">
               <input type="checkbox" bind:checked={config.circles.stroke.enabled} />
-              <span class="setting-title">Enable</span>
+              <button
+                type="button"
+                class="setting-title"
+                class:locked={isLocked('circles.stroke.enabled')}
+                onclick={(e) => {
+                  e.preventDefault();
+                  toggleLock('circles.stroke.enabled');
+                }}
+                title="Click to lock/unlock for randomize"
+              >
+                Enable
+              </button>
             </label>
             <label class="control-row slider">
-              <span class="setting-title">Width: {Math.round(config.circles.stroke.widthPx)}px</span>
+              <button type="button" class="setting-title" class:locked={isLocked('circles.stroke.widthPx')} onclick={() => toggleLock('circles.stroke.widthPx')} title="Click to lock/unlock for randomize">Width: {Math.round(config.circles.stroke.widthPx)}px</button>
               <input type="range" bind:value={config.circles.stroke.widthPx} min="0" max="24" step="1" disabled={!config.circles.stroke.enabled} />
             </label>
             <label class="control-row">
-              <span class="setting-title">Color</span>
+              <button type="button" class="setting-title" class:locked={isLocked('circles.stroke.color')} onclick={() => toggleLock('circles.stroke.color')} title="Click to lock/unlock for randomize">Color</button>
               <input type="color" bind:value={config.circles.stroke.color} disabled={!config.circles.stroke.enabled} />
             </label>
             <label class="control-row slider">
-              <span class="setting-title">Opacity: {config.circles.stroke.opacity.toFixed(2)}</span>
+              <button type="button" class="setting-title" class:locked={isLocked('circles.stroke.opacity')} onclick={() => toggleLock('circles.stroke.opacity')} title="Click to lock/unlock for randomize">Opacity: {config.circles.stroke.opacity.toFixed(2)}</button>
               <input type="range" bind:value={config.circles.stroke.opacity} min="0" max="1" step="0.01" disabled={!config.circles.stroke.enabled} />
             </label>
           </details>
@@ -1978,18 +1926,29 @@
             <summary class="control-details-summary">Croissant</summary>
             <label class="control-row checkbox">
               <input type="checkbox" bind:checked={config.circles.croissant.enabled} />
-              <span class="setting-title">Enable</span>
+              <button
+                type="button"
+                class="setting-title"
+                class:locked={isLocked('circles.croissant.enabled')}
+                onclick={(e) => {
+                  e.preventDefault();
+                  toggleLock('circles.croissant.enabled');
+                }}
+                title="Click to lock/unlock for randomize"
+              >
+                Enable
+              </button>
             </label>
             <label class="control-row slider">
-              <span class="setting-title">Inner scale: {config.circles.croissant.innerScale.toFixed(2)}</span>
+              <button type="button" class="setting-title" class:locked={isLocked('circles.croissant.innerScale')} onclick={() => toggleLock('circles.croissant.innerScale')} title="Click to lock/unlock for randomize">Inner scale: {config.circles.croissant.innerScale.toFixed(2)}</button>
               <input type="range" bind:value={config.circles.croissant.innerScale} min="0.05" max="0.98" step="0.01" disabled={!config.circles.croissant.enabled} />
             </label>
             <label class="control-row slider">
-              <span class="setting-title">Offset: {config.circles.croissant.offset.toFixed(2)}</span>
+              <button type="button" class="setting-title" class:locked={isLocked('circles.croissant.offset')} onclick={() => toggleLock('circles.croissant.offset')} title="Click to lock/unlock for randomize">Offset: {config.circles.croissant.offset.toFixed(2)}</button>
               <input type="range" bind:value={config.circles.croissant.offset} min="0" max="1" step="0.01" disabled={!config.circles.croissant.enabled} />
             </label>
             <label class="control-row slider">
-              <span class="setting-title">Angle jitter: {Math.round(config.circles.croissant.angleJitterDeg)}deg</span>
+              <button type="button" class="setting-title" class:locked={isLocked('circles.croissant.angleJitterDeg')} onclick={() => toggleLock('circles.croissant.angleJitterDeg')} title="Click to lock/unlock for randomize">Angle jitter: {Math.round(config.circles.croissant.angleJitterDeg)}deg</button>
               <input type="range" bind:value={config.circles.croissant.angleJitterDeg} min="0" max="180" step="1" disabled={!config.circles.croissant.enabled} />
             </label>
           </details>
@@ -1997,7 +1956,7 @@
           <details class="control-details">
             <summary class="control-details-summary">Palette</summary>
             <label class="control-row">
-              <span class="setting-title">Mode</span>
+              <button type="button" class="setting-title" class:locked={isLocked('circles.paletteMode')} onclick={() => toggleLock('circles.paletteMode')} title="Click to lock/unlock for randomize">Mode</button>
               <select bind:value={config.circles.paletteMode}>
                 <option value="cycle">Cycle</option>
                 <option value="weighted">Weighted</option>
@@ -2016,7 +1975,7 @@
               </div>
               {#each config.colors as c, i}
                 <label class="control-row slider">
-                  <span class="setting-title">w{i + 1}: {(config.circles.colorWeights[i] ?? 1).toFixed(2)} {c}</span>
+                  <button type="button" class="setting-title" class:locked={isLocked('circles.colorWeights')} onclick={() => toggleLock('circles.colorWeights')} title="Click to lock/unlock for randomize">w{i + 1}: {(config.circles.colorWeights[i] ?? 1).toFixed(2)} {c}</button>
                   <input
                     type="range"
                     min="0"
@@ -2037,36 +1996,36 @@
           <h3>Polygon (2D)</h3>
 
           <label class="control-row slider">
-            <span class="setting-title">Count: {config.polygons.count}</span>
+            <button type="button" class="setting-title" class:locked={isLocked('polygons.count')} onclick={() => toggleLock('polygons.count')} title="Click to lock/unlock for randomize">Count: {config.polygons.count}</button>
             <input type="range" bind:value={config.polygons.count} min="0" max="4000" step="10" />
           </label>
 
           <label class="control-row slider">
-            <span class="setting-title">Edges: {Math.round(config.polygons.edges)}</span>
+            <button type="button" class="setting-title" class:locked={isLocked('polygons.edges')} onclick={() => toggleLock('polygons.edges')} title="Click to lock/unlock for randomize">Edges: {Math.round(config.polygons.edges)}</button>
             <input type="range" bind:value={config.polygons.edges} min="3" max="16" step="1" />
           </label>
 
           <label class="control-row slider">
-            <span class="setting-title">Radius min: {Math.round(config.polygons.rMinPx)}px</span>
+            <button type="button" class="setting-title" class:locked={isLocked('polygons.rMinPx')} onclick={() => toggleLock('polygons.rMinPx')} title="Click to lock/unlock for randomize">Radius min: {Math.round(config.polygons.rMinPx)}px</button>
             <input type="range" bind:value={config.polygons.rMinPx} min="1" max="240" step="1" />
           </label>
           <label class="control-row slider">
-            <span class="setting-title">Radius max: {Math.round(config.polygons.rMaxPx)}px</span>
+            <button type="button" class="setting-title" class:locked={isLocked('polygons.rMaxPx')} onclick={() => toggleLock('polygons.rMaxPx')} title="Click to lock/unlock for randomize">Radius max: {Math.round(config.polygons.rMaxPx)}px</button>
             <input type="range" bind:value={config.polygons.rMaxPx} min="1" max="420" step="1" />
           </label>
 
           <label class="control-row slider">
-            <span class="setting-title">Jitter: {config.polygons.jitter.toFixed(2)}</span>
+            <button type="button" class="setting-title" class:locked={isLocked('polygons.jitter')} onclick={() => toggleLock('polygons.jitter')} title="Click to lock/unlock for randomize">Jitter: {config.polygons.jitter.toFixed(2)}</button>
             <input type="range" bind:value={config.polygons.jitter} min="0" max="1" step="0.01" />
           </label>
 
           <label class="control-row slider">
-            <span class="setting-title">Rotate jitter: {Math.round(config.polygons.rotateJitterDeg)}deg</span>
+            <button type="button" class="setting-title" class:locked={isLocked('polygons.rotateJitterDeg')} onclick={() => toggleLock('polygons.rotateJitterDeg')} title="Click to lock/unlock for randomize">Rotate jitter: {Math.round(config.polygons.rotateJitterDeg)}deg</button>
             <input type="range" bind:value={config.polygons.rotateJitterDeg} min="0" max="360" step="1" />
           </label>
 
           <label class="control-row slider">
-            <span class="setting-title">Fill opacity: {config.polygons.fillOpacity.toFixed(2)}</span>
+            <button type="button" class="setting-title" class:locked={isLocked('polygons.fillOpacity')} onclick={() => toggleLock('polygons.fillOpacity')} title="Click to lock/unlock for randomize">Fill opacity: {config.polygons.fillOpacity.toFixed(2)}</button>
             <input type="range" bind:value={config.polygons.fillOpacity} min="0" max="1" step="0.01" />
           </label>
 
@@ -2074,18 +2033,29 @@
             <summary class="control-details-summary">Stroke</summary>
             <label class="control-row checkbox">
               <input type="checkbox" bind:checked={config.polygons.stroke.enabled} />
-              <span class="setting-title">Enable</span>
+              <button
+                type="button"
+                class="setting-title"
+                class:locked={isLocked('polygons.stroke.enabled')}
+                onclick={(e) => {
+                  e.preventDefault();
+                  toggleLock('polygons.stroke.enabled');
+                }}
+                title="Click to lock/unlock for randomize"
+              >
+                Enable
+              </button>
             </label>
             <label class="control-row slider">
-              <span class="setting-title">Width: {Math.round(config.polygons.stroke.widthPx)}px</span>
+              <button type="button" class="setting-title" class:locked={isLocked('polygons.stroke.widthPx')} onclick={() => toggleLock('polygons.stroke.widthPx')} title="Click to lock/unlock for randomize">Width: {Math.round(config.polygons.stroke.widthPx)}px</button>
               <input type="range" bind:value={config.polygons.stroke.widthPx} min="0" max="24" step="1" disabled={!config.polygons.stroke.enabled} />
             </label>
             <label class="control-row">
-              <span class="setting-title">Color</span>
+              <button type="button" class="setting-title" class:locked={isLocked('polygons.stroke.color')} onclick={() => toggleLock('polygons.stroke.color')} title="Click to lock/unlock for randomize">Color</button>
               <input type="color" bind:value={config.polygons.stroke.color} disabled={!config.polygons.stroke.enabled} />
             </label>
             <label class="control-row slider">
-              <span class="setting-title">Opacity: {config.polygons.stroke.opacity.toFixed(2)}</span>
+              <button type="button" class="setting-title" class:locked={isLocked('polygons.stroke.opacity')} onclick={() => toggleLock('polygons.stroke.opacity')} title="Click to lock/unlock for randomize">Opacity: {config.polygons.stroke.opacity.toFixed(2)}</button>
               <input type="range" bind:value={config.polygons.stroke.opacity} min="0" max="1" step="0.01" disabled={!config.polygons.stroke.enabled} />
             </label>
           </details>
@@ -2093,7 +2063,7 @@
           <details class="control-details">
             <summary class="control-details-summary">Palette</summary>
             <label class="control-row">
-              <span class="setting-title">Mode</span>
+              <button type="button" class="setting-title" class:locked={isLocked('polygons.paletteMode')} onclick={() => toggleLock('polygons.paletteMode')} title="Click to lock/unlock for randomize">Mode</button>
               <select bind:value={config.polygons.paletteMode}>
                 <option value="cycle">Cycle</option>
                 <option value="weighted">Weighted</option>
@@ -2107,7 +2077,7 @@
               </div>
               {#each config.colors as c, i}
                 <label class="control-row slider">
-                  <span class="setting-title">w{i + 1}: {(config.polygons.colorWeights[i] ?? 1).toFixed(2)} {c}</span>
+                  <button type="button" class="setting-title" class:locked={isLocked('polygons.colorWeights')} onclick={() => toggleLock('polygons.colorWeights')} title="Click to lock/unlock for randomize">w{i + 1}: {(config.polygons.colorWeights[i] ?? 1).toFixed(2)} {c}</button>
                   <input
                     type="range"
                     min="0"
@@ -2128,7 +2098,7 @@
           <h3>Triangles (2D)</h3>
 
           <label class="control-row">
-            <span class="setting-title">Mode</span>
+            <button type="button" class="setting-title" class:locked={isLocked('triangles.mode')} onclick={() => toggleLock('triangles.mode')} title="Click to lock/unlock for randomize">Mode</button>
             <select bind:value={config.triangles.mode}>
               <option value="tessellation">Tessellation</option>
               <option value="scatter">Scatter</option>
@@ -2137,32 +2107,32 @@
           </label>
 
           <label class="control-row slider">
-            <span class="setting-title">Density: {config.triangles.density.toFixed(2)}</span>
+            <button type="button" class="setting-title" class:locked={isLocked('triangles.density')} onclick={() => toggleLock('triangles.density')} title="Click to lock/unlock for randomize">Density: {config.triangles.density.toFixed(2)}</button>
             <input type="range" bind:value={config.triangles.density} min="0.1" max="3.5" step="0.01" />
           </label>
 
           <label class="control-row slider">
-            <span class="setting-title">Scale: {Math.round(config.triangles.scalePx)}px</span>
+            <button type="button" class="setting-title" class:locked={isLocked('triangles.scalePx')} onclick={() => toggleLock('triangles.scalePx')} title="Click to lock/unlock for randomize">Scale: {Math.round(config.triangles.scalePx)}px</button>
             <input type="range" bind:value={config.triangles.scalePx} min="6" max="320" step="1" />
           </label>
 
           <label class="control-row slider">
-            <span class="setting-title">Jitter: {config.triangles.jitter.toFixed(2)}</span>
+            <button type="button" class="setting-title" class:locked={isLocked('triangles.jitter')} onclick={() => toggleLock('triangles.jitter')} title="Click to lock/unlock for randomize">Jitter: {config.triangles.jitter.toFixed(2)}</button>
             <input type="range" bind:value={config.triangles.jitter} min="0" max="1" step="0.01" />
           </label>
 
           <label class="control-row slider">
-            <span class="setting-title">Rotate jitter: {Math.round(config.triangles.rotateJitterDeg)}deg</span>
+            <button type="button" class="setting-title" class:locked={isLocked('triangles.rotateJitterDeg')} onclick={() => toggleLock('triangles.rotateJitterDeg')} title="Click to lock/unlock for randomize">Rotate jitter: {Math.round(config.triangles.rotateJitterDeg)}deg</button>
             <input type="range" bind:value={config.triangles.rotateJitterDeg} min="0" max="180" step="1" />
           </label>
 
           <label class="control-row slider">
-            <span class="setting-title">Inset: {Math.round(config.triangles.insetPx)}px</span>
+            <button type="button" class="setting-title" class:locked={isLocked('triangles.insetPx')} onclick={() => toggleLock('triangles.insetPx')} title="Click to lock/unlock for randomize">Inset: {Math.round(config.triangles.insetPx)}px</button>
             <input type="range" bind:value={config.triangles.insetPx} min="0" max="120" step="1" />
           </label>
 
           <label class="control-row slider">
-            <span class="setting-title">Fill opacity: {config.triangles.fillOpacity.toFixed(2)}</span>
+            <button type="button" class="setting-title" class:locked={isLocked('triangles.fillOpacity')} onclick={() => toggleLock('triangles.fillOpacity')} title="Click to lock/unlock for randomize">Fill opacity: {config.triangles.fillOpacity.toFixed(2)}</button>
             <input type="range" bind:value={config.triangles.fillOpacity} min="0" max="1" step="0.01" />
           </label>
 
@@ -2170,18 +2140,29 @@
             <summary class="control-details-summary">Stroke</summary>
             <label class="control-row checkbox">
               <input type="checkbox" bind:checked={config.triangles.stroke.enabled} />
-              <span class="setting-title">Enable</span>
+              <button
+                type="button"
+                class="setting-title"
+                class:locked={isLocked('triangles.stroke.enabled')}
+                onclick={(e) => {
+                  e.preventDefault();
+                  toggleLock('triangles.stroke.enabled');
+                }}
+                title="Click to lock/unlock for randomize"
+              >
+                Enable
+              </button>
             </label>
             <label class="control-row slider">
-              <span class="setting-title">Width: {Math.round(config.triangles.stroke.widthPx)}px</span>
+              <button type="button" class="setting-title" class:locked={isLocked('triangles.stroke.widthPx')} onclick={() => toggleLock('triangles.stroke.widthPx')} title="Click to lock/unlock for randomize">Width: {Math.round(config.triangles.stroke.widthPx)}px</button>
               <input type="range" bind:value={config.triangles.stroke.widthPx} min="0" max="24" step="1" disabled={!config.triangles.stroke.enabled} />
             </label>
             <label class="control-row">
-              <span class="setting-title">Color</span>
+              <button type="button" class="setting-title" class:locked={isLocked('triangles.stroke.color')} onclick={() => toggleLock('triangles.stroke.color')} title="Click to lock/unlock for randomize">Color</button>
               <input type="color" bind:value={config.triangles.stroke.color} disabled={!config.triangles.stroke.enabled} />
             </label>
             <label class="control-row slider">
-              <span class="setting-title">Opacity: {config.triangles.stroke.opacity.toFixed(2)}</span>
+              <button type="button" class="setting-title" class:locked={isLocked('triangles.stroke.opacity')} onclick={() => toggleLock('triangles.stroke.opacity')} title="Click to lock/unlock for randomize">Opacity: {config.triangles.stroke.opacity.toFixed(2)}</button>
               <input type="range" bind:value={config.triangles.stroke.opacity} min="0" max="1" step="0.01" disabled={!config.triangles.stroke.enabled} />
             </label>
           </details>
@@ -2190,14 +2171,25 @@
             <summary class="control-details-summary">Shading</summary>
             <label class="control-row checkbox">
               <input type="checkbox" bind:checked={config.triangles.shading.enabled} />
-              <span class="setting-title">Enable</span>
+              <button
+                type="button"
+                class="setting-title"
+                class:locked={isLocked('triangles.shading.enabled')}
+                onclick={(e) => {
+                  e.preventDefault();
+                  toggleLock('triangles.shading.enabled');
+                }}
+                title="Click to lock/unlock for randomize"
+              >
+                Enable
+              </button>
             </label>
             <label class="control-row slider">
-              <span class="setting-title">Light: {Math.round(config.triangles.shading.lightDeg)}deg</span>
+              <button type="button" class="setting-title" class:locked={isLocked('triangles.shading.lightDeg')} onclick={() => toggleLock('triangles.shading.lightDeg')} title="Click to lock/unlock for randomize">Light: {Math.round(config.triangles.shading.lightDeg)}deg</button>
               <input type="range" bind:value={config.triangles.shading.lightDeg} min="0" max="360" step="1" disabled={!config.triangles.shading.enabled} />
             </label>
             <label class="control-row slider">
-              <span class="setting-title">Strength: {config.triangles.shading.strength.toFixed(2)}</span>
+              <button type="button" class="setting-title" class:locked={isLocked('triangles.shading.strength')} onclick={() => toggleLock('triangles.shading.strength')} title="Click to lock/unlock for randomize">Strength: {config.triangles.shading.strength.toFixed(2)}</button>
               <input type="range" bind:value={config.triangles.shading.strength} min="0" max="1" step="0.01" disabled={!config.triangles.shading.enabled} />
             </label>
           </details>
@@ -2205,7 +2197,7 @@
           <details class="control-details">
             <summary class="control-details-summary">Palette</summary>
             <label class="control-row">
-              <span class="setting-title">Mode</span>
+              <button type="button" class="setting-title" class:locked={isLocked('triangles.paletteMode')} onclick={() => toggleLock('triangles.paletteMode')} title="Click to lock/unlock for randomize">Mode</button>
               <select bind:value={config.triangles.paletteMode}>
                 <option value="cycle">Cycle</option>
                 <option value="weighted">Weighted</option>
@@ -2224,7 +2216,7 @@
               </div>
               {#each config.colors as c, i}
                 <label class="control-row slider">
-                  <span class="setting-title">w{i + 1}: {(config.triangles.colorWeights[i] ?? 1).toFixed(2)} {c}</span>
+                  <button type="button" class="setting-title" class:locked={isLocked('triangles.colorWeights')} onclick={() => toggleLock('triangles.colorWeights')} title="Click to lock/unlock for randomize">w{i + 1}: {(config.triangles.colorWeights[i] ?? 1).toFixed(2)} {c}</button>
                   <input
                     type="range"
                     min="0"
@@ -2245,7 +2237,7 @@
           <h3>Triangles (3D)</h3>
 
           <label class="control-row">
-            <span class="setting-title">Mode</span>
+            <button type="button" class="setting-title" class:locked={isLocked('prisms.mode')} onclick={() => toggleLock('prisms.mode')} title="Click to lock/unlock for randomize">Mode</button>
             <select bind:value={config.prisms.mode}>
               <option value="tessellation">Tessellation</option>
               <option value="scatter">Scatter</option>
@@ -2254,44 +2246,44 @@
           </label>
 
           <label class="control-row slider">
-            <span class="setting-title">Count: {config.prisms.count}</span>
+            <button type="button" class="setting-title" class:locked={isLocked('prisms.count')} onclick={() => toggleLock('prisms.count')} title="Click to lock/unlock for randomize">Count: {config.prisms.count}</button>
             <input type="range" bind:value={config.prisms.count} min="0" max="2500" step="10" />
           </label>
 
           <label class="control-row slider">
-            <span class="setting-title">Radius: {config.prisms.radius.toFixed(2)}</span>
+            <button type="button" class="setting-title" class:locked={isLocked('prisms.radius')} onclick={() => toggleLock('prisms.radius')} title="Click to lock/unlock for randomize">Radius: {config.prisms.radius.toFixed(2)}</button>
             <input type="range" bind:value={config.prisms.radius} min="0.05" max="2.0" step="0.01" />
           </label>
 
           <label class="control-row slider">
-            <span class="setting-title">Height: {config.prisms.height.toFixed(2)}</span>
+            <button type="button" class="setting-title" class:locked={isLocked('prisms.height')} onclick={() => toggleLock('prisms.height')} title="Click to lock/unlock for randomize">Height: {config.prisms.height.toFixed(2)}</button>
             <input type="range" bind:value={config.prisms.height} min="0.02" max="3.0" step="0.01" />
           </label>
 
           <label class="control-row slider">
-            <span class="setting-title">Wall bulge: {config.prisms.wallBulge.toFixed(2)}</span>
+            <button type="button" class="setting-title" class:locked={isLocked('prisms.wallBulge')} onclick={() => toggleLock('prisms.wallBulge')} title="Click to lock/unlock for randomize">Wall bulge: {config.prisms.wallBulge.toFixed(2)}</button>
             <input type="range" bind:value={config.prisms.wallBulge} min="-1" max="1" step="0.01" />
           </label>
 
           <label class="control-row slider">
-            <span class="setting-title">Spread: {config.prisms.spread.toFixed(2)}</span>
+            <button type="button" class="setting-title" class:locked={isLocked('prisms.spread')} onclick={() => toggleLock('prisms.spread')} title="Click to lock/unlock for randomize">Spread: {config.prisms.spread.toFixed(2)}</button>
             <input type="range" bind:value={config.prisms.spread} min="0" max="20" step="0.05" />
           </label>
 
           <label class="control-row slider">
-            <span class="setting-title">Jitter: {config.prisms.jitter.toFixed(2)}</span>
+            <button type="button" class="setting-title" class:locked={isLocked('prisms.jitter')} onclick={() => toggleLock('prisms.jitter')} title="Click to lock/unlock for randomize">Jitter: {config.prisms.jitter.toFixed(2)}</button>
             <input type="range" bind:value={config.prisms.jitter} min="0" max="1" step="0.01" />
           </label>
 
           <label class="control-row slider">
-            <span class="setting-title">Opacity: {config.prisms.opacity.toFixed(2)}</span>
+            <button type="button" class="setting-title" class:locked={isLocked('prisms.opacity')} onclick={() => toggleLock('prisms.opacity')} title="Click to lock/unlock for randomize">Opacity: {config.prisms.opacity.toFixed(2)}</button>
             <input type="range" bind:value={config.prisms.opacity} min="0" max="1" step="0.01" />
           </label>
 
           <details class="control-details">
             <summary class="control-details-summary">Palette</summary>
             <label class="control-row">
-              <span class="setting-title">Mode</span>
+              <button type="button" class="setting-title" class:locked={isLocked('prisms.paletteMode')} onclick={() => toggleLock('prisms.paletteMode')} title="Click to lock/unlock for randomize">Mode</button>
               <select bind:value={config.prisms.paletteMode}>
                 <option value="cycle">Cycle</option>
                 <option value="weighted">Weighted</option>
@@ -2310,7 +2302,7 @@
               </div>
               {#each config.colors as c, i}
                 <label class="control-row slider">
-                  <span class="setting-title">w{i + 1}: {(config.prisms.colorWeights[i] ?? 1).toFixed(2)} {c}</span>
+                  <button type="button" class="setting-title" class:locked={isLocked('prisms.colorWeights')} onclick={() => toggleLock('prisms.colorWeights')} title="Click to lock/unlock for randomize">w{i + 1}: {(config.prisms.colorWeights[i] ?? 1).toFixed(2)} {c}</button>
                   <input
                     type="range"
                     min="0"
@@ -2331,33 +2323,33 @@
           <h3>Hex Grid (2D)</h3>
 
           <label class="control-row slider">
-            <span class="setting-title">Radius: {Math.round(config.hexgrid.radiusPx)}px</span>
+            <button type="button" class="setting-title" class:locked={isLocked('hexgrid.radiusPx')} onclick={() => toggleLock('hexgrid.radiusPx')} title="Click to lock/unlock for randomize">Radius: {Math.round(config.hexgrid.radiusPx)}px</button>
             <input type="range" bind:value={config.hexgrid.radiusPx} min="3" max="140" step="1" />
           </label>
 
           <label class="control-row slider">
-            <span class="setting-title">Margin: {Math.round(config.hexgrid.marginPx)}px</span>
+            <button type="button" class="setting-title" class:locked={isLocked('hexgrid.marginPx')} onclick={() => toggleLock('hexgrid.marginPx')} title="Click to lock/unlock for randomize">Margin: {Math.round(config.hexgrid.marginPx)}px</button>
             <input type="range" bind:value={config.hexgrid.marginPx} min="0" max="60" step="1" />
           </label>
 
           <label class="control-row slider">
-            <span class="setting-title">Overscan: {Math.round(config.hexgrid.overscanPx)}px</span>
+            <button type="button" class="setting-title" class:locked={isLocked('hexgrid.overscanPx')} onclick={() => toggleLock('hexgrid.overscanPx')} title="Click to lock/unlock for randomize">Overscan: {Math.round(config.hexgrid.overscanPx)}px</button>
             <input type="range" bind:value={config.hexgrid.overscanPx} min="0" max="400" step="5" />
           </label>
 
           <label class="control-row slider">
-            <span class="setting-title">Fill opacity: {config.hexgrid.fillOpacity.toFixed(2)}</span>
+            <button type="button" class="setting-title" class:locked={isLocked('hexgrid.fillOpacity')} onclick={() => toggleLock('hexgrid.fillOpacity')} title="Click to lock/unlock for randomize">Fill opacity: {config.hexgrid.fillOpacity.toFixed(2)}</button>
             <input type="range" bind:value={config.hexgrid.fillOpacity} min="0" max="1" step="0.01" />
           </label>
 
           <details class="control-details">
             <summary class="control-details-summary">Origin</summary>
             <label class="control-row slider">
-              <span class="setting-title">X: {Math.round(config.hexgrid.originPx.x)}px</span>
+              <button type="button" class="setting-title" class:locked={isLocked('hexgrid.originPx.x')} onclick={() => toggleLock('hexgrid.originPx.x')} title="Click to lock/unlock for randomize">X: {Math.round(config.hexgrid.originPx.x)}px</button>
               <input type="range" bind:value={config.hexgrid.originPx.x} min="-500" max="500" step="1" />
             </label>
             <label class="control-row slider">
-              <span class="setting-title">Y: {Math.round(config.hexgrid.originPx.y)}px</span>
+              <button type="button" class="setting-title" class:locked={isLocked('hexgrid.originPx.y')} onclick={() => toggleLock('hexgrid.originPx.y')} title="Click to lock/unlock for randomize">Y: {Math.round(config.hexgrid.originPx.y)}px</button>
               <input type="range" bind:value={config.hexgrid.originPx.y} min="-500" max="500" step="1" />
             </label>
           </details>
@@ -2366,14 +2358,25 @@
             <summary class="control-details-summary">Stroke</summary>
             <label class="control-row checkbox">
               <input type="checkbox" bind:checked={config.hexgrid.stroke.enabled} />
-              <span class="setting-title">Enable</span>
+              <button
+                type="button"
+                class="setting-title"
+                class:locked={isLocked('hexgrid.stroke.enabled')}
+                onclick={(e) => {
+                  e.preventDefault();
+                  toggleLock('hexgrid.stroke.enabled');
+                }}
+                title="Click to lock/unlock for randomize"
+              >
+                Enable
+              </button>
             </label>
             <label class="control-row slider">
-              <span class="setting-title">Width: {Math.round(config.hexgrid.stroke.widthPx)}px</span>
+              <button type="button" class="setting-title" class:locked={isLocked('hexgrid.stroke.widthPx')} onclick={() => toggleLock('hexgrid.stroke.widthPx')} title="Click to lock/unlock for randomize">Width: {Math.round(config.hexgrid.stroke.widthPx)}px</button>
               <input type="range" bind:value={config.hexgrid.stroke.widthPx} min="0" max="24" step="1" disabled={!config.hexgrid.stroke.enabled} />
             </label>
             <label class="control-row">
-              <span class="setting-title">Join</span>
+              <button type="button" class="setting-title" class:locked={isLocked('hexgrid.stroke.join')} onclick={() => toggleLock('hexgrid.stroke.join')} title="Click to lock/unlock for randomize">Join</button>
               <select bind:value={config.hexgrid.stroke.join} disabled={!config.hexgrid.stroke.enabled}>
                 <option value="round">Round</option>
                 <option value="miter">Miter</option>
@@ -2381,11 +2384,11 @@
               </select>
             </label>
             <label class="control-row">
-              <span class="setting-title">Color</span>
+              <button type="button" class="setting-title" class:locked={isLocked('hexgrid.stroke.color')} onclick={() => toggleLock('hexgrid.stroke.color')} title="Click to lock/unlock for randomize">Color</button>
               <input type="color" bind:value={config.hexgrid.stroke.color} disabled={!config.hexgrid.stroke.enabled} />
             </label>
             <label class="control-row slider">
-              <span class="setting-title">Opacity: {config.hexgrid.stroke.opacity.toFixed(2)}</span>
+              <button type="button" class="setting-title" class:locked={isLocked('hexgrid.stroke.opacity')} onclick={() => toggleLock('hexgrid.stroke.opacity')} title="Click to lock/unlock for randomize">Opacity: {config.hexgrid.stroke.opacity.toFixed(2)}</button>
               <input type="range" bind:value={config.hexgrid.stroke.opacity} min="0" max="1" step="0.01" disabled={!config.hexgrid.stroke.enabled} />
             </label>
           </details>
@@ -2393,7 +2396,7 @@
           <details class="control-details">
             <summary class="control-details-summary">Coloring</summary>
             <label class="control-row">
-              <span class="setting-title">Palette mode</span>
+              <button type="button" class="setting-title" class:locked={isLocked('hexgrid.coloring.paletteMode')} onclick={() => toggleLock('hexgrid.coloring.paletteMode')} title="Click to lock/unlock for randomize">Palette mode</button>
               <select bind:value={config.hexgrid.coloring.paletteMode}>
                 <option value="cycle">Cycle</option>
                 <option value="weighted">Weighted</option>
@@ -2401,7 +2404,7 @@
             </label>
 
             <label class="control-row">
-              <span class="setting-title">Weights</span>
+              <button type="button" class="setting-title" class:locked={isLocked('hexgrid.coloring.weightsMode')} onclick={() => toggleLock('hexgrid.coloring.weightsMode')} title="Click to lock/unlock for randomize">Weights</button>
               <select bind:value={config.hexgrid.coloring.weightsMode}>
                 <option value="auto">Auto</option>
                 <option value="preset">Preset</option>
@@ -2410,7 +2413,7 @@
             </label>
 
             <label class="control-row">
-              <span class="setting-title">Preset</span>
+              <button type="button" class="setting-title" class:locked={isLocked('hexgrid.coloring.preset')} onclick={() => toggleLock('hexgrid.coloring.preset')} title="Click to lock/unlock for randomize">Preset</button>
               <select bind:value={config.hexgrid.coloring.preset} disabled={config.hexgrid.coloring.weightsMode !== 'preset'}>
                 <option value="equal">Equal</option>
                 <option value="dominant">Dominant</option>
@@ -2431,7 +2434,7 @@
               </div>
               {#each config.colors as c, i}
                 <label class="control-row slider">
-                  <span class="setting-title">w{i + 1}: {(config.hexgrid.coloring.weights[i] ?? 1).toFixed(2)} {c}</span>
+                  <button type="button" class="setting-title" class:locked={isLocked('hexgrid.coloring.weights')} onclick={() => toggleLock('hexgrid.coloring.weights')} title="Click to lock/unlock for randomize">w{i + 1}: {(config.hexgrid.coloring.weights[i] ?? 1).toFixed(2)} {c}</button>
                   <input
                     type="range"
                     min="0"
@@ -2450,7 +2453,7 @@
           <details class="control-details">
             <summary class="control-details-summary">Grouping</summary>
             <label class="control-row">
-              <span class="setting-title">Mode</span>
+              <button type="button" class="setting-title" class:locked={isLocked('hexgrid.grouping.mode')} onclick={() => toggleLock('hexgrid.grouping.mode')} title="Click to lock/unlock for randomize">Mode</button>
               <select bind:value={config.hexgrid.grouping.mode}>
                 <option value="none">None</option>
                 <option value="voronoi">Voronoi</option>
@@ -2459,11 +2462,11 @@
               </select>
             </label>
             <label class="control-row slider">
-              <span class="setting-title">Strength: {config.hexgrid.grouping.strength.toFixed(2)}</span>
+              <button type="button" class="setting-title" class:locked={isLocked('hexgrid.grouping.strength')} onclick={() => toggleLock('hexgrid.grouping.strength')} title="Click to lock/unlock for randomize">Strength: {config.hexgrid.grouping.strength.toFixed(2)}</button>
               <input type="range" bind:value={config.hexgrid.grouping.strength} min="0" max="1" step="0.01" disabled={config.hexgrid.grouping.mode === 'none'} />
             </label>
             <label class="control-row slider">
-              <span class="setting-title">Target groups: {config.hexgrid.grouping.targetGroupCount}</span>
+              <button type="button" class="setting-title" class:locked={isLocked('hexgrid.grouping.targetGroupCount')} onclick={() => toggleLock('hexgrid.grouping.targetGroupCount')} title="Click to lock/unlock for randomize">Target groups: {config.hexgrid.grouping.targetGroupCount}</button>
               <input type="range" bind:value={config.hexgrid.grouping.targetGroupCount} min="1" max="250" step="1" disabled={config.hexgrid.grouping.mode === 'none'} />
             </label>
           </details>
@@ -2471,7 +2474,7 @@
           <details class="control-details">
             <summary class="control-details-summary">Effect</summary>
             <label class="control-row">
-              <span class="setting-title">Kind</span>
+              <button type="button" class="setting-title" class:locked={isLocked('hexgrid.effect.kind')} onclick={() => toggleLock('hexgrid.effect.kind')} title="Click to lock/unlock for randomize">Kind</button>
               <select bind:value={config.hexgrid.effect.kind}>
                 <option value="none">None</option>
                 <option value="bevel">Bevel</option>
@@ -2480,11 +2483,11 @@
               </select>
             </label>
             <label class="control-row slider">
-              <span class="setting-title">Amount: {config.hexgrid.effect.amount.toFixed(2)}</span>
+              <button type="button" class="setting-title" class:locked={isLocked('hexgrid.effect.amount')} onclick={() => toggleLock('hexgrid.effect.amount')} title="Click to lock/unlock for randomize">Amount: {config.hexgrid.effect.amount.toFixed(2)}</button>
               <input type="range" bind:value={config.hexgrid.effect.amount} min="0" max="1" step="0.01" disabled={config.hexgrid.effect.kind === 'none'} />
             </label>
             <label class="control-row slider">
-              <span class="setting-title">Frequency: {config.hexgrid.effect.frequency.toFixed(2)}</span>
+              <button type="button" class="setting-title" class:locked={isLocked('hexgrid.effect.frequency')} onclick={() => toggleLock('hexgrid.effect.frequency')} title="Click to lock/unlock for randomize">Frequency: {config.hexgrid.effect.frequency.toFixed(2)}</button>
               <input type="range" bind:value={config.hexgrid.effect.frequency} min="0.1" max="10" step="0.05" disabled={config.hexgrid.effect.kind === 'none'} />
             </label>
           </details>
@@ -2497,15 +2500,15 @@
           <details class="control-details">
             <summary class="control-details-summary">Camera</summary>
             <label class="control-row slider">
-              <button type="button" class="setting-title" class:locked={locks.cameraAzimuth} onclick={() => toggleLock('cameraAzimuth')} title="Click to lock/unlock for randomize">Azimuth: {config.camera.azimuth}°</button>
+              <button type="button" class="setting-title" class:locked={isLocked('camera.azimuth')} onclick={() => toggleLock('camera.azimuth')} title="Click to lock/unlock for randomize">Azimuth: {config.camera.azimuth}°</button>
               <input type="range" bind:value={config.camera.azimuth} min="0" max="360" step="5" />
             </label>
             <label class="control-row slider">
-              <button type="button" class="setting-title" class:locked={locks.cameraElevation} onclick={() => toggleLock('cameraElevation')} title="Click to lock/unlock for randomize">Elevation: {config.camera.elevation}°</button>
+              <button type="button" class="setting-title" class:locked={isLocked('camera.elevation')} onclick={() => toggleLock('camera.elevation')} title="Click to lock/unlock for randomize">Elevation: {config.camera.elevation}°</button>
               <input type="range" bind:value={config.camera.elevation} min="-80" max="80" step="5" />
             </label>
             <label class="control-row slider">
-              <button type="button" class="setting-title" class:locked={locks.cameraDistance} onclick={() => toggleLock('cameraDistance')} title="Click to lock/unlock for randomize">Distance: {config.camera.distance.toFixed(1)}</button>
+              <button type="button" class="setting-title" class:locked={isLocked('camera.distance')} onclick={() => toggleLock('camera.distance')} title="Click to lock/unlock for randomize">Distance: {config.camera.distance.toFixed(1)}</button>
               <input type="range" bind:value={config.camera.distance} min="5" max="50" step="0.1" />
             </label>
           </details>
@@ -2521,10 +2524,10 @@
           <button
             type="button"
             class="setting-title"
-            class:locked={locks.lightingEnabled}
+            class:locked={isLocked('lighting.enabled')}
             onclick={(e) => {
               e.preventDefault();
-              toggleLock('lightingEnabled');
+              toggleLock('lighting.enabled');
             }}
             title="Click to lock/unlock for randomize"
           >
@@ -2533,23 +2536,23 @@
         </label>
         {#if config.lighting.enabled}
           <label class="control-row slider">
-            <button type="button" class="setting-title" class:locked={locks.lightingIntensity} onclick={() => toggleLock('lightingIntensity')} title="Click to lock/unlock for randomize">Intensity: {config.lighting.intensity.toFixed(1)}</button>
+            <button type="button" class="setting-title" class:locked={isLocked('lighting.intensity')} onclick={() => toggleLock('lighting.intensity')} title="Click to lock/unlock for randomize">Intensity: {config.lighting.intensity.toFixed(1)}</button>
             <input type="range" bind:value={config.lighting.intensity} min="0" max="3" step="0.1" />
           </label>
           <label class="control-row slider">
-            <button type="button" class="setting-title" class:locked={locks.lightingX} onclick={() => toggleLock('lightingX')} title="Click to lock/unlock for randomize">Position X: {config.lighting.position.x}</button>
+            <button type="button" class="setting-title" class:locked={isLocked('lighting.position.x')} onclick={() => toggleLock('lighting.position.x')} title="Click to lock/unlock for randomize">Position X: {config.lighting.position.x}</button>
             <input type="range" bind:value={config.lighting.position.x} min="-10" max="10" step="0.5" />
           </label>
           <label class="control-row slider">
-            <button type="button" class="setting-title" class:locked={locks.lightingY} onclick={() => toggleLock('lightingY')} title="Click to lock/unlock for randomize">Position Y: {config.lighting.position.y}</button>
+            <button type="button" class="setting-title" class:locked={isLocked('lighting.position.y')} onclick={() => toggleLock('lighting.position.y')} title="Click to lock/unlock for randomize">Position Y: {config.lighting.position.y}</button>
             <input type="range" bind:value={config.lighting.position.y} min="-10" max="10" step="0.5" />
           </label>
           <label class="control-row slider">
-            <button type="button" class="setting-title" class:locked={locks.lightingZ} onclick={() => toggleLock('lightingZ')} title="Click to lock/unlock for randomize">Position Z: {config.lighting.position.z}</button>
+            <button type="button" class="setting-title" class:locked={isLocked('lighting.position.z')} onclick={() => toggleLock('lighting.position.z')} title="Click to lock/unlock for randomize">Position Z: {config.lighting.position.z}</button>
             <input type="range" bind:value={config.lighting.position.z} min="0" max="20" step="0.5" />
           </label>
           <label class="control-row slider">
-            <button type="button" class="setting-title" class:locked={locks.lightingAmbient} onclick={() => toggleLock('lightingAmbient')} title="Click to lock/unlock for randomize">Ambient: {config.lighting.ambientIntensity.toFixed(1)}</button>
+            <button type="button" class="setting-title" class:locked={isLocked('lighting.ambientIntensity')} onclick={() => toggleLock('lighting.ambientIntensity')} title="Click to lock/unlock for randomize">Ambient: {config.lighting.ambientIntensity.toFixed(1)}</button>
             <input type="range" bind:value={config.lighting.ambientIntensity} min="0" max="1" step="0.1" />
           </label>
         {/if}
@@ -2562,12 +2565,12 @@
 
         {#if is3DType}
           <label class="control-row slider">
-            <span class="setting-title">Exposure: {config.rendering.exposure.toFixed(2)}</span>
+            <button type="button" class="setting-title" class:locked={isLocked('rendering.exposure')} onclick={() => toggleLock('rendering.exposure')} title="Click to lock/unlock for randomize">Exposure: {config.rendering.exposure.toFixed(2)}</button>
             <input type="range" bind:value={config.rendering.exposure} min="0.3" max="2.5" step="0.01" />
           </label>
 
           <label class="control-row">
-            <span class="setting-title">Tone Mapping</span>
+            <button type="button" class="setting-title" class:locked={isLocked('rendering.toneMapping')} onclick={() => toggleLock('rendering.toneMapping')} title="Click to lock/unlock for randomize">Tone Mapping</button>
             <select bind:value={config.rendering.toneMapping}>
               <option value="aces">ACES</option>
               <option value="none">None</option>
@@ -2588,18 +2591,29 @@
             <summary class="control-details-summary">Bloom</summary>
             <label class="control-row checkbox">
               <input type="checkbox" bind:checked={config.bloom.enabled} />
-              <span class="setting-title">Enable bloom</span>
+              <button
+                type="button"
+                class="setting-title"
+                class:locked={isLocked('bloom.enabled')}
+                onclick={(e) => {
+                  e.preventDefault();
+                  toggleLock('bloom.enabled');
+                }}
+                title="Click to lock/unlock for randomize"
+              >
+                Enable bloom
+              </button>
             </label>
             <label class="control-row slider">
-              <span class="setting-title">Strength: {config.bloom.strength.toFixed(2)}</span>
+              <button type="button" class="setting-title" class:locked={isLocked('bloom.strength')} onclick={() => toggleLock('bloom.strength')} title="Click to lock/unlock for randomize">Strength: {config.bloom.strength.toFixed(2)}</button>
               <input type="range" bind:value={config.bloom.strength} min="0" max="3" step="0.01" disabled={!config.bloom.enabled} />
             </label>
             <label class="control-row slider">
-              <span class="setting-title">Radius: {config.bloom.radius.toFixed(2)}</span>
+              <button type="button" class="setting-title" class:locked={isLocked('bloom.radius')} onclick={() => toggleLock('bloom.radius')} title="Click to lock/unlock for randomize">Radius: {config.bloom.radius.toFixed(2)}</button>
               <input type="range" bind:value={config.bloom.radius} min="0" max="1" step="0.01" disabled={!config.bloom.enabled} />
             </label>
             <label class="control-row slider">
-              <span class="setting-title">Threshold: {config.bloom.threshold.toFixed(2)}</span>
+              <button type="button" class="setting-title" class:locked={isLocked('bloom.threshold')} onclick={() => toggleLock('bloom.threshold')} title="Click to lock/unlock for randomize">Threshold: {config.bloom.threshold.toFixed(2)}</button>
               <input type="range" bind:value={config.bloom.threshold} min="0" max="1" step="0.01" disabled={!config.bloom.enabled} />
             </label>
           </details>
@@ -2609,20 +2623,31 @@
         <div style="border-top: 1px solid #333; margin-top: 0.75rem; padding-top: 0.75rem;">
           <label class="control-row checkbox">
             <input type="checkbox" bind:checked={config.environment.enabled} />
-            <span class="setting-title">Environment (Reflections)</span>
+            <button
+              type="button"
+              class="setting-title"
+              class:locked={isLocked('environment.enabled')}
+              onclick={(e) => {
+                e.preventDefault();
+                toggleLock('environment.enabled');
+              }}
+              title="Click to lock/unlock for randomize"
+            >
+              Environment (Reflections)
+            </button>
           </label>
           <label class="control-row slider">
-            <span class="setting-title">Env Intensity: {config.environment.intensity.toFixed(2)}</span>
+            <button type="button" class="setting-title" class:locked={isLocked('environment.intensity')} onclick={() => toggleLock('environment.intensity')} title="Click to lock/unlock for randomize">Env Intensity: {config.environment.intensity.toFixed(2)}</button>
             <input type="range" bind:value={config.environment.intensity} min="0" max="5" step="0.01" disabled={!config.environment.enabled} />
           </label>
 
           {#if config.texture !== 'matte'}
             <label class="control-row slider">
-              <span class="setting-title">Env Rotation: {config.environment.rotation.toFixed(0)}°</span>
+              <button type="button" class="setting-title" class:locked={isLocked('environment.rotation')} onclick={() => toggleLock('environment.rotation')} title="Click to lock/unlock for randomize">Env Rotation: {config.environment.rotation.toFixed(0)}°</button>
               <input type="range" bind:value={config.environment.rotation} min="0" max="360" step="1" disabled={!config.environment.enabled} />
             </label>
             <label class="control-row">
-              <span class="setting-title">Env Style</span>
+              <button type="button" class="setting-title" class:locked={isLocked('environment.style')} onclick={() => toggleLock('environment.style')} title="Click to lock/unlock for randomize">Env Style</button>
               <select bind:value={config.environment.style} disabled={!config.environment.enabled}>
                 <option value="studio">Studio</option>
                 <option value="overcast">Overcast</option>
@@ -2633,11 +2658,11 @@
             <details class="control-details">
               <summary class="control-details-summary">More env options</summary>
               <label class="control-row slider">
-                <span class="setting-title">Env Rotation: {config.environment.rotation.toFixed(0)}°</span>
+                <button type="button" class="setting-title" class:locked={isLocked('environment.rotation')} onclick={() => toggleLock('environment.rotation')} title="Click to lock/unlock for randomize">Env Rotation: {config.environment.rotation.toFixed(0)}°</button>
                 <input type="range" bind:value={config.environment.rotation} min="0" max="360" step="1" disabled={!config.environment.enabled} />
               </label>
               <label class="control-row">
-                <span class="setting-title">Env Style</span>
+                <button type="button" class="setting-title" class:locked={isLocked('environment.style')} onclick={() => toggleLock('environment.style')} title="Click to lock/unlock for randomize">Env Style</button>
                 <select bind:value={config.environment.style} disabled={!config.environment.enabled}>
                   <option value="studio">Studio</option>
                   <option value="overcast">Overcast</option>
@@ -2651,28 +2676,39 @@
         <div style="border-top: 1px solid #333; margin-top: 0.75rem; padding-top: 0.75rem;">
           <label class="control-row checkbox">
             <input type="checkbox" bind:checked={config.shadows.enabled} />
-            <span class="setting-title">Shadows</span>
+            <button
+              type="button"
+              class="setting-title"
+              class:locked={isLocked('shadows.enabled')}
+              onclick={(e) => {
+                e.preventDefault();
+                toggleLock('shadows.enabled');
+              }}
+              title="Click to lock/unlock for randomize"
+            >
+              Shadows
+            </button>
           </label>
           <label class="control-row">
-            <span class="setting-title">Shadow Type</span>
+            <button type="button" class="setting-title" class:locked={isLocked('shadows.type')} onclick={() => toggleLock('shadows.type')} title="Click to lock/unlock for randomize">Shadow Type</button>
             <select bind:value={config.shadows.type} disabled={!config.shadows.enabled}>
               <option value="pcfsoft">PCF Soft</option>
               <option value="vsm">VSM</option>
             </select>
           </label>
           <label class="control-row slider">
-            <span class="setting-title">Shadow Map: {config.shadows.mapSize}</span>
+            <button type="button" class="setting-title" class:locked={isLocked('shadows.mapSize')} onclick={() => toggleLock('shadows.mapSize')} title="Click to lock/unlock for randomize">Shadow Map: {config.shadows.mapSize}</button>
             <input type="range" bind:value={config.shadows.mapSize} min="256" max="4096" step="256" disabled={!config.shadows.enabled} />
           </label>
 
           <details class="control-details">
             <summary class="control-details-summary">Shadow tuning</summary>
             <label class="control-row slider">
-              <span class="setting-title">Normal Bias: {config.shadows.normalBias.toFixed(3)}</span>
+              <button type="button" class="setting-title" class:locked={isLocked('shadows.normalBias')} onclick={() => toggleLock('shadows.normalBias')} title="Click to lock/unlock for randomize">Normal Bias: {config.shadows.normalBias.toFixed(3)}</button>
               <input type="range" bind:value={config.shadows.normalBias} min="0" max="0.2" step="0.001" disabled={!config.shadows.enabled} />
             </label>
             <label class="control-row slider">
-              <span class="setting-title">Shadow Bias: {config.shadows.bias.toFixed(5)}</span>
+              <button type="button" class="setting-title" class:locked={isLocked('shadows.bias')} onclick={() => toggleLock('shadows.bias')} title="Click to lock/unlock for randomize">Shadow Bias: {config.shadows.bias.toFixed(5)}</button>
               <input type="range" bind:value={config.shadows.bias} min="-0.01" max="0.01" step="0.00001" disabled={!config.shadows.enabled} />
             </label>
           </details>
@@ -2690,6 +2726,128 @@
 
         {/if}
       </section>
+
+      {#if supportsCollisions}
+        <section class="control-section">
+          <h3>Collisions</h3>
+            <label class="control-row">
+              <button type="button" class="setting-title" class:locked={isLocked('collisions.mode')} onclick={() => toggleLock('collisions.mode')} title="Click to lock/unlock for randomize">Mode</button>
+              <select bind:value={config.collisions.mode} disabled={config.colors.length > 8}>
+                <option value="none">None</option>
+                <option value="carve">Carve</option>
+              </select>
+            </label>
+
+            {#if config.colors.length > 8}
+              <div style="font-size: 0.75rem; color: #a9a9b3; line-height: 1.2;">
+                Collision masking is disabled when the palette has more than 8 colors.
+              </div>
+            {/if}
+
+            {#if config.collisions.mode === 'carve' && config.colors.length <= 8}
+              <label class="control-row">
+                <button type="button" class="setting-title" class:locked={isLocked('collisions.carve.direction')} onclick={() => toggleLock('collisions.carve.direction')} title="Click to lock/unlock for randomize">Direction</button>
+                <select bind:value={config.collisions.carve.direction}>
+                  <option value="oneWay">One-way</option>
+                  <option value="twoWay">Two-way</option>
+                </select>
+              </label>
+              <label class="control-row slider">
+                <button type="button" class="setting-title" class:locked={isLocked('collisions.carve.marginPx')} onclick={() => toggleLock('collisions.carve.marginPx')} title="Click to lock/unlock for randomize">Margin: {Math.round(config.collisions.carve.marginPx)}px</button>
+                <input
+                  type="range"
+                  bind:value={config.collisions.carve.marginPx}
+                  min="0"
+                  max="400"
+                  step="1"
+                  onpointerdown={() => {
+                    collisionDragActive = true;
+                    if (renderSettleTimer) window.clearTimeout(renderSettleTimer);
+                  }}
+                  onpointerup={() => {
+                    collisionDragActive = false;
+                    schedulePreviewRender();
+                  }}
+                  onpointercancel={() => {
+                    collisionDragActive = false;
+                    schedulePreviewRender();
+                  }}
+                />
+              </label>
+              <label class="control-row">
+                <button type="button" class="setting-title" class:locked={isLocked('collisions.carve.marginPx')} onclick={() => toggleLock('collisions.carve.marginPx')} title="Click to lock/unlock for randomize">Margin (exact)</button>
+                <input type="number" bind:value={config.collisions.carve.marginPx} min="0" max="2000" step="1" />
+              </label>
+              <label class="control-row">
+                <button type="button" class="setting-title" class:locked={isLocked('collisions.carve.edge')} onclick={() => toggleLock('collisions.carve.edge')} title="Click to lock/unlock for randomize">Edge</button>
+                <select bind:value={config.collisions.carve.edge}>
+                  <option value="hard">Hard</option>
+                  <option value="soft">Soft</option>
+                </select>
+              </label>
+              <label class="control-row slider">
+                <button type="button" class="setting-title" class:locked={isLocked('collisions.carve.featherPx')} onclick={() => toggleLock('collisions.carve.featherPx')} title="Click to lock/unlock for randomize">Feather: {Math.round(config.collisions.carve.featherPx)}px</button>
+                <input
+                  type="range"
+                  bind:value={config.collisions.carve.featherPx}
+                  min="0"
+                  max="200"
+                  step="1"
+                  disabled={config.collisions.carve.edge !== 'soft'}
+                  onpointerdown={() => {
+                    collisionDragActive = true;
+                    if (renderSettleTimer) window.clearTimeout(renderSettleTimer);
+                  }}
+                  onpointerup={() => {
+                    collisionDragActive = false;
+                    schedulePreviewRender();
+                  }}
+                  onpointercancel={() => {
+                    collisionDragActive = false;
+                    schedulePreviewRender();
+                  }}
+                />
+              </label>
+              <label class="control-row">
+                <button type="button" class="setting-title" class:locked={isLocked('collisions.carve.featherPx')} onclick={() => toggleLock('collisions.carve.featherPx')} title="Click to lock/unlock for randomize">Feather (exact)</button>
+                <input
+                  type="number"
+                  bind:value={config.collisions.carve.featherPx}
+                  min="0"
+                  max="2000"
+                  step="1"
+                  disabled={config.collisions.carve.edge !== 'soft'}
+                />
+              </label>
+
+              {#if is3DType}
+                <div style="border-top: 1px solid #333; margin-top: 0.75rem; padding-top: 0.75rem;">
+                  <label class="control-row">
+                    <button type="button" class="setting-title" class:locked={isLocked('collisions.carve.finish')} onclick={() => toggleLock('collisions.carve.finish')} title="Click to lock/unlock for randomize">Finish Volume</button>
+                    <select bind:value={config.collisions.carve.finish}>
+                      <option value="none">None</option>
+                      <option value="wallsCap">Walls + Cap</option>
+                    </select>
+                  </label>
+
+                  {#if config.collisions.carve.finish === 'wallsCap'}
+                    <label class="control-row slider">
+                      <button type="button" class="setting-title" class:locked={isLocked('collisions.carve.finishAutoDepthMult')} onclick={() => toggleLock('collisions.carve.finishAutoDepthMult')} title="Click to lock/unlock for randomize">Depth (auto): {config.collisions.carve.finishAutoDepthMult.toFixed(2)}x</button>
+                      <input type="range" bind:value={config.collisions.carve.finishAutoDepthMult} min="0" max="4" step="0.05" />
+                    </label>
+                    <label class="control-row">
+                      <button type="button" class="setting-title" class:locked={isLocked('collisions.carve.finishAutoDepthMult')} onclick={() => toggleLock('collisions.carve.finishAutoDepthMult')} title="Click to lock/unlock for randomize">Depth (auto, exact)</button>
+                      <input type="number" bind:value={config.collisions.carve.finishAutoDepthMult} min="0" max="20" step="0.05" />
+                    </label>
+                  {/if}
+                </div>
+              {/if}
+              <div style="font-size: 0.75rem; color: #a9a9b3; line-height: 1.2;">
+                One-way priority is based on palette weights: higher weight carves lower.
+              </div>
+            {/if}
+        </section>
+      {/if}
 
       <section class="control-section">
         <h3>CLI</h3>

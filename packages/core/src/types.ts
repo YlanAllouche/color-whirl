@@ -860,14 +860,34 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
   const tri = (min: number, mode: number, max: number): number => randomTriangular(rng, min, mode, max);
   const chance = (p: number): boolean => rng() < clamp(p, 0, 1);
 
+  // Heavily bias toward smaller counts, while keeping large values possible.
+  const skewCountLow = (
+    min: number,
+    normal: number,
+    softMax: number,
+    hardMax: number,
+    tailChance: number = 0.03
+  ): number => {
+    const t = clamp(tailChance, 0, 1);
+    if (rng() >= t) {
+      return Math.round(clamp(randomWeighted(rng, min, softMax, normal), min, hardMax));
+    }
+    const tailMode = clamp(softMax + (hardMax - softMax) * 0.35, softMax, hardMax);
+    return Math.round(clamp(randomWeighted(rng, softMax, hardMax, tailMode), min, hardMax));
+  };
+
   const emissionEnabled = chance(0.22);
   const bloomEnabled = chance(0.35);
 
-  const collisionsMode = chance(0.18) ? 'carve' : 'none';
-  const collisionsEdge = chance(0.35) ? 'soft' : 'hard';
+  const is3DType = type === 'popsicle' || type === 'spheres3d' || type === 'triangles3d';
+
+  // Collisions are allowed for 2D types but are disabled for 3D random configs.
+  // (3D carve collisions are both expensive and historically problematic.)
+  const collisionsMode = !is3DType && chance(0.12) ? 'carve' : 'none';
+  const collisionsEdge = chance(0.28) ? 'soft' : 'hard';
   const collisionsFeather =
-    collisionsEdge === 'soft'
-      ? Math.round(tri(0, DEFAULT_POPSICLE_CONFIG.collisions.carve.featherPx, 32))
+    collisionsMode === 'carve' && collisionsEdge === 'soft'
+      ? Math.round(tri(0, DEFAULT_POPSICLE_CONFIG.collisions.carve.featherPx, 16))
       : 0;
 
   const base: BaseWallpaperConfig = {
@@ -938,12 +958,13 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
     collisions: {
       mode: collisionsMode,
       carve: {
-        direction: chance(0.25) ? 'twoWay' : 'oneWay',
-        marginPx: Math.round(tri(0, DEFAULT_POPSICLE_CONFIG.collisions.carve.marginPx, 44)),
-        edge: collisionsEdge,
+        direction: collisionsMode === 'carve' && chance(0.18) ? 'twoWay' : 'oneWay',
+        marginPx: collisionsMode === 'carve' ? Math.round(tri(0, DEFAULT_POPSICLE_CONFIG.collisions.carve.marginPx, 24)) : 0,
+        edge: collisionsMode === 'carve' ? collisionsEdge : DEFAULT_POPSICLE_CONFIG.collisions.carve.edge,
         featherPx: collisionsFeather,
-        finish: chance(0.3) ? 'wallsCap' : 'none',
-        finishAutoDepthMult: tri(0.2, DEFAULT_POPSICLE_CONFIG.collisions.carve.finishAutoDepthMult, 3.5)
+        // 3D-only feature; keep random configs conservative.
+        finish: 'none',
+        finishAutoDepthMult: DEFAULT_POPSICLE_CONFIG.collisions.carve.finishAutoDepthMult
       }
     },
     lighting: {
@@ -988,7 +1009,7 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
         ...base,
         type: 'spheres3d',
         spheres: {
-          count: Math.round(randomWeighted(rng, 20, 1000, 220)),
+          count: skewCountLow(20, DEFAULT_SPHERES3D_CONFIG.spheres.count, 380, 1000, 0.03),
           distribution: (['jitteredGrid', 'scatter', 'layeredDepth'] as const)[Math.floor(rng() * 3)],
           radiusMin: randomWeighted(rng, 0.04, 0.18, 0.08),
           radiusMax: randomWeighted(rng, 0.12, 0.55, 0.26),
@@ -1007,7 +1028,7 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
         type: 'circles2d',
         circles: {
           mode: rng() < 0.7 ? 'scatter' : 'grid',
-          count: Math.round(randomWeighted(rng, 10, 1200, 260)),
+          count: skewCountLow(10, DEFAULT_CIRCLES2D_CONFIG.circles.count, 420, 1200, 0.03),
           rMinPx: Math.round(randomWeighted(rng, 6, 40, 18)),
           rMaxPx: Math.round(randomWeighted(rng, 30, 280, 150)),
           jitter: clamp(randomWeighted(rng, 0, 1, 1), 0, 1),
@@ -1029,7 +1050,7 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
         bloom: base.emission.enabled ? { ...base.bloom, enabled: true } : { ...base.bloom },
         type: 'polygon2d',
         polygons: {
-          count: Math.round(randomWeighted(rng, 10, 1600, 240)),
+          count: skewCountLow(10, DEFAULT_POLYGON2D_CONFIG.polygons.count, 420, 1600, 0.03),
           edges: Math.max(3, Math.min(16, Math.round(randomWeighted(rng, 3, 12, 6)))),
           rMinPx: Math.round(randomWeighted(rng, 6, 40, 18)),
           rMaxPx: Math.round(randomWeighted(rng, 30, 280, 130)),
@@ -1066,7 +1087,7 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
         type: 'triangles3d',
         prisms: {
           mode: 'stackedPrisms',
-          count: Math.round(randomWeighted(rng, 10, 1500, 200)),
+          count: skewCountLow(10, DEFAULT_TRIANGLES3D_CONFIG.prisms.count, 360, 1500, 0.03),
           radius: randomWeighted(rng, 0.06, 0.6, 0.22),
           height: randomWeighted(rng, 0.06, 1.2, 0.5),
           wallBulge: clamp(tri(-1, 0, 1), -1, 1),
@@ -1097,7 +1118,8 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
           },
           effect: { kind: (['none', 'bevel', 'grain', 'gradient'] as const)[Math.floor(rng() * 4)], amount: clamp(randomWeighted(rng, 0, 1, 0.45), 0, 1), frequency: randomWeighted(rng, 0.2, 3.0, 1.0) },
           grouping: {
-            mode: (['none', 'voronoi', 'noise', 'random-walk'] as const)[Math.floor(rng() * 4)],
+            // Grouping is visually strong and can be expensive; keep it less common.
+            mode: rng() < 0.55 ? 'none' : (rng() < 0.70 ? 'noise' : rng() < 0.86 ? 'voronoi' : 'random-walk'),
             strength: clamp(randomWeighted(rng, 0, 1, 0.6), 0, 1),
             targetGroupCount: Math.max(1, Math.round(randomWeighted(rng, 1, 80, 24)))
           },
