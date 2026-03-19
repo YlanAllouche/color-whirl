@@ -1308,6 +1308,32 @@
     const resizeObserver = new ResizeObserver(() => {
       schedulePreviewRender();
     });
+
+    const handleGlobalPointerUp = () => {
+      let changed = false;
+
+      if (cameraDragActive) {
+        cameraDragActive = false;
+        camDragPointerId = -1;
+        changed = true;
+      }
+
+      if (collisionDragActive) {
+        collisionDragActive = false;
+        changed = true;
+      }
+
+      if (changed) schedulePreviewRender();
+    };
+
+    const handleGlobalBlur = () => {
+      // If the window loses focus mid-drag, make sure we can recover.
+      handleGlobalPointerUp();
+    };
+
+    window.addEventListener('pointerup', handleGlobalPointerUp, { passive: true });
+    window.addEventListener('pointercancel', handleGlobalPointerUp, { passive: true });
+    window.addEventListener('blur', handleGlobalBlur);
     
     if (canvasContainer) {
       resizeObserver.observe(canvasContainer);
@@ -1315,6 +1341,9 @@
     
     return () => {
       resizeObserver.disconnect();
+      window.removeEventListener('pointerup', handleGlobalPointerUp);
+      window.removeEventListener('pointercancel', handleGlobalPointerUp);
+      window.removeEventListener('blur', handleGlobalBlur);
       if (renderRaf) cancelAnimationFrame(renderRaf);
       if (renderSettleTimer) window.clearTimeout(renderSettleTimer);
       preview?.dispose();
