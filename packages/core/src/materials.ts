@@ -195,6 +195,19 @@ function applyRimLight(material: THREE.Material, cfg: RimLightConfig): void {
       shader.uniforms.rimColor = { value: rimColor };
       shader.uniforms.rimIntensity = { value: intensity };
       shader.uniforms.rimPower = { value: power };
+
+      const rimUniforms = `
+uniform vec3 rimColor;
+uniform float rimIntensity;
+uniform float rimPower;
+`;
+
+      if (shader.fragmentShader.includes('#include <common>')) {
+        shader.fragmentShader = shader.fragmentShader.replace('#include <common>', `#include <common>\n${rimUniforms}`);
+      } else if (!shader.fragmentShader.includes('uniform vec3 rimColor')) {
+        shader.fragmentShader = rimUniforms + '\n' + shader.fragmentShader;
+      }
+
       shader.fragmentShader = shader.fragmentShader.replace(
         '#include <dithering_fragment>',
         `#include <dithering_fragment>\n\n// Rim light\nvec3 rimN = normalize(normal);\nvec3 rimV = normalize(vViewPosition);\n#ifdef ORTHOGRAPHIC_CAMERA\nrimV = vec3(0.0, 0.0, 1.0);\n#endif\nfloat rimDot = clamp(dot(rimN, rimV), 0.0, 1.0);\nfloat rim = pow(1.0 - rimDot, rimPower) * rimIntensity;\ngl_FragColor.rgb += rimColor * rim;`
@@ -219,6 +232,20 @@ function applyEdgeWear(material: THREE.Material, cfg: EdgeWearConfig): void {
       shader.uniforms.wearWidth = { value: width };
       shader.uniforms.wearNoise = { value: noise };
       shader.uniforms.wearSeed = { value: 0 };
+
+      const wearUniforms = `
+uniform vec3 wearColor;
+uniform float wearIntensity;
+uniform float wearWidth;
+uniform float wearNoise;
+uniform float wearSeed;
+`;
+
+      if (shader.fragmentShader.includes('#include <common>')) {
+        shader.fragmentShader = shader.fragmentShader.replace('#include <common>', `#include <common>\n${wearUniforms}`);
+      } else if (!shader.fragmentShader.includes('uniform vec3 wearColor')) {
+        shader.fragmentShader = wearUniforms + '\n' + shader.fragmentShader;
+      }
 
       shader.fragmentShader = shader.fragmentShader.replace(
         '#include <dithering_fragment>',
