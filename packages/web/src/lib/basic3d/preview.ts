@@ -10,6 +10,8 @@ export type Basic3DType = 'spheres3d' | 'triangles3d';
 export type Basic3DConfig = Spheres3DConfig | Triangles3DConfig;
 export type PreviewQuality = 'interactive' | 'final';
 
+export type RenderSize = { width: number; height: number };
+
 function clamp(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, n));
 }
@@ -111,58 +113,35 @@ export class Basic3DPreview {
   }
 
   dispose(): void {
-    if (this.scene) {
-      try {
-        (this.scene.userData as any).__wmDisposeCollisionMasking?.();
-      } catch {
-        // Ignore.
-      }
-      try {
-        (this.scene.userData as any).__wmDisposeProceduralEnvironment?.();
-      } catch {
-        // Ignore.
-      }
-      try {
-        delete (this.scene.userData as any).__wmDisposeProceduralEnvironment;
-      } catch {
-        // Ignore.
-      }
-
-      try {
-        disposeSceneDeep(this.scene);
-      } catch {
-        // Ignore.
-      }
-    }
-
-    try {
-      this.composer?.dispose();
-    } catch {
-      // Ignore.
-    }
-    this.composer = null;
-    this.renderPass = null;
-    this.bloomPass = null;
-
-    if (this.renderer) {
-      try {
-        (this.renderer as any).forceContextLoss?.();
-      } catch {
-        // Ignore.
-      }
-      try {
-        this.renderer.dispose();
-      } catch {
-        // Ignore.
-      }
-    }
+    const prev = {
+      renderer: this.renderer,
+      scene: this.scene,
+      composer: this.composer
+    };
 
     this.renderer = null;
     this.scene = null;
     this.camera = null;
+    this.composer = null;
+    this.renderPass = null;
+    this.bloomPass = null;
     this.lastSig = null;
     this.lastBloomEnabled = null;
-    this.container.innerHTML = '';
+
+    try {
+      prev.composer?.dispose();
+    } catch {
+      // Ignore.
+    }
+
+    this.disposeSceneAndRenderer(prev.scene, prev.renderer);
+
+    // Best-effort: ensure the host is clean.
+    try {
+      this.container.innerHTML = '';
+    } catch {
+      // Ignore.
+    }
   }
 
   renderOnce(
@@ -170,8 +149,12 @@ export class Basic3DPreview {
     quality: PreviewQuality,
     opts?: {
       cameraOnly?: boolean;
+      renderSize?: RenderSize;
     }
   ): void {
+    const renderW = Math.max(1, Math.round(Number(opts?.renderSize?.width ?? config.width) || 1));
+    const renderH = Math.max(1, Math.round(Number(opts?.renderSize?.height ?? config.height) || 1));
+
     const bloomEnabled = !!config.bloom?.enabled;
     const shouldComputeSig = !(opts?.cameraOnly === true);
     const nextSig = shouldComputeSig ? signatureWithoutCameraAndBloom(config) : null;
@@ -179,7 +162,7 @@ export class Basic3DPreview {
     const needsBuild = !this.renderer || !this.scene || !this.camera || (shouldComputeSig && nextSig !== this.lastSig);
 
     if (needsBuild) {
-      this.build(config);
+      this.rebuild(config);
       this.lastSig = shouldComputeSig ? nextSig : signatureWithoutCameraAndBloom(config);
       this.lastBloomEnabled = null;
     }
@@ -188,10 +171,10 @@ export class Basic3DPreview {
 
     // Size (keep consistent with config dimensions).
     this.renderer.setPixelRatio(1);
-    this.renderer.setSize(config.width, config.height, false);
+    this.renderer.setSize(renderW, renderH, false);
 
     // Camera (matches generator setup).
-    const aspect = config.width / config.height;
+    const aspect = renderW / renderH;
     const frustumSize = 10;
     this.camera.left = (frustumSize * aspect) / -2;
     this.camera.right = (frustumSize * aspect) / 2;
@@ -212,11 +195,11 @@ export class Basic3DPreview {
       if (bloomEnabled) {
         this.composer = new EffectComposer(this.renderer);
         this.composer.setPixelRatio(1);
-        this.composer.setSize(config.width, config.height);
+        this.composer.setSize(renderW, renderH);
         this.renderPass = new RenderPass(this.scene, this.camera as any);
         this.composer.addPass(this.renderPass);
 
-        this.bloomPass = new UnrealBloomPass(new THREE.Vector2(config.width, config.height), config.bloom.strength, config.bloom.radius, config.bloom.threshold);
+        this.bloomPass = new UnrealBloomPass(new THREE.Vector2(renderW, renderH), config.bloom.strength, config.bloom.radius, config.bloom.threshold);
         this.composer.addPass(this.bloomPass);
       } else {
         try {
@@ -232,13 +215,13 @@ export class Basic3DPreview {
     }
 
     if (this.composer) {
-      this.composer.setSize(config.width, config.height);
+      this.composer.setSize(renderW, renderH);
       if (this.renderPass) this.renderPass.camera = this.camera as any;
       if (this.bloomPass) {
         this.bloomPass.strength = config.bloom.strength;
         this.bloomPass.radius = config.bloom.radius;
         this.bloomPass.threshold = config.bloom.threshold;
-        this.bloomPass.resolution.set(config.width, config.height);
+        this.bloomPass.resolution.set(renderW, renderH);
       }
     }
 
@@ -255,25 +238,98 @@ export class Basic3DPreview {
       this.renderer.render(this.scene, this.camera);
     }
 
-    // Note: quality is currently handled by the caller via config dimensions.
+    // Note: quality is handled by the caller via renderSize.
     void quality;
   }
 
-  private build(config: Basic3DConfig): void {
-    this.dispose();
-
+  private rebuild(config: Basic3DConfig): void {
     const collisionMaskScale = config.collisions?.mode === 'carve' ? 0.6 : 1;
     const built = this.type === 'spheres3d'
       ? createSpheres3DScene(config as Spheres3DConfig, { preserveDrawingBuffer: true, pixelRatio: 1, collisionMaskScale })
       : createTriangles3DScene(config as Triangles3DConfig, { preserveDrawingBuffer: true, pixelRatio: 1, collisionMaskScale });
 
-    this.scene = built.scene;
-    this.camera = built.camera;
-    this.renderer = built.renderer;
+    const nextScene = built.scene;
+    const nextCamera = built.camera;
+    const nextRenderer = built.renderer;
 
-    const el = this.renderer.domElement;
-    el.style.display = 'block';
-    el.style.touchAction = 'none';
-    this.container.appendChild(el);
+    const nextEl = nextRenderer.domElement;
+    nextEl.style.display = 'block';
+    nextEl.style.touchAction = 'none';
+
+    const prev = {
+      renderer: this.renderer,
+      scene: this.scene,
+      composer: this.composer
+    };
+
+    // Swap in the new canvas first so a failed dispose doesn't blank the UI.
+    try {
+      const prevEl = prev.renderer?.domElement;
+      if (prevEl && prevEl.parentElement === this.container) {
+        this.container.replaceChild(nextEl, prevEl);
+      } else {
+        this.container.innerHTML = '';
+        this.container.appendChild(nextEl);
+      }
+    } catch {
+      // Last resort.
+      try {
+        this.container.innerHTML = '';
+        this.container.appendChild(nextEl);
+      } catch {
+        // Ignore.
+      }
+    }
+
+    this.scene = nextScene;
+    this.camera = nextCamera;
+    this.renderer = nextRenderer;
+
+    // Recreate composer wiring lazily after rebuild.
+    this.composer = null;
+    this.renderPass = null;
+    this.bloomPass = null;
+
+    try {
+      prev.composer?.dispose();
+    } catch {
+      // Ignore.
+    }
+
+    this.disposeSceneAndRenderer(prev.scene, prev.renderer);
+  }
+
+  private disposeSceneAndRenderer(scene: THREE.Scene | null, renderer: THREE.WebGLRenderer | null): void {
+    if (scene) {
+      try {
+        (scene.userData as any).__wmDisposeCollisionMasking?.();
+      } catch {
+        // Ignore.
+      }
+      try {
+        (scene.userData as any).__wmDisposeProceduralEnvironment?.();
+      } catch {
+        // Ignore.
+      }
+      try {
+        delete (scene.userData as any).__wmDisposeProceduralEnvironment;
+      } catch {
+        // Ignore.
+      }
+
+      try {
+        disposeSceneDeep(scene);
+      } catch {
+        // Ignore.
+      }
+    }
+
+    if (renderer) {
+      try {
+        renderer.dispose();
+      } catch {
+        // Ignore.
+      }
+    }
   }
 }

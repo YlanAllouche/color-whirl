@@ -232,7 +232,7 @@
     const aspect = config.width / config.height;
     const { previewWidth, previewHeight, cssWidth, cssHeight } = getFallbackPreviewSize(aspect, quality);
 
-    let effective: WallpaperConfig = { ...config, width: previewWidth, height: previewHeight } as any;
+    let effective: WallpaperConfig = { ...config } as any;
 
     // 3D collision masking is expensive; keep interactive renders snappy by previewing without collisions.
     if (quality === 'interactive' && effective.collisions?.mode === 'carve') {
@@ -244,7 +244,7 @@
 
     const type = effective.type as Basic3DType;
     const p = ensureBasic3DPreview(type);
-    p.renderOnce(effective as any, quality, { cameraOnly: !!opts?.cameraOnly });
+    p.renderOnce(effective as any, quality, { cameraOnly: !!opts?.cameraOnly, renderSize: { width: previewWidth, height: previewHeight } });
 
     const el = p.getDomElement();
     if (el) {
@@ -2715,7 +2715,6 @@
       bind:this={canvasContainer}
       class="canvas-container"
       role="application"
-      tabindex="0"
       aria-label="Preview canvas"
       style={`background: ${config.backgroundColor}`}
       onmouseenter={() => {
