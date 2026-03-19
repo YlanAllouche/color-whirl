@@ -929,12 +929,11 @@
   }
 
   function buildCliCommandString(): string {
-    const state = getAppState();
-    const cfg = encodeAppStateToBase64Url(state);
-
     const parts: string[] = [];
     parts.push('pnpm', 'cli', 'generate');
-    parts.push('--cfg', quoteCliArg(cfg));
+    // Prefer JSON for CLI usage; it is more inspectable than base64url.
+    // The CLI accepts either a full app-state object or just the config; we pass the config.
+    parts.push('--config', quoteCliArg(JSON.stringify(config)));
     return parts.join(' ');
   }
 
