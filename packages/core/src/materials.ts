@@ -384,8 +384,6 @@ varying vec3 wmObjPos;
     );
   };
 
-  applyEdgeFx(face);
-
   const grazing = config.facades?.grazing;
   if (grazing?.enabled && grazing.mode !== 'mix') {
     applyGrazing(face, grazing);
@@ -398,7 +396,10 @@ varying vec3 wmObjPos;
   const wantsHollow = !!config.edge?.hollow;
   const needsSplitMaterial = wantsHollow || needsSideOverrides || (grazing?.enabled && grazing.mode === 'mix');
 
-  if (!needsSplitMaterial) return face;
+  if (!needsSplitMaterial) {
+    applyEdgeFx(face);
+    return face;
+  }
 
   const side = face.clone();
   if (grazing?.enabled && grazing.mode === 'mix') {
@@ -429,6 +430,11 @@ varying vec3 wmObjPos;
         return m;
       })()
     : face;
+
+  // Apply edge effects late so they exist on both cap and side materials.
+  // (Material.clone() does not reliably preserve onBeforeCompile/customProgramCacheKey across runtimes.)
+  applyEdgeFx(cap);
+  applyEdgeFx(side);
 
   return [cap, side];
 }
