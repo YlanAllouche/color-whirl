@@ -1042,7 +1042,6 @@
     void c.facades.outline.thickness;
     void c.facades.outline.opacity;
     void c.edge.hollow;
-    void c.edge.showInnerFacades;
     void c.edge.seam.enabled;
     void c.edge.seam.color;
     void c.edge.seam.opacity;
@@ -1859,22 +1858,6 @@
                   title="Click to lock/unlock for randomize"
                 >
                   Hollow caps
-                </button>
-              </label>
-
-              <label class="control-row checkbox">
-                <input type="checkbox" bind:checked={config.edge.showInnerFacades} disabled={!config.edge.hollow} />
-                <button
-                  type="button"
-                  class="setting-title"
-                  class:locked={isLocked('edge.showInnerFacades')}
-                  onclick={(e) => {
-                    e.preventDefault();
-                    toggleLock('edge.showInnerFacades');
-                  }}
-                  title="Click to lock/unlock for randomize"
-                >
-                  Show inner facades
                 </button>
               </label>
             </div>

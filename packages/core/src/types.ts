@@ -117,8 +117,6 @@ export interface EdgeBandConfig {
 export interface EdgeConfig {
   /** Popsicle-only: make front/back caps transparent */
   hollow: boolean;
-  /** Popsicle-only: render facade walls double-sided when hollow */
-  showInnerFacades: boolean;
   seam: EdgeSeamConfig;
   band: EdgeBandConfig;
 }
@@ -516,7 +514,6 @@ export const DEFAULT_POPSICLE_CONFIG: PopsicleConfig = {
   },
   edge: {
     hollow: false,
-    showInnerFacades: false,
     seam: {
       enabled: false,
       color: '#0b0b10',
@@ -827,12 +824,6 @@ export function normalizeWallpaperConfig(input: any): WallpaperConfig {
   if (typeof (merged as any).edge?.hollow !== 'boolean') {
     (merged as any).edge = { ...(merged as any).edge, hollow: !!(merged as any).edge?.hollow };
   }
-  if (typeof (merged as any).edge?.showInnerFacades !== 'boolean') {
-    (merged as any).edge = {
-      ...(merged as any).edge,
-      showInnerFacades: !!(merged as any).edge?.showInnerFacades
-    };
-  }
 
   const edgeObj: any = (merged as any).edge;
   if (!edgeObj || typeof edgeObj !== 'object') {
@@ -1124,7 +1115,6 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
     })(),
     edge: {
       hollow: false,
-      showInnerFacades: false,
       seam: { ...DEFAULT_POPSICLE_CONFIG.edge.seam },
       band: { ...DEFAULT_POPSICLE_CONFIG.edge.band }
     },
@@ -1312,6 +1302,17 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
       };
     case 'popsicle':
     default:
+      const endProfileR = rng();
+      const stickEndProfile: PopsicleConfig['stickEndProfile'] = endProfileR < 0.72 ? 'rounded' : endProfileR < 0.90 ? 'chamfer' : 'chipped';
+
+      const seamEnabled = rng() < 0.16;
+      const bandEnabled = rng() < 0.10;
+      const edgeEmissiveSeam = seamEnabled && rng() < 0.10;
+      const edgeEmissiveBand = bandEnabled && rng() < 0.08;
+      const pickEdgeColor = () => {
+        if (theme.colors.length > 0 && rng() < 0.75) return theme.colors[Math.floor(rng() * theme.colors.length)] ?? '#ffffff';
+        return rng() < 0.5 ? '#ffffff' : '#0b0b10';
+      };
       return {
         ...base,
         type: 'popsicle',
@@ -1323,12 +1324,35 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
         stickSize: randomWeighted(rng, 0.25, 2.5, 1.0),
         stickRatio: randomWeighted(rng, 0.75, 12, 3.0),
         stickThickness: randomWeighted(rng, 0.1, 3, 1.0),
-        stickEndProfile: 'rounded',
-        stickRoundness: randomWeighted(rng, 0, 1, 0.15),
-        stickChipAmount: randomWeighted(rng, 0, 1, 0.35),
-        stickChipJaggedness: randomWeighted(rng, 0, 1, 0.55),
+        stickEndProfile,
+        // Bias toward simpler square-ish ends.
+        stickRoundness: clamp(Math.pow(randomWeighted(rng, 0, 1, 0.18), 1.6), 0, 1),
+        stickChipAmount: stickEndProfile === 'chipped' ? randomWeighted(rng, 0, 1, 0.35) : 0,
+        stickChipJaggedness: stickEndProfile === 'chipped' ? randomWeighted(rng, 0, 1, 0.55) : 0,
         stickBevel: randomWeighted(rng, 0, 1, 0.35),
-        stickOpacity: randomStickOpacity()
+        stickOpacity: randomStickOpacity(),
+        edge: {
+          ...base.edge,
+          hollow: false,
+          seam: {
+            ...base.edge.seam,
+            enabled: seamEnabled,
+            color: edgeEmissiveSeam ? pickEdgeColor() : '#0b0b10',
+            opacity: seamEnabled ? clamp(tri(0.15, base.edge.seam.opacity, 1.0), 0, 1) : base.edge.seam.opacity,
+            width: seamEnabled ? clamp(tri(0, 0.012, 0.08), 0, 0.12) : base.edge.seam.width,
+            noise: seamEnabled ? clamp(tri(0, 0.15, 0.9), 0, 1) : base.edge.seam.noise,
+            emissiveIntensity: edgeEmissiveSeam ? clamp(tri(0.25, 2.0, 8), 0, 20) : 0
+          },
+          band: {
+            ...base.edge.band,
+            enabled: bandEnabled,
+            color: edgeEmissiveBand ? pickEdgeColor() : '#ffffff',
+            opacity: bandEnabled ? clamp(tri(0.05, base.edge.band.opacity, 0.75), 0, 1) : base.edge.band.opacity,
+            width: bandEnabled ? clamp(tri(0, base.edge.band.width, 0.22), 0, 0.25) : base.edge.band.width,
+            noise: bandEnabled ? clamp(tri(0, 0.1, 0.75), 0, 1) : base.edge.band.noise,
+            emissiveIntensity: edgeEmissiveBand ? clamp(tri(0.25, 1.5, 7), 0, 20) : 0
+          }
+        }
       };
   }
 }

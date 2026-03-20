@@ -425,7 +425,7 @@ varying vec3 wmObjPos;
     applySideMaterialOverrides(side, sideCfg, envIntensity);
   }
 
-  if (wantsHollow && config.edge?.showInnerFacades) {
+  if (wantsHollow) {
     const anySide: any = side as any;
     if (typeof anySide.side === 'number') {
       anySide.side = THREE.DoubleSide;
