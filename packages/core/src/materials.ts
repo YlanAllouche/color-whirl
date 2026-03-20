@@ -317,6 +317,14 @@ export function createStickMeshMaterial(
     applySideMaterialOverrides(side, sideCfg, envIntensity);
   }
 
+  if (wantsHollow && config.edge?.showInnerFacades) {
+    const anySide: any = side as any;
+    if (typeof anySide.side === 'number') {
+      anySide.side = THREE.DoubleSide;
+      side.needsUpdate = true;
+    }
+  }
+
   const cap = wantsHollow
     ? (() => {
         const m = face.clone();

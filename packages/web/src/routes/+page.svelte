@@ -1042,6 +1042,7 @@
     void c.facades.outline.thickness;
     void c.facades.outline.opacity;
     void c.edge.hollow;
+    void c.edge.showInnerFacades;
     void c.emission.enabled;
     void c.emission.paletteIndex;
     void c.emission.intensity;
@@ -1656,24 +1657,6 @@
           </details>
         </section>
 
-        <section class="control-section">
-          <h3>Edge</h3>
-          <label class="control-row checkbox">
-            <input type="checkbox" bind:checked={config.edge.hollow} />
-            <button
-              type="button"
-              class="setting-title"
-              class:locked={isLocked('edge.hollow')}
-              onclick={(e) => {
-                e.preventDefault();
-                toggleLock('edge.hollow');
-              }}
-              title="Click to lock/unlock for randomize"
-            >
-              Hollow caps
-            </button>
-          </label>
-        </section>
       {:else if supportsOutlineOnly}
         <section class="control-section">
           <h3>Outline</h3>
@@ -1708,9 +1691,9 @@
       {/if}
        
        {#if config.type === 'popsicle'}
-        <!-- Stick Settings -->
-         <section class="control-section">
-           <h3>Stick Settings</h3>
+         <!-- Stick Settings -->
+          <section class="control-section">
+            <h3>Stick Settings</h3>
           <label class="control-row slider">
            <button type="button" class="setting-title" class:locked={isLocked('stickCount')} onclick={() => toggleLock('stickCount')} title="Click to lock/unlock for randomize">Count: {config.stickCount}</button>
             <input type="range" bind:value={config.stickCount} min="1" max="200" />
@@ -1739,13 +1722,47 @@
             <button type="button" class="setting-title" class:locked={isLocked('stickBevel')} onclick={() => toggleLock('stickBevel')} title="Click to lock/unlock for randomize">Bevel: {config.stickBevel.toFixed(2)}</button>
              <input type="range" bind:value={config.stickBevel} min="0" max="1" step="0.01" />
             </label>
-           <label class="control-row slider">
-            <button type="button" class="setting-title" class:locked={isLocked('stickOpacity')} onclick={() => toggleLock('stickOpacity')} title="Click to lock/unlock for randomize">Opacity: {config.stickOpacity.toFixed(2)}</button>
-             <input type="range" bind:value={config.stickOpacity} min="0" max="1" step="0.01" />
-           </label>
-          
-          <!-- Helix Settings -->
-          <div style="border-top: 1px solid #333; margin-top: 0.75rem; padding-top: 0.75rem;">
+            <label class="control-row slider">
+             <button type="button" class="setting-title" class:locked={isLocked('stickOpacity')} onclick={() => toggleLock('stickOpacity')} title="Click to lock/unlock for randomize">Opacity: {config.stickOpacity.toFixed(2)}</button>
+              <input type="range" bind:value={config.stickOpacity} min="0" max="1" step="0.01" />
+            </label>
+
+            <div style="border-top: 1px solid #333; margin-top: 0.75rem; padding-top: 0.75rem;">
+              <label class="control-row checkbox">
+                <input type="checkbox" bind:checked={config.edge.hollow} />
+                <button
+                  type="button"
+                  class="setting-title"
+                  class:locked={isLocked('edge.hollow')}
+                  onclick={(e) => {
+                    e.preventDefault();
+                    toggleLock('edge.hollow');
+                  }}
+                  title="Click to lock/unlock for randomize"
+                >
+                  Hollow caps
+                </button>
+              </label>
+
+              <label class="control-row checkbox">
+                <input type="checkbox" bind:checked={config.edge.showInnerFacades} disabled={!config.edge.hollow} />
+                <button
+                  type="button"
+                  class="setting-title"
+                  class:locked={isLocked('edge.showInnerFacades')}
+                  onclick={(e) => {
+                    e.preventDefault();
+                    toggleLock('edge.showInnerFacades');
+                  }}
+                  title="Click to lock/unlock for randomize"
+                >
+                  Show inner facades
+                </button>
+              </label>
+            </div>
+           
+           <!-- Helix Settings -->
+           <div style="border-top: 1px solid #333; margin-top: 0.75rem; padding-top: 0.75rem;">
              <label class="control-row slider">
                <button type="button" class="setting-title" class:locked={isLocked('stickOverhang')} onclick={() => toggleLock('stickOverhang')} title="Click to lock/unlock for randomize">Overhang: {config.stickOverhang.toFixed(0)}°</button>
                <input type="range" bind:value={config.stickOverhang} min="0" max="180" step="1" />

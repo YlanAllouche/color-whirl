@@ -91,6 +91,8 @@ export interface FacadesConfig {
 export interface EdgeConfig {
   /** Popsicle-only: make front/back caps transparent */
   hollow: boolean;
+  /** Popsicle-only: render facade walls double-sided when hollow */
+  showInnerFacades: boolean;
 }
 
 export interface EmissionConfig {
@@ -480,7 +482,8 @@ export const DEFAULT_POPSICLE_CONFIG: PopsicleConfig = {
     outline: { enabled: false, color: '#0b0b10', thickness: 0.03, opacity: 1.0 }
   },
   edge: {
-    hollow: false
+    hollow: false,
+    showInnerFacades: false
   },
   emission: {
     enabled: false,
@@ -772,6 +775,12 @@ export function normalizeWallpaperConfig(input: any): WallpaperConfig {
   if (typeof (merged as any).edge?.hollow !== 'boolean') {
     (merged as any).edge = { ...(merged as any).edge, hollow: !!(merged as any).edge?.hollow };
   }
+  if (typeof (merged as any).edge?.showInnerFacades !== 'boolean') {
+    (merged as any).edge = {
+      ...(merged as any).edge,
+      showInnerFacades: !!(merged as any).edge?.showInnerFacades
+    };
+  }
 
   return merged as WallpaperConfig;
 }
@@ -1054,7 +1063,8 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
       };
     })(),
     edge: {
-      hollow: false
+      hollow: false,
+      showInnerFacades: false
     },
     emission: {
       enabled: emissionEnabled,
