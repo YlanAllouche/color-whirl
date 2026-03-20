@@ -71,6 +71,8 @@ function autoFitOrthoCameraToBox(camera: THREE.OrthographicCamera, box: THREE.Bo
 
   camera.updateMatrixWorld(true);
 
+  const tmpDir = new THREE.Vector3();
+
   const min = box.min;
   const max = box.max;
   const corners = [
@@ -84,32 +86,46 @@ function autoFitOrthoCameraToBox(camera: THREE.OrthographicCamera, box: THREE.Bo
     new THREE.Vector3(max.x, max.y, max.z)
   ];
 
-  let maxAbsX = 0;
-  let maxAbsY = 0;
-  let minZ = Infinity;
-  let maxZ = -Infinity;
-  for (let i = 0; i < corners.length; i++) {
-    corners[i].applyMatrix4(camera.matrixWorldInverse);
-    maxAbsX = Math.max(maxAbsX, Math.abs(corners[i].x));
-    maxAbsY = Math.max(maxAbsY, Math.abs(corners[i].y));
-    minZ = Math.min(minZ, corners[i].z);
-    maxZ = Math.max(maxZ, corners[i].z);
+  const measure = () => {
+    camera.updateMatrixWorld(true);
+    let maxAbsX = 0;
+    let maxAbsY = 0;
+    let minZ = Infinity;
+    let maxZ = -Infinity;
+    for (let i = 0; i < corners.length; i++) {
+      const p = corners[i].clone().applyMatrix4(camera.matrixWorldInverse);
+      maxAbsX = Math.max(maxAbsX, Math.abs(p.x));
+      maxAbsY = Math.max(maxAbsY, Math.abs(p.y));
+      minZ = Math.min(minZ, p.z);
+      maxZ = Math.max(maxZ, p.z);
+    }
+    return { maxAbsX, maxAbsY, minZ, maxZ };
+  };
+
+  let m = measure();
+  const minNear = 0.001;
+  const zThreshold = -minNear + 1e-4;
+  if (m.maxZ > zThreshold) {
+    const delta = (m.maxZ - zThreshold) + Math.max(0.01, (m.maxZ - m.minZ) * 0.02);
+    camera.getWorldDirection(tmpDir);
+    camera.position.addScaledVector(tmpDir, -delta);
+    m = measure();
   }
 
   const halfW0 = Math.abs(camera.right - camera.left) * 0.5;
   const halfH0 = Math.abs(camera.top - camera.bottom) * 0.5;
   const eps = 1e-6;
-  const zoomMaxX = maxAbsX > eps ? (halfW0 * pad) / maxAbsX : Infinity;
-  const zoomMaxY = maxAbsY > eps ? (halfH0 * pad) / maxAbsY : Infinity;
+  const zoomMaxX = m.maxAbsX > eps ? (halfW0 * pad) / m.maxAbsX : Infinity;
+  const zoomMaxY = m.maxAbsY > eps ? (halfH0 * pad) / m.maxAbsY : Infinity;
   const zoomMax = Math.min(zoomMaxX, zoomMaxY);
   if (Number.isFinite(zoomMax) && zoomMax > 0) camera.zoom = Math.min(camera.zoom, zoomMax);
 
-  const nearDist = Math.max(0, -maxZ);
-  const farDist = Math.max(0, -minZ);
+  const nearDist = Math.max(0, -m.maxZ);
+  const farDist = Math.max(0, -m.minZ);
   if (Number.isFinite(nearDist) && Number.isFinite(farDist) && farDist > 0) {
     const depth = Math.max(eps, farDist - nearDist);
     const zPad = Math.max(0.05, depth * 0.05);
-    const nextNear = Math.max(0.01, nearDist - zPad);
+    const nextNear = Math.max(minNear, nearDist - zPad);
     const nextFar = Math.max(nextNear + 1.0, farDist + zPad);
     camera.near = nextNear;
     camera.far = nextFar;
@@ -769,7 +785,8 @@ export class PopsiclePreview {
 
     // Auto-fit camera before placing meshes (bounds are centered at origin by construction).
     try {
-      autoFitOrthoCameraToBox(this.camera, symmetricBoxFromSize(bounds.size), 0.92);
+      const padding = effective.bloom?.enabled ? 0.86 : 0.92;
+      autoFitOrthoCameraToBox(this.camera, symmetricBoxFromSize(bounds.size), padding);
     } catch {
       // Ignore.
     }
@@ -1454,7 +1471,8 @@ void wmApplyCollisionMask(inout vec4 col) {
       outlineScaleForBounds
     );
     const sphereRadius = 0.5 * bounds.size.length();
-    const minDist = minDistanceToFitBoundingSphere(sphereRadius, aspect, baseFov, 0.92);
+    const padding = config.bloom?.enabled ? 0.86 : 0.92;
+    const minDist = minDistanceToFitBoundingSphere(sphereRadius, aspect, baseFov, padding);
     const d = Math.max(baseDistance, minDist);
 
     const camera = new THREE.PerspectiveCamera(clamp(baseFov, 5, 80), aspect, 0.1, Math.max(2000, d + sphereRadius * 4 + 50));

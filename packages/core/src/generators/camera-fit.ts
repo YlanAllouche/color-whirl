@@ -34,48 +34,68 @@ export function autoFitOrthographicCameraToBox(
     padding?: number;
     /** Minimum near plane (default 0.01). */
     minNear?: number;
+    /** Ensure bounds are entirely in front of the camera (default true). */
+    pushBackIfSlicing?: boolean;
   }
 ): void {
   if (!worldBounds || worldBounds.isEmpty()) return;
 
   const padding = clamp(Number(options?.padding ?? 0.92), 0.5, 0.999);
   const minNear = Math.max(0.001, Number(options?.minNear ?? 0.01));
-
-  // Ensure matrices are current.
-  camera.updateMatrixWorld(true);
+  const pushBackIfSlicing = options?.pushBackIfSlicing ?? true;
 
   const corners = getBoxCorners(worldBounds);
-  const inv = camera.matrixWorldInverse;
 
-  let maxAbsX = 0;
-  let maxAbsY = 0;
-  let minZ = Infinity;
-  let maxZ = -Infinity;
+  const tmpDir = new THREE.Vector3();
 
-  for (let i = 0; i < corners.length; i++) {
-    corners[i].applyMatrix4(inv);
-    const x = Math.abs(corners[i].x);
-    const y = Math.abs(corners[i].y);
-    if (x > maxAbsX) maxAbsX = x;
-    if (y > maxAbsY) maxAbsY = y;
-    if (corners[i].z < minZ) minZ = corners[i].z;
-    if (corners[i].z > maxZ) maxZ = corners[i].z;
+  const measure = (): { maxAbsX: number; maxAbsY: number; minZ: number; maxZ: number } => {
+    camera.updateMatrixWorld(true);
+    const inv = camera.matrixWorldInverse;
+    let maxAbsX = 0;
+    let maxAbsY = 0;
+    let minZ = Infinity;
+    let maxZ = -Infinity;
+    for (let i = 0; i < corners.length; i++) {
+      const p = corners[i].clone().applyMatrix4(inv);
+      const x = Math.abs(p.x);
+      const y = Math.abs(p.y);
+      if (x > maxAbsX) maxAbsX = x;
+      if (y > maxAbsY) maxAbsY = y;
+      if (p.z < minZ) minZ = p.z;
+      if (p.z > maxZ) maxZ = p.z;
+    }
+    return { maxAbsX, maxAbsY, minZ, maxZ };
+  };
+
+  let m = measure();
+
+  // If any part of the bounds is at/behind the camera plane, the near plane will slice geometry
+  // and can reveal interiors. Push the camera back along its view direction until it's safe.
+  if (pushBackIfSlicing) {
+    const sliceEps = 1e-4;
+    const zThreshold = -minNear + sliceEps;
+    if (m.maxZ > zThreshold) {
+      const delta = (m.maxZ - zThreshold) + Math.max(0.01, (m.maxZ - m.minZ) * 0.02);
+      camera.getWorldDirection(tmpDir); // forward
+      camera.position.addScaledVector(tmpDir, -delta); // move backward
+      m = measure();
+    }
   }
 
   const halfW0 = Math.abs(camera.right - camera.left) * 0.5;
   const halfH0 = Math.abs(camera.top - camera.bottom) * 0.5;
 
   const eps = 1e-6;
-  const zoomMaxX = maxAbsX > eps ? (halfW0 * padding) / maxAbsX : Infinity;
-  const zoomMaxY = maxAbsY > eps ? (halfH0 * padding) / maxAbsY : Infinity;
+  const zoomMaxX = m.maxAbsX > eps ? (halfW0 * padding) / m.maxAbsX : Infinity;
+  const zoomMaxY = m.maxAbsY > eps ? (halfH0 * padding) / m.maxAbsY : Infinity;
   const zoomMax = Math.min(zoomMaxX, zoomMaxY);
   if (Number.isFinite(zoomMax) && zoomMax > 0) {
     camera.zoom = Math.min(camera.zoom, zoomMax);
   }
 
   // Near/far: camera looks down -Z; visible points have negative z in camera space.
-  const nearDist = Math.max(0, -maxZ);
-  const farDist = Math.max(0, -minZ);
+  const nearDist = Math.max(0, -m.maxZ);
+  const farDist = Math.max(0, -m.minZ);
   if (Number.isFinite(nearDist) && Number.isFinite(farDist) && farDist > 0) {
     const depth = Math.max(eps, farDist - nearDist);
     const pad = Math.max(0.05, depth * 0.05);
