@@ -320,7 +320,7 @@ function getStackingOffset(
   stickOverhang: number,
   rotationCenterOffsetX: number,
   rotationCenterOffsetY: number,
-  stickGap: number
+  z: number
 ): { x: number; y: number; z: number; rotationZ: number } {
   // Helix with configurable overhang angle and rotation center offset
   // stickOverhang: degrees each stick rotates from the previous
@@ -348,7 +348,7 @@ function getStackingOffset(
   return {
     x: offsetX,
     y: offsetY,
-    z: index * (stickDimensions.depth + stickGap),
+    z,
     rotationZ: rotationAngle
   };
 }
@@ -448,19 +448,34 @@ export function createPopsicleScene(
     scene.add(ambientLight);
   }
   
-  const stickDimensions = getStickDimensions(width, height, stickThickness, stickSize, stickRatio);
-  const geo = createRoundedBox(
-    stickDimensions.width,
-    stickDimensions.height,
-    stickDimensions.depth,
-    config.stickEndProfile,
-    stickRoundness,
-    config.stickChipAmount,
-    config.stickChipJaggedness,
-    stickBevel,
-    geometry?.quality ?? 0.6,
-    config.seed
-  );
+  const nColors = Math.max(1, colors.length);
+
+  const stickDimensionsByPalette: StickDimensions[] = new Array(nColors);
+  const geometryByPalette: THREE.BufferGeometry[] = new Array(nColors);
+
+  for (let pi = 0; pi < nColors; pi++) {
+    const mult = resolvePaletteConfig(config, pi).multipliers.popsicle;
+    const stickDimensions = getStickDimensions(
+      width,
+      height,
+      stickThickness * (mult.thicknessMult ?? 1),
+      stickSize * (mult.sizeMult ?? 1),
+      stickRatio * (mult.ratioMult ?? 1)
+    );
+    stickDimensionsByPalette[pi] = stickDimensions;
+    geometryByPalette[pi] = createRoundedBox(
+      stickDimensions.width,
+      stickDimensions.height,
+      stickDimensions.depth,
+      config.stickEndProfile,
+      stickRoundness,
+      config.stickChipAmount,
+      config.stickChipJaggedness,
+      stickBevel,
+      geometry?.quality ?? 0.6,
+      config.seed
+    );
+  }
 
   const envIntensity = environment?.enabled ? Number(environment.intensity) || 0 : 0;
   const useShadows = !!shadows?.enabled;
@@ -468,12 +483,15 @@ export function createPopsicleScene(
   const group = new THREE.Group();
   const materialCache = new Map<string, THREE.Material | THREE.Material[]>();
   const materialParamsKey = JSON.stringify({ t: config.textureParams, f: config.facades, ed: config.edge, g: (config as any).gruyere, em: config.emission, p: (config as any).palette });
-  const getMat = (paletteIndex: number, hex: string) => {
+  const getMat = (paletteIndex: number, hex: string, stickDimensions: StickDimensions) => {
     const key = [
       texture,
       materialParamsKey,
       String(paletteIndex),
       hex,
+      stickDimensions.width.toFixed(4),
+      stickDimensions.height.toFixed(4),
+      stickDimensions.depth.toFixed(4),
       envIntensity.toFixed(3),
       safeStickOpacity.toFixed(3),
       String(config.seed)
@@ -485,18 +503,29 @@ export function createPopsicleScene(
     return m;
   };
 
-  const nColors = Math.max(1, colors.length);
   const baseMeshesByPalette: THREE.Mesh[][] = Array.from({ length: nColors }, () => []);
 
+  const safeStickGap = Number.isFinite(Number(stickGap)) ? Number(stickGap) : 0;
+  let zCursor = 0;
+  let prevDepth = 0;
+
   for (let i = 0; i < stickCount; i++) {
-    const paletteIndex = i % colors.length;
-    const hex = colors[paletteIndex];
-    const mesh = new THREE.Mesh(geo, getMat(paletteIndex, hex));
+    const paletteIndex = ((i % nColors) + nColors) % nColors;
+    const hex = colors[paletteIndex] ?? '#ffffff';
+    const stickDimensions = stickDimensionsByPalette[paletteIndex];
+    const mesh = new THREE.Mesh(geometryByPalette[paletteIndex], getMat(paletteIndex, hex, stickDimensions));
     (mesh.userData as any).__wmPaletteIndex = paletteIndex;
     mesh.castShadow = useShadows;
     mesh.receiveShadow = useShadows;
 
-    const offset = getStackingOffset(i, stickDimensions, stickOverhang, rotationCenterOffsetX, rotationCenterOffsetY, stickGap);
+    if (i === 0) {
+      zCursor = 0;
+    } else {
+      zCursor += prevDepth * 0.5 + stickDimensions.depth * 0.5 + safeStickGap;
+    }
+    prevDepth = stickDimensions.depth;
+
+    const offset = getStackingOffset(i, stickDimensions, stickOverhang, rotationCenterOffsetX, rotationCenterOffsetY, zCursor);
     mesh.position.set(offset.x, offset.y, offset.z);
     mesh.rotation.z = offset.rotationZ;
     group.add(mesh);

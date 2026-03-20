@@ -177,6 +177,33 @@ export interface PaletteEdgeOverride {
   band?: Partial<EdgeBandConfig>;
 }
 
+export interface PaletteGeometryOverride {
+  popsicle?: {
+    /** Multiplies stickSize */
+    sizeMult?: number;
+    /** Multiplies stickRatio */
+    ratioMult?: number;
+    /** Multiplies stickThickness */
+    thicknessMult?: number;
+  };
+  spheres3d?: {
+    /** Multiplies per-instance sphere radius */
+    radiusMult?: number;
+  };
+  triangles3d?: {
+    /** Multiplies prism radius */
+    radiusMult?: number;
+    /** Multiplies prism height */
+    heightMult?: number;
+  };
+  svg?: {
+    /** Multiplies per-instance SVG size (2D r / 3D XY scale) */
+    sizeMult?: number;
+    /** Multiplies 3D SVG extrusion depth (Z scale) */
+    extrudeMult?: number;
+  };
+}
+
 export interface PaletteOverride {
   /** Whether overrides for this palette index are active */
   enabled: boolean;
@@ -184,6 +211,7 @@ export interface PaletteOverride {
   texture?: PaletteTextureOverride;
   facades?: PaletteFacadesOverride;
   edge?: PaletteEdgeOverride;
+  geometry?: PaletteGeometryOverride;
 }
 
 export interface PaletteConfig {
@@ -1596,6 +1624,32 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
             ? { glass: { style: (['simple', 'frosted', 'thick', 'stylized'] as const)[Math.floor(rng() * 4)] } }
             : undefined;
         setOverride(idx, { texture: { type, params } });
+      }
+
+      // Rare: per-color geometry multipliers (subtle accent near 1.0).
+      if (chance(0.18)) {
+        const idx = Math.floor(rng() * n);
+        const mult = () => clamp(tri(0.85, 1.0, 1.18), 0.5, 2.0);
+
+        if (type === 'popsicle') {
+          setOverride(idx, {
+            geometry: {
+              popsicle: {
+                sizeMult: mult(),
+                ratioMult: mult(),
+                thicknessMult: mult()
+              }
+            }
+          });
+        } else if (type === 'spheres3d') {
+          setOverride(idx, { geometry: { spheres3d: { radiusMult: mult() } } });
+        } else if (type === 'triangles3d') {
+          setOverride(idx, { geometry: { triangles3d: { radiusMult: mult(), heightMult: mult() } } });
+        } else if (type === 'svg2d') {
+          setOverride(idx, { geometry: { svg: { sizeMult: mult() } } });
+        } else if (type === 'svg3d') {
+          setOverride(idx, { geometry: { svg: { sizeMult: mult(), extrudeMult: mult() } } });
+        }
       }
 
       base.palette.overrides = overrides;

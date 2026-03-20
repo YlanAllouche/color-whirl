@@ -22,6 +22,36 @@ function clamp(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, n));
 }
 
+function clampMult(raw: unknown, min: number = 0.25, max: number = 4): number {
+  const v = Number(raw);
+  if (!Number.isFinite(v)) return 1;
+  return clamp(v, min, max);
+}
+
+function getEnabledPaletteOverride(config: PopsicleConfig, paletteIndex: number): any | null {
+  const list: any = (config as any)?.palette?.overrides;
+  if (!Array.isArray(list)) return null;
+  const v = list[paletteIndex];
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+  const enabled = typeof (v as any).enabled === 'boolean' ? (v as any).enabled : !!(v as any).enabled;
+  if (!enabled) return null;
+  return v;
+}
+
+function getPopsicleGeometryMultipliers(config: PopsicleConfig, paletteIndex: number): {
+  sizeMult: number;
+  ratioMult: number;
+  thicknessMult: number;
+} {
+  const ov = getEnabledPaletteOverride(config, paletteIndex);
+  const g = ov?.geometry?.popsicle;
+  return {
+    sizeMult: clampMult(g?.sizeMult),
+    ratioMult: clampMult(g?.ratioMult),
+    thicknessMult: clampMult(g?.thicknessMult)
+  };
+}
+
 function chainOnBeforeCompile(material: THREE.Material, fn: (shader: any) => void, keyPart: string): void {
   const prev = material.onBeforeCompile;
   material.onBeforeCompile = (shader: any, renderer: any) => {
@@ -184,7 +214,8 @@ function getStackingOffset(
   stickOverhang: number,
   rotationCenterOffsetX: number,
   rotationCenterOffsetY: number,
-  stickGap: number
+  stickGap: number,
+  zOverride?: number
 ): { x: number; y: number; z: number; rotationZ: number } {
   const rotationAngle = index * degToRad(stickOverhang);
 
@@ -203,7 +234,7 @@ function getStackingOffset(
   return {
     x: offsetX,
     y: offsetY,
-    z: index * (stickDimensions.depth + stickGap),
+    z: typeof zOverride === 'number' && Number.isFinite(zOverride) ? zOverride : index * (stickDimensions.depth + stickGap),
     rotationZ: rotationAngle
   };
 }
@@ -512,6 +543,52 @@ function computeBounds(
   return { min, max, center, size, radius };
 }
 
+function computeBoundsPerStick(options: {
+  stickCount: number;
+  getStickDimensions: (i: number) => { width: number; height: number; depth: number };
+  stickOverhang: number;
+  rotationCenterOffsetX: number;
+  rotationCenterOffsetY: number;
+  stickGap: number;
+  outlineScale?: number;
+}): Bounds {
+  const min = new THREE.Vector3(Infinity, Infinity, Infinity);
+  const max = new THREE.Vector3(-Infinity, -Infinity, -Infinity);
+
+  const oScale = Math.max(1, Number(options.outlineScale ?? 1) || 1);
+  const safeGap = Number.isFinite(Number(options.stickGap)) ? Number(options.stickGap) : 0;
+
+  let zCursor = 0;
+  let prevDepth = 0;
+
+  for (let i = 0; i < options.stickCount; i++) {
+    const dims = options.getStickDimensions(i);
+    if (i === 0) {
+      zCursor = 0;
+    } else {
+      zCursor += prevDepth * 0.5 + dims.depth * 0.5 + safeGap;
+    }
+    prevDepth = dims.depth;
+
+    const o = getStackingOffset(i, dims, options.stickOverhang, options.rotationCenterOffsetX, options.rotationCenterOffsetY, safeGap, zCursor);
+
+    const halfDiag = Math.sqrt((dims.width * 0.5) * (dims.width * 0.5) + (dims.height * 0.5) * (dims.height * 0.5)) * oScale;
+    const halfDepth = dims.depth * 0.5 * oScale;
+
+    min.x = Math.min(min.x, o.x - halfDiag);
+    min.y = Math.min(min.y, o.y - halfDiag);
+    min.z = Math.min(min.z, o.z - halfDepth);
+    max.x = Math.max(max.x, o.x + halfDiag);
+    max.y = Math.max(max.y, o.y + halfDiag);
+    max.z = Math.max(max.z, o.z + halfDepth);
+  }
+
+  const center = new THREE.Vector3().addVectors(min, max).multiplyScalar(0.5);
+  const size = new THREE.Vector3().subVectors(max, min);
+  const radius = Math.max(size.x, size.y, size.z) * 0.5;
+  return { min, max, center, size, radius };
+}
+
 export class PopsiclePreview {
   private container: HTMLElement;
   private renderer: THREE.WebGLRenderer;
@@ -530,7 +607,7 @@ export class PopsiclePreview {
   private outlineMaterial: THREE.MeshBasicMaterial | null = null;
   private stickMeshes: THREE.Mesh[] = [];
   private stickMaterialCache = new Map<string, THREE.Material | THREE.Material[]>();
-  private stickGeometry: THREE.BufferGeometry | null = null;
+  private stickGeometryCache = new Map<string, THREE.BufferGeometry>();
   private envCache = new EnvironmentCache();
 
   // Collision masking (raster only)
@@ -625,21 +702,13 @@ export class PopsiclePreview {
     this.pathScene = null;
     this.pathCamera = null;
 
-    this.stickGeometry?.dispose();
-    this.stickGeometry = null;
+    for (const g of this.stickGeometryCache.values()) g.dispose();
+    this.stickGeometryCache.clear();
     for (const m of this.stickMaterialCache.values()) disposeMaterial(m);
     this.stickMaterialCache.clear();
-    for (const mesh of this.stickMeshes) {
-      mesh.geometry?.dispose?.();
-      disposeMaterial(mesh.material as any);
-    }
     this.stickMeshes = [];
     this.sticksGroup.clear();
 
-    for (const mesh of this.outlineMeshes) {
-      mesh.geometry?.dispose?.();
-      disposeMaterial(mesh.material as any);
-    }
     this.outlineMeshes = [];
     this.outlineGroup.clear();
     this.outlineMaterial?.dispose();
@@ -761,27 +830,32 @@ export class PopsiclePreview {
 
     // Geometry + instances
     const safeStickOpacity = clamp(Number.isFinite(Number(effective.stickOpacity)) ? Number(effective.stickOpacity) : 1.0, 0, 1);
-    const stickDimensions = getStickDimensions(
-      effective.width,
-      effective.height,
-      effective.stickThickness,
-      effective.stickSize,
-      effective.stickRatio
-    );
+
+    const nColors = Math.max(1, effective.colors.length);
+    const stickDimensionsByPalette = Array.from({ length: nColors }, (_, pi) => {
+      const mult = getPopsicleGeometryMultipliers(effective, pi);
+      return getStickDimensions(
+        effective.width,
+        effective.height,
+        effective.stickThickness * mult.thicknessMult,
+        effective.stickSize * mult.sizeMult,
+        effective.stickRatio * mult.ratioMult
+      );
+    });
 
     const outlineScaleForBounds = effective.facades.outline.enabled
       ? 1 + Math.max(0, Math.min(0.2, Number(effective.facades.outline.thickness) || 0))
       : 1;
 
-    const bounds = computeBounds(
-      stickDimensions,
-      effective.stickCount,
-      effective.stickOverhang,
-      effective.rotationCenterOffsetX,
-      effective.rotationCenterOffsetY,
-      effective.stickGap,
-      outlineScaleForBounds
-    );
+    const bounds = computeBoundsPerStick({
+      stickCount: effective.stickCount,
+      getStickDimensions: (i) => stickDimensionsByPalette[((i % nColors) + nColors) % nColors],
+      stickOverhang: effective.stickOverhang,
+      rotationCenterOffsetX: effective.rotationCenterOffsetX,
+      rotationCenterOffsetY: effective.rotationCenterOffsetY,
+      stickGap: effective.stickGap,
+      outlineScale: outlineScaleForBounds
+    });
 
     // Auto-fit camera before placing meshes (bounds are centered at origin by construction).
     try {
@@ -791,34 +865,48 @@ export class PopsiclePreview {
       // Ignore.
     }
 
-    const geoKey = [
-      stickDimensions.width.toFixed(4),
-      stickDimensions.height.toFixed(4),
-      stickDimensions.depth.toFixed(4),
-      String(effective.stickEndProfile),
-      effective.stickRoundness.toFixed(4),
-      effective.stickChipAmount.toFixed(4),
-      effective.stickChipJaggedness.toFixed(4),
-      effective.stickBevel.toFixed(4),
-      effective.geometry.quality.toFixed(3),
-      String(effective.seed)
-    ].join(':');
+    const geometriesByPalette: THREE.BufferGeometry[] = new Array(nColors);
+    const usedGeoKeys = new Set<string>();
 
-    if (!this.stickGeometry || (this.stickGeometry as any).__key !== geoKey) {
-      this.stickGeometry?.dispose();
-      this.stickGeometry = createRoundedBox(
-        stickDimensions.width,
-        stickDimensions.height,
-        stickDimensions.depth,
-        effective.stickEndProfile,
-        effective.stickRoundness,
-        effective.stickChipAmount,
-        effective.stickChipJaggedness,
-        effective.stickBevel,
-        effective.geometry.quality,
-        effective.seed
-      );
-      (this.stickGeometry as any).__key = geoKey;
+    for (let pi = 0; pi < nColors; pi++) {
+      const dims = stickDimensionsByPalette[pi];
+      const geoKey = [
+        dims.width.toFixed(4),
+        dims.height.toFixed(4),
+        dims.depth.toFixed(4),
+        String(effective.stickEndProfile),
+        effective.stickRoundness.toFixed(4),
+        effective.stickChipAmount.toFixed(4),
+        effective.stickChipJaggedness.toFixed(4),
+        effective.stickBevel.toFixed(4),
+        effective.geometry.quality.toFixed(3),
+        String(effective.seed)
+      ].join(':');
+
+      usedGeoKeys.add(geoKey);
+      let geo = this.stickGeometryCache.get(geoKey);
+      if (!geo) {
+        geo = createRoundedBox(
+          dims.width,
+          dims.height,
+          dims.depth,
+          effective.stickEndProfile,
+          effective.stickRoundness,
+          effective.stickChipAmount,
+          effective.stickChipJaggedness,
+          effective.stickBevel,
+          effective.geometry.quality,
+          effective.seed
+        );
+        this.stickGeometryCache.set(geoKey, geo);
+      }
+      geometriesByPalette[pi] = geo;
+    }
+
+    for (const [k, g] of this.stickGeometryCache.entries()) {
+      if (usedGeoKeys.has(k)) continue;
+      g.dispose();
+      this.stickGeometryCache.delete(k);
     }
 
     const envIntensity = effective.environment.enabled ? effective.environment.intensity : 0;
@@ -835,8 +923,15 @@ export class PopsiclePreview {
       safeStickOpacity.toFixed(3),
       String(effective.seed)
     ].join(':');
-    const getMaterial = (paletteIndex: number, hex: string) => {
-      const k = [matBaseKey, String(paletteIndex), hex].join(':');
+    const getMaterial = (paletteIndex: number, hex: string, stickDimensions: { width: number; height: number; depth: number }) => {
+      const k = [
+        matBaseKey,
+        String(paletteIndex),
+        hex,
+        stickDimensions.width.toFixed(4),
+        stickDimensions.height.toFixed(4),
+        stickDimensions.depth.toFixed(4)
+      ].join(':');
       const existing = this.stickMaterialCache.get(k);
       if (existing) return existing;
       const m = createMaterialForColor(effective, paletteIndex, hex, envIntensity, safeStickOpacity, stickDimensions);
@@ -850,10 +945,15 @@ export class PopsiclePreview {
 
     // Ensure mesh pool
     while (this.stickMeshes.length < effective.stickCount) {
-      const mesh = new THREE.Mesh(this.stickGeometry, getMaterial(0, '#ffffff'));
+      const dims0 = stickDimensionsByPalette[0];
+      const mesh = new THREE.Mesh(geometriesByPalette[0], getMaterial(0, '#ffffff', dims0));
       this.sticksGroup.add(mesh);
       this.stickMeshes.push(mesh);
     }
+
+    const safeStickGap = Number.isFinite(Number(effective.stickGap)) ? Number(effective.stickGap) : 0;
+    let zCursor = 0;
+    let prevDepth = 0;
 
     for (let i = 0; i < this.stickMeshes.length; i++) {
       const mesh = this.stickMeshes[i];
@@ -863,22 +963,31 @@ export class PopsiclePreview {
       }
 
       mesh.visible = true;
-      mesh.geometry = this.stickGeometry;
-      const paletteIndex = i % effective.colors.length;
+      const paletteIndex = ((i % nColors) + nColors) % nColors;
       const hex = effective.colors[paletteIndex] ?? '#ffffff';
-      mesh.material = getMaterial(paletteIndex, hex);
+      const dims = stickDimensionsByPalette[paletteIndex];
+      mesh.geometry = geometriesByPalette[paletteIndex];
+      mesh.material = getMaterial(paletteIndex, hex, dims);
       collisionBuckets[paletteIndex % collisionPaletteCount].push(mesh);
-      collisionPaletteMaterials[paletteIndex % collisionPaletteCount] = mesh.material as any;
+      if (!collisionPaletteMaterials[paletteIndex % collisionPaletteCount]) collisionPaletteMaterials[paletteIndex % collisionPaletteCount] = mesh.material as any;
       mesh.castShadow = useShadows;
       mesh.receiveShadow = useShadows;
 
+      if (i === 0) {
+        zCursor = 0;
+      } else {
+        zCursor += prevDepth * 0.5 + dims.depth * 0.5 + safeStickGap;
+      }
+      prevDepth = dims.depth;
+
       const o = getStackingOffset(
         i,
-        stickDimensions,
+        dims,
         effective.stickOverhang,
         effective.rotationCenterOffsetX,
         effective.rotationCenterOffsetY,
-        effective.stickGap
+        safeStickGap,
+        zCursor
       );
 
       mesh.position.set(o.x - bounds.center.x, o.y - bounds.center.y, o.z - bounds.center.z);
@@ -912,7 +1021,7 @@ export class PopsiclePreview {
       }
 
       while (this.outlineMeshes.length < effective.stickCount) {
-        const om = new THREE.Mesh(this.stickGeometry!, this.outlineMaterial!);
+        const om = new THREE.Mesh(geometriesByPalette[0], this.outlineMaterial!);
         om.castShadow = false;
         om.receiveShadow = false;
         this.outlineGroup.add(om);
@@ -928,7 +1037,7 @@ export class PopsiclePreview {
 
         const sm = this.stickMeshes[i];
         om.visible = sm.visible;
-        om.geometry = this.stickGeometry;
+        om.geometry = sm.geometry;
         om.material = this.outlineMaterial!;
         om.position.copy(sm.position);
         om.rotation.copy(sm.rotation);
@@ -1460,16 +1569,25 @@ void wmApplyCollisionMask(inout vec4 col) {
     const outlineScaleForBounds = config.facades.outline.enabled
       ? 1 + Math.max(0, Math.min(0.2, Number(config.facades.outline.thickness) || 0))
       : 1;
-    const stickDimensions = getStickDimensions(config.width, config.height, config.stickThickness, config.stickSize, config.stickRatio);
-    const bounds = computeBounds(
-      stickDimensions,
-      config.stickCount,
-      config.stickOverhang,
-      config.rotationCenterOffsetX,
-      config.rotationCenterOffsetY,
-      config.stickGap,
-      outlineScaleForBounds
-    );
+    const baseStickDimensions = getStickDimensions(config.width, config.height, config.stickThickness, config.stickSize, config.stickRatio);
+    const nColors = Math.max(1, config.colors.length);
+    const stickDimensionsByPalette = Array.from({ length: nColors }, (_, pi) => {
+      const sizeMult = getPopsicleGeometryMultipliers(config, pi).sizeMult;
+      return {
+        width: baseStickDimensions.width * sizeMult,
+        height: baseStickDimensions.height * sizeMult,
+        depth: baseStickDimensions.depth * sizeMult
+      };
+    });
+    const bounds = computeBoundsPerStick({
+      stickCount: config.stickCount,
+      getStickDimensions: (i) => stickDimensionsByPalette[((i % nColors) + nColors) % nColors],
+      stickOverhang: config.stickOverhang,
+      rotationCenterOffsetX: config.rotationCenterOffsetX,
+      rotationCenterOffsetY: config.rotationCenterOffsetY,
+      stickGap: config.stickGap,
+      outlineScale: outlineScaleForBounds
+    });
     const sphereRadius = 0.5 * bounds.size.length();
     const padding = config.bloom?.enabled ? 0.86 : 0.92;
     const minDist = minDistanceToFitBoundingSphere(sphereRadius, aspect, baseFov, padding);
@@ -1520,20 +1638,30 @@ void wmApplyCollisionMask(inout vec4 col) {
     }
 
     const safeStickOpacity = clamp(Number.isFinite(Number(config.stickOpacity)) ? Number(config.stickOpacity) : 1.0, 0, 1);
-    const stickDimensions = getStickDimensions(config.width, config.height, config.stickThickness, config.stickSize, config.stickRatio);
-    const bounds = computeBounds(
-      stickDimensions,
-      config.stickCount,
-      config.stickOverhang,
-      config.rotationCenterOffsetX,
-      config.rotationCenterOffsetY,
-      config.stickGap
-    );
+    const baseStickDimensions = getStickDimensions(config.width, config.height, config.stickThickness, config.stickSize, config.stickRatio);
+    const nColors = Math.max(1, config.colors.length);
+    const stickDimensionsByPalette = Array.from({ length: nColors }, (_, pi) => {
+      const sizeMult = getPopsicleGeometryMultipliers(config, pi).sizeMult;
+      return {
+        width: baseStickDimensions.width * sizeMult,
+        height: baseStickDimensions.height * sizeMult,
+        depth: baseStickDimensions.depth * sizeMult
+      };
+    });
+
+    const bounds = computeBoundsPerStick({
+      stickCount: config.stickCount,
+      getStickDimensions: (i) => stickDimensionsByPalette[((i % nColors) + nColors) % nColors],
+      stickOverhang: config.stickOverhang,
+      rotationCenterOffsetX: config.rotationCenterOffsetX,
+      rotationCenterOffsetY: config.rotationCenterOffsetY,
+      stickGap: config.stickGap
+    });
 
     const geometry = createRoundedBox(
-      stickDimensions.width,
-      stickDimensions.height,
-      stickDimensions.depth,
+      baseStickDimensions.width,
+      baseStickDimensions.height,
+      baseStickDimensions.depth,
       config.stickEndProfile,
       config.stickRoundness,
       config.stickChipAmount,
@@ -1546,6 +1674,7 @@ void wmApplyCollisionMask(inout vec4 col) {
     const envIntensity = config.environment.enabled ? config.environment.intensity : 0;
     const materialCache = new Map<string, THREE.Material | THREE.Material[]>();
     const getMat = (paletteIndex: number, hex: string) => {
+      const dims = stickDimensionsByPalette[paletteIndex] ?? baseStickDimensions;
       const k = [
         config.texture,
         textureParamsKey(config),
@@ -1554,29 +1683,50 @@ void wmApplyCollisionMask(inout vec4 col) {
         JSON.stringify(config.emission),
         String(paletteIndex),
         hex,
+        dims.width.toFixed(4),
+        dims.height.toFixed(4),
+        dims.depth.toFixed(4),
         envIntensity.toFixed(3),
         safeStickOpacity.toFixed(3),
         String(config.seed)
       ].join(':');
       const existing = materialCache.get(k);
       if (existing) return existing;
-      const m = createMaterialForColor(config, paletteIndex, hex, envIntensity, safeStickOpacity, stickDimensions);
+      const m = createMaterialForColor(config, paletteIndex, hex, envIntensity, safeStickOpacity, dims);
       materialCache.set(k, m);
       return m;
     };
 
+    const safeStickGap = Number.isFinite(Number(config.stickGap)) ? Number(config.stickGap) : 0;
+    let zCursor = 0;
+    let prevDepth = 0;
+
     for (let i = 0; i < config.stickCount; i++) {
+      const paletteIndex = ((i % nColors) + nColors) % nColors;
+      const hex = config.colors[paletteIndex] ?? '#ffffff';
+      const mesh = new THREE.Mesh(geometry, getMat(paletteIndex, hex));
+
+      const dims = stickDimensionsByPalette[paletteIndex] ?? baseStickDimensions;
+      if (i === 0) {
+        zCursor = 0;
+      } else {
+        zCursor += prevDepth * 0.5 + dims.depth * 0.5 + safeStickGap;
+      }
+      prevDepth = dims.depth;
+
       const o = getStackingOffset(
         i,
-        stickDimensions,
+        dims,
         config.stickOverhang,
         config.rotationCenterOffsetX,
         config.rotationCenterOffsetY,
-        config.stickGap
+        safeStickGap,
+        zCursor
       );
-      const paletteIndex = i % config.colors.length;
-      const hex = config.colors[paletteIndex] ?? '#ffffff';
-      const mesh = new THREE.Mesh(geometry, getMat(paletteIndex, hex));
+
+      const sizeMult = getPopsicleGeometryMultipliers(config, paletteIndex).sizeMult;
+      if (Number.isFinite(sizeMult) && sizeMult !== 1) mesh.scale.setScalar(sizeMult);
+
       mesh.position.set(o.x - bounds.center.x, o.y - bounds.center.y, o.z - bounds.center.z);
       mesh.rotation.z = o.rotationZ;
       scene.add(mesh);

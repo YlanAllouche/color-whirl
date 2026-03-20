@@ -175,6 +175,8 @@ export function renderSvg2DToCanvas(config: Svg2DConfig, canvas?: HTMLCanvasElem
   const nColors = Math.max(1, colors.length);
   const weightsNorm = normalizeWeights(config.svg.colorWeights ?? [], nColors);
 
+  const sizeMultByIndex = Array.from({ length: nColors }, (_, i) => resolvePaletteConfig(config as any, i).multipliers.svg.sizeMult);
+
   const emissionByIndex = Array.from({ length: nColors }, (_, i) => {
     const e = resolvePaletteConfig(config as any, i).emission;
     return { enabled: !!e.enabled && !!config.bloom.enabled, intensity: e.intensity };
@@ -235,15 +237,17 @@ export function renderSvg2DToCanvas(config: Svg2DConfig, canvas?: HTMLCanvasElem
   };
 
   for (let i = 0; i < count; i++) {
-    const r = rMin + rng() * (rMax - rMin);
+    const pi = pickPaletteIndex(rng, (config.svg.paletteMode as PaletteAssignMode) === 'cycle' ? 'cycle' : 'weighted', weightsNorm, i, nColors);
+    const fill = colors[pi] ?? '#ffffff';
+
+    const sizeMult = sizeMultByIndex[pi] ?? 1;
+    const r0 = rMin + rng() * (rMax - rMin);
+    const r = r0 * sizeMult;
     const x0 = rng() * c.width;
     const y0 = rng() * c.height;
     const x = x0 + (rng() - 0.5) * r * 2 * jitter;
     const y = y0 + (rng() - 0.5) * r * 2 * jitter;
     const theta = (rng() - 0.5) * rotJ;
-
-    const pi = pickPaletteIndex(rng, (config.svg.paletteMode as PaletteAssignMode) === 'cycle' ? 'cycle' : 'weighted', weightsNorm, i, nColors);
-    const fill = colors[pi] ?? '#ffffff';
 
     drawShape(ctx, x, y, r, theta, fill);
     {

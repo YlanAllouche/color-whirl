@@ -327,6 +327,8 @@ export function createSpheres3DScene(
   const nColors = colors.length;
   const w = normalizeWeights(config.spheres.colorWeights, nColors);
 
+  const radiusMultByIndex = Array.from({ length: nColors }, (_, pi) => resolvePaletteConfig(config, pi).multipliers.spheres3d.radiusMult);
+
   const count = Math.max(0, Math.round(config.spheres.count));
   const spread = Math.max(0, Number(config.spheres.spread) || 0);
   const depth = Math.max(0, Number(config.spheres.depth) || 0);
@@ -686,7 +688,8 @@ void wmApplyCollisionMask(inout vec4 col) {
     const p = posForIndex(i);
     tmpPos.set(p.x, p.y, p.z);
     tmpQuat.identity();
-    tmpScale.setScalar(p.rad);
+    const rm = radiusMultByIndex[pi] ?? 1;
+    tmpScale.setScalar(p.rad * rm);
     tmpMat.compose(tmpPos, tmpQuat, tmpScale);
     perColor[pi].inst.setMatrixAt(slot, tmpMat);
   }

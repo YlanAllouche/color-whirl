@@ -490,7 +490,7 @@
     });
   }
 
-  function togglePaletteBlock(paletteIndex: number, block: 'emission' | 'texture' | 'grazing' | 'side' | 'outline' | 'edge') {
+  function togglePaletteBlock(paletteIndex: number, block: 'emission' | 'texture' | 'grazing' | 'side' | 'outline' | 'edge' | 'geometry') {
     updatePaletteOverride(paletteIndex, (cur) => {
       const base = cur ?? { enabled: true };
       const enabled = typeof (base as any).enabled === 'boolean' ? (base as any).enabled : true;
@@ -536,6 +536,19 @@
       if (block === 'edge') {
         if (next.edge) delete next.edge;
         else next.edge = { ...config.edge, seam: { ...config.edge.seam }, band: { ...config.edge.band } };
+      }
+
+      if (block === 'geometry') {
+        if (next.geometry) {
+          delete next.geometry;
+        } else {
+          if (config.type === 'popsicle') next.geometry = { popsicle: { sizeMult: 1, ratioMult: 1, thicknessMult: 1 } };
+          else if (config.type === 'spheres3d') next.geometry = { spheres3d: { radiusMult: 1 } };
+          else if (config.type === 'triangles3d') next.geometry = { triangles3d: { radiusMult: 1, heightMult: 1 } };
+          else if (config.type === 'svg3d') next.geometry = { svg: { sizeMult: 1, extrudeMult: 1 } };
+          else if (config.type === 'svg2d') next.geometry = { svg: { sizeMult: 1 } };
+          else next.geometry = {};
+        }
       }
 
       return next;
@@ -1878,6 +1891,205 @@
                             }}
                           />
                         </label>
+                      {/if}
+                    </details>
+                  {/if}
+
+                  {#if config.type === 'popsicle' || config.type === 'spheres3d' || config.type === 'triangles3d' || config.type === 'svg2d' || config.type === 'svg3d'}
+                    <details class="control-details">
+                      <summary class="control-details-summary">Geometry</summary>
+                      <label class="control-row checkbox">
+                        <input type="checkbox" checked={!!ov?.geometry} oninput={() => togglePaletteBlock(i, 'geometry')} />
+                        <span class="setting-title">Override geometry</span>
+                      </label>
+
+                      {#if ov?.geometry}
+                        {#if config.type === 'popsicle'}
+                          <label class="control-row slider">
+                            <span class="setting-title">Size: {Number(ov.geometry?.popsicle?.sizeMult ?? 1).toFixed(2)}</span>
+                            <input
+                              type="range"
+                              value={Number(ov.geometry?.popsicle?.sizeMult ?? 1)}
+                              min="0.5"
+                              max="2"
+                              step="0.01"
+                              oninput={(e) => {
+                                const v = Number((e.currentTarget as HTMLInputElement).value);
+                                updatePaletteOverride(i, (cur) => ({
+                                  ...(cur ?? { enabled: true }),
+                                  enabled: true,
+                                  geometry: {
+                                    ...((cur as any)?.geometry ?? {}),
+                                    popsicle: { ...(((cur as any)?.geometry?.popsicle ?? {}) as any), sizeMult: v }
+                                  }
+                                }));
+                              }}
+                            />
+                          </label>
+                          <label class="control-row slider">
+                            <span class="setting-title">Ratio: {Number(ov.geometry?.popsicle?.ratioMult ?? 1).toFixed(2)}</span>
+                            <input
+                              type="range"
+                              value={Number(ov.geometry?.popsicle?.ratioMult ?? 1)}
+                              min="0.5"
+                              max="2"
+                              step="0.01"
+                              oninput={(e) => {
+                                const v = Number((e.currentTarget as HTMLInputElement).value);
+                                updatePaletteOverride(i, (cur) => ({
+                                  ...(cur ?? { enabled: true }),
+                                  enabled: true,
+                                  geometry: {
+                                    ...((cur as any)?.geometry ?? {}),
+                                    popsicle: { ...(((cur as any)?.geometry?.popsicle ?? {}) as any), ratioMult: v }
+                                  }
+                                }));
+                              }}
+                            />
+                          </label>
+                          <label class="control-row slider">
+                            <span class="setting-title">Thickness: {Number(ov.geometry?.popsicle?.thicknessMult ?? 1).toFixed(2)}</span>
+                            <input
+                              type="range"
+                              value={Number(ov.geometry?.popsicle?.thicknessMult ?? 1)}
+                              min="0.5"
+                              max="2"
+                              step="0.01"
+                              oninput={(e) => {
+                                const v = Number((e.currentTarget as HTMLInputElement).value);
+                                updatePaletteOverride(i, (cur) => ({
+                                  ...(cur ?? { enabled: true }),
+                                  enabled: true,
+                                  geometry: {
+                                    ...((cur as any)?.geometry ?? {}),
+                                    popsicle: { ...(((cur as any)?.geometry?.popsicle ?? {}) as any), thicknessMult: v }
+                                  }
+                                }));
+                              }}
+                            />
+                          </label>
+                        {:else if config.type === 'spheres3d'}
+                          <label class="control-row slider">
+                            <span class="setting-title">Radius: {Number(ov.geometry?.spheres3d?.radiusMult ?? 1).toFixed(2)}</span>
+                            <input
+                              type="range"
+                              value={Number(ov.geometry?.spheres3d?.radiusMult ?? 1)}
+                              min="0.5"
+                              max="2"
+                              step="0.01"
+                              oninput={(e) => {
+                                const v = Number((e.currentTarget as HTMLInputElement).value);
+                                updatePaletteOverride(i, (cur) => ({
+                                  ...(cur ?? { enabled: true }),
+                                  enabled: true,
+                                  geometry: {
+                                    ...((cur as any)?.geometry ?? {}),
+                                    spheres3d: { ...(((cur as any)?.geometry?.spheres3d ?? {}) as any), radiusMult: v }
+                                  }
+                                }));
+                              }}
+                            />
+                          </label>
+                        {:else if config.type === 'triangles3d'}
+                          <label class="control-row slider">
+                            <span class="setting-title">Radius: {Number(ov.geometry?.triangles3d?.radiusMult ?? 1).toFixed(2)}</span>
+                            <input
+                              type="range"
+                              value={Number(ov.geometry?.triangles3d?.radiusMult ?? 1)}
+                              min="0.5"
+                              max="2"
+                              step="0.01"
+                              oninput={(e) => {
+                                const v = Number((e.currentTarget as HTMLInputElement).value);
+                                updatePaletteOverride(i, (cur) => ({
+                                  ...(cur ?? { enabled: true }),
+                                  enabled: true,
+                                  geometry: {
+                                    ...((cur as any)?.geometry ?? {}),
+                                    triangles3d: { ...(((cur as any)?.geometry?.triangles3d ?? {}) as any), radiusMult: v }
+                                  }
+                                }));
+                              }}
+                            />
+                          </label>
+                          <label class="control-row slider">
+                            <span class="setting-title">Height: {Number(ov.geometry?.triangles3d?.heightMult ?? 1).toFixed(2)}</span>
+                            <input
+                              type="range"
+                              value={Number(ov.geometry?.triangles3d?.heightMult ?? 1)}
+                              min="0.5"
+                              max="2"
+                              step="0.01"
+                              oninput={(e) => {
+                                const v = Number((e.currentTarget as HTMLInputElement).value);
+                                updatePaletteOverride(i, (cur) => ({
+                                  ...(cur ?? { enabled: true }),
+                                  enabled: true,
+                                  geometry: {
+                                    ...((cur as any)?.geometry ?? {}),
+                                    triangles3d: { ...(((cur as any)?.geometry?.triangles3d ?? {}) as any), heightMult: v }
+                                  }
+                                }));
+                              }}
+                            />
+                          </label>
+                        {:else if config.type === 'svg2d'}
+                          <label class="control-row slider">
+                            <span class="setting-title">Size: {Number(ov.geometry?.svg?.sizeMult ?? 1).toFixed(2)}</span>
+                            <input
+                              type="range"
+                              value={Number(ov.geometry?.svg?.sizeMult ?? 1)}
+                              min="0.5"
+                              max="2"
+                              step="0.01"
+                              oninput={(e) => {
+                                const v = Number((e.currentTarget as HTMLInputElement).value);
+                                updatePaletteOverride(i, (cur) => ({
+                                  ...(cur ?? { enabled: true }),
+                                  enabled: true,
+                                  geometry: { ...((cur as any)?.geometry ?? {}), svg: { ...(((cur as any)?.geometry?.svg ?? {}) as any), sizeMult: v } }
+                                }));
+                              }}
+                            />
+                          </label>
+                        {:else if config.type === 'svg3d'}
+                          <label class="control-row slider">
+                            <span class="setting-title">Size: {Number(ov.geometry?.svg?.sizeMult ?? 1).toFixed(2)}</span>
+                            <input
+                              type="range"
+                              value={Number(ov.geometry?.svg?.sizeMult ?? 1)}
+                              min="0.5"
+                              max="2"
+                              step="0.01"
+                              oninput={(e) => {
+                                const v = Number((e.currentTarget as HTMLInputElement).value);
+                                updatePaletteOverride(i, (cur) => ({
+                                  ...(cur ?? { enabled: true }),
+                                  enabled: true,
+                                  geometry: { ...((cur as any)?.geometry ?? {}), svg: { ...(((cur as any)?.geometry?.svg ?? {}) as any), sizeMult: v } }
+                                }));
+                              }}
+                            />
+                          </label>
+                          <label class="control-row slider">
+                            <span class="setting-title">Extrude: {Number(ov.geometry?.svg?.extrudeMult ?? 1).toFixed(2)}</span>
+                            <input
+                              type="range"
+                              value={Number(ov.geometry?.svg?.extrudeMult ?? 1)}
+                              min="0.5"
+                              max="2"
+                              step="0.01"
+                              oninput={(e) => {
+                                const v = Number((e.currentTarget as HTMLInputElement).value);
+                                updatePaletteOverride(i, (cur) => ({
+                                  ...(cur ?? { enabled: true }),
+                                  enabled: true,
+                                  geometry: { ...((cur as any)?.geometry ?? {}), svg: { ...(((cur as any)?.geometry?.svg ?? {}) as any), extrudeMult: v } }
+                                }));
+                              }}
+                            />
+                          </label>
+                        {/if}
                       {/if}
                     </details>
                   {/if}

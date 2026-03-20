@@ -6,6 +6,7 @@ import { createSurfaceMaterial } from '../materials.js';
 import { renderWithOptionalBloom } from './postprocessing.js';
 import { autoFitOrthographicCameraToBox } from './camera-fit.js';
 import { validateSvgSource } from '../svg-utils.js';
+import { resolvePaletteConfig } from '../palette.js';
 
 import { SVGLoader } from 'three/examples/jsm/loaders/SVGLoader.js';
 
@@ -332,6 +333,9 @@ export function createSvg3DScene(
   const rng = createRng(config.seed);
   const weightsNorm = normalizeWeights(config.svg.colorWeights ?? [], nColors);
 
+  const sizeMultByIndex = Array.from({ length: nColors }, (_, pi) => resolvePaletteConfig(config as any, pi).multipliers.svg.sizeMult);
+  const extrudeMultByIndex = Array.from({ length: nColors }, (_, pi) => resolvePaletteConfig(config as any, pi).multipliers.svg.extrudeMult);
+
   const count = Math.max(0, Math.round(Number(config.svg.count) || 0));
   const spread = Math.max(0, Number(config.svg.spread) || 0);
   const depth = Math.max(0, Number(config.svg.depth) || 0);
@@ -378,10 +382,13 @@ export function createSvg3DScene(
     const pi = pickIndex(i);
     const bucket = perColor[pi] ?? perColor[0];
 
+    const sizeMult = sizeMultByIndex[pi] ?? 1;
+    const extrudeMult = extrudeMultByIndex[pi] ?? 1;
+
     tmpPos.set(x, y, z);
     tmpEuler.set(0, 0, theta);
     tmpQuat.setFromEuler(tmpEuler);
-    tmpScale.set(size, size, 1);
+    tmpScale.set(size * sizeMult, size * sizeMult, extrudeMult);
     tmpMat.compose(tmpPos, tmpQuat, tmpScale);
     bucket.inst.setMatrixAt(bucket.count++, tmpMat);
   }

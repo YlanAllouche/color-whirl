@@ -13,6 +13,12 @@ export type ResolvedPaletteConfig = {
   textureParams: TextureParams;
   facades: FacadesConfig;
   edge: EdgeConfig;
+  multipliers: {
+    popsicle: { sizeMult: number; ratioMult: number; thicknessMult: number };
+    spheres3d: { radiusMult: number };
+    triangles3d: { radiusMult: number; heightMult: number };
+    svg: { sizeMult: number; extrudeMult: number };
+  };
   emission: {
     enabled: boolean;
     intensity: number;
@@ -43,6 +49,12 @@ function deepMerge<T>(base: T, patch: any): T {
 
 function clamp(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, n));
+}
+
+function clampMult(raw: unknown, min: number = 0.25, max: number = 4): number {
+  const v = Number(raw);
+  if (!Number.isFinite(v)) return 1;
+  return clamp(v, min, max);
 }
 
 export function getPaletteOverride(config: WallpaperConfig, paletteIndex: number): PaletteOverride | null {
@@ -79,12 +91,30 @@ export function resolvePaletteConfig(config: WallpaperConfig, paletteIndex: numb
 
   enabled = !!enabled && intensity > 0;
 
+  const popsicleSizeMult = clampMult((ov as any)?.geometry?.popsicle?.sizeMult);
+  const popsicleRatioMult = clampMult((ov as any)?.geometry?.popsicle?.ratioMult);
+  const popsicleThicknessMult = clampMult((ov as any)?.geometry?.popsicle?.thicknessMult);
+
+  const spheresRadiusMult = clampMult((ov as any)?.geometry?.spheres3d?.radiusMult);
+
+  const triRadiusMult = clampMult((ov as any)?.geometry?.triangles3d?.radiusMult);
+  const triHeightMult = clampMult((ov as any)?.geometry?.triangles3d?.heightMult);
+
+  const svgSizeMult = clampMult((ov as any)?.geometry?.svg?.sizeMult);
+  const svgExtrudeMult = clampMult((ov as any)?.geometry?.svg?.extrudeMult);
+
   return {
     paletteIndex,
     texture,
     textureParams,
     facades,
     edge,
+    multipliers: {
+      popsicle: { sizeMult: popsicleSizeMult, ratioMult: popsicleRatioMult, thicknessMult: popsicleThicknessMult },
+      spheres3d: { radiusMult: spheresRadiusMult },
+      triangles3d: { radiusMult: triRadiusMult, heightMult: triHeightMult },
+      svg: { sizeMult: svgSizeMult, extrudeMult: svgExtrudeMult }
+    },
     emission: { enabled, intensity }
   };
 }

@@ -356,6 +356,9 @@ export function createTriangles3DScene(
   const rng = createRng(config.seed);
   const w = normalizeWeights(config.prisms.colorWeights, nColors);
 
+  const radiusMultByIndex = Array.from({ length: nColors }, (_, pi) => resolvePaletteConfig(config, pi).multipliers.triangles3d.radiusMult);
+  const heightMultByIndex = Array.from({ length: nColors }, (_, pi) => resolvePaletteConfig(config, pi).multipliers.triangles3d.heightMult);
+
   const count = Math.max(0, Math.round(config.prisms.count));
   const spread = Math.max(0, Number(config.prisms.spread) || 0);
   const jitter = clamp01(Number(config.prisms.jitter) || 0);
@@ -679,6 +682,11 @@ void wmApplyCollisionMask(inout vec4 col) {
     const pi = assigned[i];
     const slot = cursor[pi]++;
 
+    const rm = radiusMultByIndex[pi] ?? 1;
+    const hm = heightMultByIndex[pi] ?? 1;
+    const radiusI = radius * rm;
+    const heightI = height * hm;
+
     let x = 0;
     let y = 0;
     let z = 0;
@@ -691,21 +699,21 @@ void wmApplyCollisionMask(inout vec4 col) {
       const cellH = (spread * 2) / gy;
       x = -spread + (cx + 0.5) * cellW;
       y = -spread + (cy + 0.5) * cellH;
-      z = (rng() - 0.5) * height * 0.5;
+      z = (rng() - 0.5) * heightI * 0.5;
     } else {
       x = (rng() - 0.5) * 2 * spread;
       y = (rng() - 0.5) * 2 * spread;
-      z = mode === 'stackedPrisms' ? (rng() - 0.5) * (spread * 0.7) : (rng() - 0.5) * height;
+      z = mode === 'stackedPrisms' ? (rng() - 0.5) * (spread * 0.7) : (rng() - 0.5) * heightI;
     }
 
-    x += (rng() - 0.5) * jitter * radius * 2;
-    y += (rng() - 0.5) * jitter * radius * 2;
-    z += (rng() - 0.5) * jitter * radius;
+    x += (rng() - 0.5) * jitter * radiusI * 2;
+    y += (rng() - 0.5) * jitter * radiusI * 2;
+    z += (rng() - 0.5) * jitter * radiusI;
 
     const rot = rng() * Math.PI * 2;
     tmpPos.set(x, y, z);
     tmpQuat.setFromEuler(new THREE.Euler(0, rot, 0));
-    tmpScale.set(radius, height, radius);
+    tmpScale.set(radiusI, heightI, radiusI);
     tmpMat.compose(tmpPos, tmpQuat, tmpScale);
     perColor[pi].inst.setMatrixAt(slot, tmpMat);
   }
