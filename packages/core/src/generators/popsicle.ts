@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { PopsicleConfig, EnvironmentStyle } from '../types.js';
 import { createStickMeshMaterial } from '../materials.js';
+import { resolvePaletteConfig } from '../palette.js';
 import { renderWithOptionalBloom } from './postprocessing.js';
 import { autoFitOrthographicCameraToBox } from './camera-fit.js';
 
@@ -466,7 +467,7 @@ export function createPopsicleScene(
 
   const group = new THREE.Group();
   const materialCache = new Map<string, THREE.Material | THREE.Material[]>();
-  const materialParamsKey = JSON.stringify({ t: config.textureParams, f: config.facades, ed: config.edge, g: (config as any).gruyere, em: config.emission });
+  const materialParamsKey = JSON.stringify({ t: config.textureParams, f: config.facades, ed: config.edge, g: (config as any).gruyere, em: config.emission, p: (config as any).palette });
   const getMat = (paletteIndex: number, hex: string) => {
     const key = [
       texture,
@@ -504,29 +505,48 @@ export function createPopsicleScene(
   }
 
   let outlineGroup: THREE.Group | null = null;
-  if (config.facades.outline.enabled) {
-    const oc = config.facades.outline;
-    const outlineMat = new THREE.MeshBasicMaterial({
-      color: new THREE.Color(oc.color),
-      side: THREE.BackSide,
-      transparent: oc.opacity < 1,
-      opacity: clamp(Number(oc.opacity) || 1, 0, 1),
-      depthWrite: false
-    });
-    const thickness = Math.max(0, Math.min(0.2, Number(oc.thickness) || 0));
+  {
     outlineGroup = new THREE.Group();
-    for (const child of group.children) {
-      if (!(child as any).isMesh) continue;
-      const mesh = child as THREE.Mesh;
-      const o = new THREE.Mesh(mesh.geometry, outlineMat);
-      o.position.copy(mesh.position);
-      o.rotation.copy(mesh.rotation);
-      o.scale.setScalar(1 + thickness);
-      o.castShadow = false;
-      o.receiveShadow = false;
-      outlineGroup.add(o);
+    const outlineMats = new Map<string, THREE.MeshBasicMaterial>();
+
+    for (let pi = 0; pi < nColors; pi++) {
+      const resolved = resolvePaletteConfig(config, pi);
+      const oc = resolved.facades.outline;
+      if (!oc?.enabled) continue;
+
+      const opacity = clamp(Number(oc.opacity) || 1, 0, 1);
+      const thickness = Math.max(0, Math.min(0.2, Number(oc.thickness) || 0));
+      if (!(thickness > 0)) continue;
+
+      const matKey = `${String(oc.color)}:${opacity.toFixed(4)}`;
+      let outlineMat = outlineMats.get(matKey);
+      if (!outlineMat) {
+        outlineMat = new THREE.MeshBasicMaterial({
+          color: new THREE.Color(oc.color),
+          side: THREE.BackSide,
+          transparent: opacity < 1,
+          opacity,
+          depthWrite: false
+        });
+        outlineMats.set(matKey, outlineMat);
+      }
+
+      for (const mesh of baseMeshesByPalette[pi] ?? []) {
+        const o = new THREE.Mesh(mesh.geometry, outlineMat);
+        o.position.copy(mesh.position);
+        o.rotation.copy(mesh.rotation);
+        o.scale.setScalar(1 + thickness);
+        o.castShadow = false;
+        o.receiveShadow = false;
+        outlineGroup.add(o);
+      }
     }
-    group.add(outlineGroup);
+
+    if (outlineGroup.children.length > 0) {
+      group.add(outlineGroup);
+    } else {
+      outlineGroup = null;
+    }
   }
 
   // Center AFTER adding outline so framing accounts for thickness.

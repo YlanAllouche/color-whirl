@@ -9,6 +9,7 @@ import type {
   GruyereConfig
 } from './types.js';
 import { createRng } from './types.js';
+import { resolvePaletteConfig } from './palette.js';
 
 type DrywallMaps = { normalMap: THREE.DataTexture; roughnessMap: THREE.DataTexture };
 
@@ -449,28 +450,24 @@ export function createStickMeshMaterial(
   stickOpacity: number,
   stickDimensions?: { width: number; height: number; depth: number }
 ): StickMeshMaterial {
-  const emit =
-    config.emission.enabled &&
-    Math.round(config.emission.paletteIndex) === Math.round(paletteIndex) &&
-    Number.isFinite(Number(config.emission.intensity)) &&
-    Number(config.emission.intensity) > 0;
-  const emissive = emit
-    ? { enabled: true, intensity: Number(config.emission.intensity), color }
+  const resolved = resolvePaletteConfig(config, paletteIndex);
+  const emissive = resolved.emission.enabled
+    ? { enabled: true, intensity: resolved.emission.intensity, color }
     : { enabled: false, intensity: 0, color };
 
   const face = createStickMaterial({
-    texture: config.texture,
+    texture: resolved.texture,
     color,
     envIntensity,
     stickOpacity,
     seed: config.seed,
-    textureParams: config.textureParams,
+    textureParams: resolved.textureParams,
     emissive
   });
 
   const applyEdgeFx = (m: THREE.Material, surfaceKind: 'cap' | 'side') => {
-    const seam = config.edge?.seam;
-    const band = config.edge?.band;
+    const seam = resolved.edge?.seam;
+    const band = resolved.edge?.band;
     if (!seam?.enabled && !band?.enabled) return;
     if (!stickDimensions) return;
 
@@ -571,17 +568,17 @@ varying vec3 wmObjPos;
     );
   };
 
-  const grazing = config.facades?.grazing;
+  const grazing = resolved.facades?.grazing;
   if (grazing?.enabled && grazing.mode !== 'mix') {
     applyGrazing(face, grazing);
   }
 
-  const sideCfg = config.facades?.side;
+  const sideCfg = resolved.facades?.side;
   const needsSideOverrides =
     !!sideCfg?.enabled && (clamp(Number(sideCfg.tintAmount) || 0, 0, 1) > 0 || clamp(Number(sideCfg.materialAmount) || 0, 0, 1) > 0);
 
-  const wantsHollow = !!config.edge?.hollow;
-  const edgeEnabled = !!config.edge?.seam?.enabled || !!config.edge?.band?.enabled;
+  const wantsHollow = !!resolved.edge?.hollow;
+  const edgeEnabled = !!resolved.edge?.seam?.enabled || !!resolved.edge?.band?.enabled;
   const needsSplitMaterial = wantsHollow || needsSideOverrides || (grazing?.enabled && grazing.mode === 'mix') || edgeEnabled;
 
   if (!needsSplitMaterial) {
@@ -637,25 +634,21 @@ export function createSurfaceMaterial(
   envIntensity: number,
   opacity: number
 ): THREE.Material {
-  const emit =
-    config.emission.enabled &&
-    Math.round(config.emission.paletteIndex) === Math.round(paletteIndex) &&
-    Number.isFinite(Number(config.emission.intensity)) &&
-    Number(config.emission.intensity) > 0;
-  const emissive = emit
-    ? { enabled: true, intensity: Number(config.emission.intensity), color }
+  const resolved = resolvePaletteConfig(config, paletteIndex);
+  const emissive = resolved.emission.enabled
+    ? { enabled: true, intensity: resolved.emission.intensity, color }
     : { enabled: false, intensity: 0, color };
 
   const m = createStickMaterial({
-    texture: config.texture,
+    texture: resolved.texture,
     color,
     envIntensity,
     stickOpacity: Math.max(0, Math.min(1, opacity)),
     seed: config.seed,
-    textureParams: config.textureParams,
+    textureParams: resolved.textureParams,
     emissive
   });
-  if (config.facades?.grazing?.enabled) applyGrazing(m, config.facades.grazing);
+  if (resolved.facades?.grazing?.enabled) applyGrazing(m, resolved.facades.grazing);
   applyGruyere(m, config);
   return m;
 }

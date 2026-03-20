@@ -1,5 +1,6 @@
 import type { Polygon2DConfig } from '../types.js';
 import { createRng } from '../types.js';
+import { resolvePaletteConfig } from '../palette.js';
 
 function clamp(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, n));
@@ -217,6 +218,11 @@ export function renderPolygon2DToCanvas(config: Polygon2DConfig, canvas?: HTMLCa
     return sampleWeightedIndex01(rng(), weights);
   };
 
+  const emissionByIndex = Array.from({ length: nColors }, (_, i) => {
+    const e = resolvePaletteConfig(config as any, i).emission;
+    return { enabled: !!e.enabled && !!config.bloom.enabled, intensity: e.intensity };
+  });
+
   const drawTo = (target: CanvasRenderingContext2D, path: Path2D, fill: string) => {
     target.fillStyle = rgba(fill, fillOpacity);
     target.fill(path);
@@ -228,13 +234,13 @@ export function renderPolygon2DToCanvas(config: Polygon2DConfig, canvas?: HTMLCa
     }
   };
 
-  const drawEmission = (target: CanvasRenderingContext2D, cx: number, cy: number, r: number, fill: string, theta: number) => {
-    if (!config.emission.enabled || !config.bloom.enabled) return;
-    const emit = Math.max(0, Number(config.emission.intensity) || 0);
-    if (!(emit > 0)) return;
-    const s = 1.0 + clamp(emit * 0.03, 0, 0.8);
+  const drawEmission = (target: CanvasRenderingContext2D, cx: number, cy: number, r: number, fill: string, theta: number, emit: number) => {
+    if (!config.bloom.enabled) return;
+    const e = Math.max(0, Number(emit) || 0);
+    if (!(e > 0)) return;
+    const s = 1.0 + clamp(e * 0.03, 0, 0.8);
     const glowPath = buildPolygonPath(cx, cy, r * s, edges, theta);
-    target.fillStyle = rgba(fill, clamp(0.06 + emit * 0.02, 0, 1));
+    target.fillStyle = rgba(fill, clamp(0.06 + e * 0.02, 0, 1));
     target.fill(glowPath);
   };
 
@@ -255,7 +261,8 @@ export function renderPolygon2DToCanvas(config: Polygon2DConfig, canvas?: HTMLCa
 
     if (!collisionsEnabled) {
       drawTo(sctx, path, color);
-      if (paletteIndex === Math.round(config.emission.paletteIndex)) drawEmission(gctx, cxJ, cyJ, r, color, theta);
+      const em = emissionByIndex[paletteIndex];
+      if (em?.enabled) drawEmission(gctx, cxJ, cyJ, r, color, theta, em.intensity);
       return;
     }
 
@@ -272,7 +279,10 @@ export function renderPolygon2DToCanvas(config: Polygon2DConfig, canvas?: HTMLCa
 
       tgctx.setTransform(1, 0, 0, 1, 0, 0);
       tgctx.clearRect(0, 0, tempGlow.width, tempGlow.height);
-      if (paletteIndex === Math.round(config.emission.paletteIndex)) drawEmission(tgctx, cxJ, cyJ, r, color, theta);
+      {
+        const em = emissionByIndex[paletteIndex];
+        if (em?.enabled) drawEmission(tgctx, cxJ, cyJ, r, color, theta, em.intensity);
+      }
       tgctx.globalCompositeOperation = 'destination-out';
       tgctx.globalAlpha = 1;
       tgctx.drawImage(mask, 0, 0);
@@ -293,7 +303,10 @@ export function renderPolygon2DToCanvas(config: Polygon2DConfig, canvas?: HTMLCa
     applyCarve(sctx, path);
     applyCarve(gctx, path);
     drawTo(sctx, path, color);
-    if (paletteIndex === Math.round(config.emission.paletteIndex)) drawEmission(gctx, cxJ, cyJ, r, color, theta);
+    {
+      const em = emissionByIndex[paletteIndex];
+      if (em?.enabled) drawEmission(gctx, cxJ, cyJ, r, color, theta, em.intensity);
+    }
   };
 
   for (let i = 0; i < count; i++) {

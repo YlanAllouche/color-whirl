@@ -147,6 +147,50 @@ export interface EmissionConfig {
   intensity: number;
 }
 
+export interface PaletteEmissionOverride {
+  /** Override global emission for this palette index */
+  enabled?: boolean;
+  /** 0..20 (recommended) */
+  intensity?: number;
+}
+
+export type TextureParamsOverride = {
+  drywall?: Partial<TextureParams['drywall']>;
+  glass?: Partial<TextureParams['glass']>;
+  cel?: Partial<TextureParams['cel']>;
+};
+
+export interface PaletteTextureOverride {
+  type?: TextureType;
+  params?: TextureParamsOverride;
+}
+
+export interface PaletteFacadesOverride {
+  side?: Partial<FacadeSideConfig>;
+  grazing?: Partial<GrazingConfig>;
+  outline?: Partial<OutlineConfig>;
+}
+
+export interface PaletteEdgeOverride {
+  hollow?: boolean;
+  seam?: Partial<EdgeSeamConfig>;
+  band?: Partial<EdgeBandConfig>;
+}
+
+export interface PaletteOverride {
+  /** Whether overrides for this palette index are active */
+  enabled: boolean;
+  emission?: PaletteEmissionOverride;
+  texture?: PaletteTextureOverride;
+  facades?: PaletteFacadesOverride;
+  edge?: PaletteEdgeOverride;
+}
+
+export interface PaletteConfig {
+  /** Per-palette overrides. Length may be < colors.length. Missing entries are treated as null. */
+  overrides: Array<PaletteOverride | null>;
+}
+
 export interface BloomConfig {
   enabled: boolean;
   strength: number;
@@ -244,6 +288,7 @@ export interface BaseWallpaperConfig {
   width: number;
   height: number;
   colors: string[];
+  palette: PaletteConfig;
   texture: TextureType;
   textureParams: TextureParams;
   backgroundColor: string;
@@ -611,6 +656,7 @@ export const DEFAULT_POPSICLE_CONFIG: PopsicleConfig = {
   width: 1920,
   height: 1080,
   colors: ['#FF6B6B', '#FF8E53', '#FE6B8B', '#FF8E53', '#FFD93D'],
+  palette: { overrides: [] },
   texture: 'glossy',
   textureParams: {
     drywall: { grainAmount: 0.65, grainScale: 2.5 },
@@ -1066,6 +1112,21 @@ export function normalizeWallpaperConfig(input: any): WallpaperConfig {
     if (!edgeObj.band || typeof edgeObj.band !== 'object') edgeObj.band = cloneJson((base as any).edge.band);
   }
 
+  // Palette overrides validation.
+  const pAny: any = (merged as any).palette;
+  if (!pAny || typeof pAny !== 'object') {
+    (merged as any).palette = { overrides: [] };
+  } else {
+    if (!Array.isArray(pAny.overrides)) pAny.overrides = [];
+    pAny.overrides = pAny.overrides
+      .map((v: any) => {
+        if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+        const enabled = typeof v.enabled === 'boolean' ? v.enabled : !!v.enabled;
+        return { ...v, enabled };
+      })
+      .filter((v: any) => v === null || (v && typeof v === 'object'));
+  }
+
   // Back-compat: triangles3d prisms.wallBulge -> wallBulgeX/wallBulgeY.
   if ((merged as any).type === 'triangles3d') {
     const prisms: any = (merged as any).prisms;
@@ -1363,6 +1424,7 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
     width: DEFAULT_POPSICLE_CONFIG.width,
     height: DEFAULT_POPSICLE_CONFIG.height,
     colors: [...theme.colors],
+    palette: { overrides: [] },
     texture: textures[Math.floor(rng() * textures.length)],
     textureParams: {
       drywall: {
@@ -1496,6 +1558,49 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
     // Do not randomize geometry.quality here (parameter-like).
     geometry: { ...DEFAULT_POPSICLE_CONFIG.geometry }
   };
+
+  // Palette overrides: strongly biased toward none.
+  // Occasionally enables a single accent color emission and/or a per-color texture.
+  {
+    const n = Math.max(0, base.colors.length);
+    const overrides: Array<any> = [];
+
+    const setOverride = (pi: number, patch: any) => {
+      const cur = overrides[pi] && typeof overrides[pi] === 'object' ? overrides[pi] : null;
+      overrides[pi] = { ...(cur ?? { enabled: true }), ...patch, enabled: true };
+    };
+
+    const hasGlobalEmission = !!base.emission.enabled && (Number(base.emission.intensity) || 0) > 0;
+    const allowOverrides = chance(0.06);
+
+    if (allowOverrides && n > 0) {
+      // Emission accent.
+      if (chance(hasGlobalEmission ? 0.22 : 0.55)) {
+        const idx0 = Math.floor(rng() * n);
+        const idx = hasGlobalEmission && n > 1 ? (idx0 + 1 + Math.floor(rng() * (n - 1))) % n : idx0;
+        const baseIntensity = clamp(Number(base.emission.intensity) || DEFAULT_POPSICLE_CONFIG.emission.intensity, 0, 20);
+        const intensity = hasGlobalEmission
+          ? clamp(baseIntensity * tri(0.25, 0.7, 1.0), 0, 20)
+          : clamp(tri(0.6, baseIntensity, 14), 0, 20);
+        setOverride(idx, { emission: { enabled: true, intensity } });
+        // Keep random configs coherent: bloom is required for 2D glow and improves 3D emission.
+        base.bloom.enabled = true;
+      }
+
+      // Very rare: per-color texture for 3D types.
+      if (is3DType && chance(0.12)) {
+        const idx = Math.floor(rng() * n);
+        const type: TextureType = chance(0.55) ? 'glass' : chance(0.6) ? 'mirror' : chance(0.5) ? 'metallic' : 'matte';
+        const params: any =
+          type === 'glass'
+            ? { glass: { style: (['simple', 'frosted', 'thick', 'stylized'] as const)[Math.floor(rng() * 4)] } }
+            : undefined;
+        setOverride(idx, { texture: { type, params } });
+      }
+
+      base.palette.overrides = overrides;
+    }
+  }
 
   switch (type) {
     case 'spheres3d':

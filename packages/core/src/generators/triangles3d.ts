@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Triangles3DConfig, EnvironmentStyle, PaletteAssignMode } from '../types.js';
 import { createSurfaceMaterial } from '../materials.js';
 import { createRng } from '../types.js';
+import { resolvePaletteConfig } from '../palette.js';
 import { renderWithOptionalBloom } from './postprocessing.js';
 import { autoFitOrthographicCameraToBox } from './camera-fit.js';
 
@@ -715,16 +716,30 @@ void wmApplyCollisionMask(inout vec4 col) {
   }
 
   // Outline is supported, but is an extra pass (raster-only).
-  if (config.facades.outline.enabled) {
-    const outlineMat = new THREE.MeshBasicMaterial({
-      color: new THREE.Color(config.facades.outline.color),
-      side: THREE.BackSide,
-      transparent: config.facades.outline.opacity < 1,
-      opacity: clamp(Number(config.facades.outline.opacity) || 1, 0, 1),
-      depthWrite: false
-    });
-    const thickness = Math.max(0, Math.min(0.2, Number(config.facades.outline.thickness) || 0));
+  // Per-palette overrides are supported.
+  {
+    const outlineMats = new Map<string, THREE.MeshBasicMaterial>();
     for (let pi = 0; pi < nColors; pi++) {
+      const oc = resolvePaletteConfig(config, pi).facades.outline;
+      if (!oc?.enabled) continue;
+
+      const opacity = clamp(Number(oc.opacity) || 1, 0, 1);
+      const thickness = Math.max(0, Math.min(0.2, Number(oc.thickness) || 0));
+      if (!(thickness > 0)) continue;
+
+      const matKey = `${String(oc.color)}:${opacity.toFixed(4)}`;
+      let outlineMat = outlineMats.get(matKey);
+      if (!outlineMat) {
+        outlineMat = new THREE.MeshBasicMaterial({
+          color: new THREE.Color(oc.color),
+          side: THREE.BackSide,
+          transparent: opacity < 1,
+          opacity,
+          depthWrite: false
+        });
+        outlineMats.set(matKey, outlineMat);
+      }
+
       const baseInst = perColor[pi].inst;
       const outInst = new THREE.InstancedMesh(geometry, outlineMat, baseInst.count);
       outInst.castShadow = false;

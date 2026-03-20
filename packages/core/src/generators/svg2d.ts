@@ -1,6 +1,7 @@
 import type { Svg2DConfig, PaletteAssignMode } from '../types.js';
 import { createRng } from '../types.js';
 import { validateSvgSource } from '../svg-utils.js';
+import { resolvePaletteConfig } from '../palette.js';
 
 import { SVGLoader } from 'three/examples/jsm/loaders/SVGLoader.js';
 
@@ -174,6 +175,11 @@ export function renderSvg2DToCanvas(config: Svg2DConfig, canvas?: HTMLCanvasElem
   const nColors = Math.max(1, colors.length);
   const weightsNorm = normalizeWeights(config.svg.colorWeights ?? [], nColors);
 
+  const emissionByIndex = Array.from({ length: nColors }, (_, i) => {
+    const e = resolvePaletteConfig(config as any, i).emission;
+    return { enabled: !!e.enabled && !!config.bloom.enabled, intensity: e.intensity };
+  });
+
   const count = Math.max(0, Math.round(Number(config.svg.count) || 0));
   const rMin = Math.max(0.1, Number(config.svg.rMinPx) || 1);
   const rMax = Math.max(rMin, Number(config.svg.rMaxPx) || rMin);
@@ -213,17 +219,17 @@ export function renderSvg2DToCanvas(config: Svg2DConfig, canvas?: HTMLCanvasElem
     target.restore();
   };
 
-  const drawEmission = (x: number, y: number, r: number, theta: number, fill: string) => {
-    if (!config.emission.enabled || !config.bloom.enabled) return;
-    const emit = Math.max(0, Number(config.emission.intensity) || 0);
-    if (!(emit > 0)) return;
+  const drawEmission = (x: number, y: number, r: number, theta: number, fill: string, emit: number) => {
+    if (!config.bloom.enabled) return;
+    const e = Math.max(0, Number(emit) || 0);
+    if (!(e > 0)) return;
 
-    const s = 1.0 + clamp(emit * 0.03, 0, 0.85);
+    const s = 1.0 + clamp(e * 0.03, 0, 0.85);
     gctx.save();
     gctx.translate(x, y);
     gctx.rotate(theta);
     gctx.scale(r * s, r * s);
-    gctx.fillStyle = rgba(fill, clamp(0.06 + emit * 0.02, 0, 1));
+    gctx.fillStyle = rgba(fill, clamp(0.06 + e * 0.02, 0, 1));
     gctx.fill(shapePath, 'evenodd');
     gctx.restore();
   };
@@ -240,8 +246,9 @@ export function renderSvg2DToCanvas(config: Svg2DConfig, canvas?: HTMLCanvasElem
     const fill = colors[pi] ?? '#ffffff';
 
     drawShape(ctx, x, y, r, theta, fill);
-    if (pi === Math.round(Number(config.emission.paletteIndex) || 0)) {
-      drawEmission(x, y, r, theta, fill);
+    {
+      const em = emissionByIndex[pi];
+      if (em?.enabled) drawEmission(x, y, r, theta, fill, em.intensity);
     }
   }
 

@@ -1,5 +1,6 @@
 import type { Triangles2DConfig } from '../types.js';
 import { createRng } from '../types.js';
+import { resolvePaletteConfig } from '../palette.js';
 
 function clamp(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, n));
@@ -247,11 +248,16 @@ export function renderTriangles2DToCanvas(config: Triangles2DConfig, canvas?: HT
     }
   };
 
-  const drawGlow = (target: CanvasRenderingContext2D, path: Path2D, fill: string) => {
-    if (!config.emission.enabled || !config.bloom.enabled) return;
-    const emit = Math.max(0, Number(config.emission.intensity) || 0);
-    if (!(emit > 0)) return;
-    target.fillStyle = rgba(fill, clamp(0.04 + emit * 0.02, 0, 1));
+  const emissionByIndex = Array.from({ length: nColors }, (_, i) => {
+    const e = resolvePaletteConfig(config as any, i).emission;
+    return { enabled: !!e.enabled && !!config.bloom.enabled, intensity: e.intensity };
+  });
+
+  const drawGlow = (target: CanvasRenderingContext2D, path: Path2D, fill: string, emit: number) => {
+    if (!config.bloom.enabled) return;
+    const e = Math.max(0, Number(emit) || 0);
+    if (!(e > 0)) return;
+    target.fillStyle = rgba(fill, clamp(0.04 + e * 0.02, 0, 1));
     target.fill(path);
   };
 
@@ -274,12 +280,12 @@ export function renderTriangles2DToCanvas(config: Triangles2DConfig, canvas?: HT
     p.lineTo(cx1, cy1);
     p.closePath();
 
-    const emitIdx = Math.round(config.emission.paletteIndex);
-    const wantsGlow = config.emission.enabled && idx === emitIdx && config.bloom.enabled;
+    const em = emissionByIndex[idx];
+    const wantsGlow = !!em?.enabled;
 
     if (!collisionsEnabled) {
       drawTo(sctx, p, fill);
-      if (wantsGlow) drawGlow(gctx, p, fill);
+      if (wantsGlow) drawGlow(gctx, p, fill, em.intensity);
       return;
     }
 
@@ -296,7 +302,7 @@ export function renderTriangles2DToCanvas(config: Triangles2DConfig, canvas?: HT
 
       tgctx.setTransform(1, 0, 0, 1, 0, 0);
       tgctx.clearRect(0, 0, tempGlow.width, tempGlow.height);
-      if (wantsGlow) drawGlow(tgctx, p, fill);
+      if (wantsGlow) drawGlow(tgctx, p, fill, em.intensity);
       tgctx.globalCompositeOperation = 'destination-out';
       tgctx.globalAlpha = 1;
       tgctx.drawImage(mask, 0, 0);
@@ -317,7 +323,7 @@ export function renderTriangles2DToCanvas(config: Triangles2DConfig, canvas?: HT
     applyCarve(sctx, p);
     applyCarve(gctx, p);
     drawTo(sctx, p, fill);
-    if (wantsGlow) drawGlow(gctx, p, fill);
+    if (wantsGlow) drawGlow(gctx, p, fill, em.intensity);
   };
 
   const mode = config.triangles.mode;

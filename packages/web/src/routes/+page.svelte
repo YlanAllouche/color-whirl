@@ -91,9 +91,16 @@
 
   function applyColorPreset(preset: ColorPreset) {
     if (preset.colors.length === 0) return;
+    const nextColors = [...preset.colors];
+    const pAny: any = (config as any).palette;
+    const curOverrides: any[] = Array.isArray(pAny?.overrides) ? pAny.overrides.slice() : [];
+    const nextOverrides = curOverrides.slice(0, nextColors.length);
+    while (nextOverrides.length < nextColors.length) nextOverrides.push(null);
+
     config = {
       ...config,
-      colors: [...preset.colors],
+      colors: nextColors,
+      palette: { ...(pAny && typeof pAny === 'object' ? pAny : {}), overrides: nextOverrides },
       backgroundColor: preset.backgroundColor
     };
 
@@ -435,14 +442,23 @@
   }
   
   function addColor() {
-    config = { ...config, colors: [...config.colors, '#ffffff'] };
+    const nextColors = [...config.colors, '#ffffff'];
+    const pAny: any = (config as any).palette;
+    const curOverrides: any[] = Array.isArray(pAny?.overrides) ? pAny.overrides.slice() : [];
+    const nextOverrides = curOverrides.slice(0, nextColors.length);
+    while (nextOverrides.length < nextColors.length) nextOverrides.push(null);
+    config = { ...config, colors: nextColors, palette: { ...(pAny && typeof pAny === 'object' ? pAny : {}), overrides: nextOverrides } } as any;
     schedulePreviewRender();
   }
   
   function removeColor(index: number) {
     if (config.colors.length > 1) {
       const newColors = config.colors.filter((_, i) => i !== index);
-      config = { ...config, colors: newColors };
+      const pAny: any = (config as any).palette;
+      const curOverrides: any[] = Array.isArray(pAny?.overrides) ? pAny.overrides.slice() : [];
+      const nextOverrides = curOverrides.filter((_, i) => i !== index).slice(0, newColors.length);
+      while (nextOverrides.length < newColors.length) nextOverrides.push(null);
+      config = { ...config, colors: newColors, palette: { ...(pAny && typeof pAny === 'object' ? pAny : {}), overrides: nextOverrides } } as any;
       schedulePreviewRender();
     }
   }
@@ -453,15 +469,89 @@
     config = { ...config, colors: newColors };
   }
 
+  function updatePaletteOverride(paletteIndex: number, fn: (cur: any | null) => any | null) {
+    const colorsLen = Math.max(0, config.colors.length);
+    const pAny: any = (config as any).palette;
+    const palette = pAny && typeof pAny === 'object' ? pAny : { overrides: [] };
+    const overrides: any[] = Array.isArray(palette.overrides) ? palette.overrides.slice() : [];
+    while (overrides.length < colorsLen) overrides.push(null);
+
+    const cur = overrides[paletteIndex];
+    const curObj = cur && typeof cur === 'object' && !Array.isArray(cur) ? cur : null;
+    const next = fn(curObj);
+    overrides[paletteIndex] = next;
+    config = { ...config, palette: { ...palette, overrides } } as any;
+  }
+
+  function togglePaletteOverride(paletteIndex: number) {
+    updatePaletteOverride(paletteIndex, (cur) => {
+      if (!cur) return { enabled: true };
+      return { ...cur, enabled: !cur.enabled };
+    });
+  }
+
+  function togglePaletteBlock(paletteIndex: number, block: 'emission' | 'texture' | 'grazing' | 'side' | 'outline' | 'edge') {
+    updatePaletteOverride(paletteIndex, (cur) => {
+      const base = cur ?? { enabled: true };
+      const enabled = typeof (base as any).enabled === 'boolean' ? (base as any).enabled : true;
+      const next: any = { ...base, enabled };
+
+      if (block === 'emission') {
+        if (next.emission) delete next.emission;
+        else next.emission = { enabled: true, intensity: Number(config.emission.intensity) || 0 };
+      }
+
+      if (block === 'texture') {
+        if (next.texture) delete next.texture;
+        else next.texture = { type: config.texture, params: {} };
+      }
+
+      if (block === 'grazing') {
+        if (next.facades?.grazing) {
+          next.facades = { ...(next.facades ?? {}) };
+          delete next.facades.grazing;
+        } else {
+          next.facades = { ...(next.facades ?? {}), grazing: { ...config.facades.grazing } };
+        }
+      }
+
+      if (block === 'side') {
+        if (next.facades?.side) {
+          next.facades = { ...(next.facades ?? {}) };
+          delete next.facades.side;
+        } else {
+          next.facades = { ...(next.facades ?? {}), side: { ...config.facades.side } };
+        }
+      }
+
+      if (block === 'outline') {
+        if (next.facades?.outline) {
+          next.facades = { ...(next.facades ?? {}) };
+          delete next.facades.outline;
+        } else {
+          next.facades = { ...(next.facades ?? {}), outline: { ...config.facades.outline } };
+        }
+      }
+
+      if (block === 'edge') {
+        if (next.edge) delete next.edge;
+        else next.edge = { ...config.edge, seam: { ...config.edge.seam }, band: { ...config.edge.band } };
+      }
+
+      return next;
+    });
+  }
+
   function cloneDefaultConfig(): WallpaperConfig {
       return {
          ...DEFAULT_CONFIG,
-           colors: [...DEFAULT_CONFIG.colors],
-            textureParams: {
-              drywall: { ...DEFAULT_CONFIG.textureParams.drywall },
-              glass: { ...DEFAULT_CONFIG.textureParams.glass },
-              cel: { ...DEFAULT_CONFIG.textureParams.cel }
-            },
+            colors: [...DEFAULT_CONFIG.colors],
+            palette: { overrides: Array.isArray((DEFAULT_CONFIG as any).palette?.overrides) ? (DEFAULT_CONFIG as any).palette.overrides.map((v: any) => (v && typeof v === 'object' ? { ...v } : null)) : [] },
+             textureParams: {
+               drywall: { ...DEFAULT_CONFIG.textureParams.drywall },
+               glass: { ...DEFAULT_CONFIG.textureParams.glass },
+               cel: { ...DEFAULT_CONFIG.textureParams.cel }
+             },
             facades: {
               side: { ...DEFAULT_CONFIG.facades.side },
               grazing: { ...DEFAULT_CONFIG.facades.grazing },
@@ -486,9 +576,21 @@
 
   function mergeWithLocks(next: WallpaperConfig): WallpaperConfig {
     const current = config;
+
+    const cloneAny = <T>(value: T): T => {
+      try {
+        return structuredClone(value);
+      } catch {
+        return JSON.parse(JSON.stringify(value));
+      }
+    };
+
     const merged: WallpaperConfig = {
       ...next,
       colors: [...next.colors],
+      palette: {
+        overrides: Array.isArray((next as any).palette?.overrides) ? cloneAny((next as any).palette.overrides) : []
+      } as any,
       textureParams: {
         drywall: { ...next.textureParams.drywall },
         glass: { ...next.textureParams.glass },
@@ -521,14 +623,6 @@
 
     // Geometry quality is not randomized; always preserve the current value.
     merged.geometry = { ...current.geometry };
-
-    const cloneAny = <T>(value: T): T => {
-      try {
-        return structuredClone(value);
-      } catch {
-        return JSON.parse(JSON.stringify(value));
-      }
-    };
 
     const getAtPath = (obj: any, path: string): any => {
       const parts = path.split('.').filter(Boolean);
@@ -582,11 +676,24 @@
   }
 
   function cloneConfigDeep(src: WallpaperConfig): WallpaperConfig {
+    const cloneAny = <T>(value: T): T => {
+      try {
+        return structuredClone(value);
+      } catch {
+        return JSON.parse(JSON.stringify(value));
+      }
+    };
+
+    const palette = {
+      overrides: Array.isArray((src as any).palette?.overrides) ? cloneAny((src as any).palette.overrides) : []
+    } as any;
+
     switch (src.type) {
       case 'popsicle':
         return {
           ...src,
           colors: [...src.colors],
+          palette,
           textureParams: {
             drywall: { ...src.textureParams.drywall },
             glass: { ...src.textureParams.glass },
@@ -616,6 +723,7 @@
         return {
           ...src,
           colors: [...src.colors],
+          palette,
           textureParams: {
             drywall: { ...src.textureParams.drywall },
             glass: { ...src.textureParams.glass },
@@ -646,6 +754,7 @@
         return {
           ...src,
           colors: [...src.colors],
+          palette,
           textureParams: {
             drywall: { ...src.textureParams.drywall },
             glass: { ...src.textureParams.glass },
@@ -681,6 +790,7 @@
         return {
           ...src,
           colors: [...src.colors],
+          palette,
           textureParams: {
             drywall: { ...src.textureParams.drywall },
             glass: { ...src.textureParams.glass },
@@ -715,6 +825,7 @@
         return {
           ...src,
           colors: [...src.colors],
+          palette,
           textureParams: {
             drywall: { ...src.textureParams.drywall },
             glass: { ...src.textureParams.glass },
@@ -750,6 +861,7 @@
         return {
           ...src,
           colors: [...src.colors],
+          palette,
           textureParams: {
             drywall: { ...src.textureParams.drywall },
             glass: { ...src.textureParams.glass },
@@ -780,6 +892,7 @@
         return {
           ...src,
           colors: [...src.colors],
+          palette,
           textureParams: {
             drywall: { ...src.textureParams.drywall },
             glass: { ...src.textureParams.glass },
@@ -817,6 +930,7 @@
         return {
           ...src,
           colors: [...src.colors],
+          palette,
           textureParams: {
             drywall: { ...src.textureParams.drywall },
             glass: { ...src.textureParams.glass },
@@ -851,6 +965,7 @@
         return {
           ...src,
           colors: [...src.colors],
+          palette,
           textureParams: {
             drywall: { ...src.textureParams.drywall },
             glass: { ...src.textureParams.glass },
@@ -885,6 +1000,7 @@
         return {
           ...src,
           colors: [...src.colors],
+          palette,
           textureParams: {
             drywall: { ...src.textureParams.drywall },
             glass: { ...src.textureParams.glass },
@@ -929,6 +1045,18 @@
     next.width = current.width;
     next.height = current.height;
     next.colors = [...current.colors];
+    {
+      const curOverrides: any[] = Array.isArray((current as any).palette?.overrides) ? (current as any).palette.overrides : [];
+      let nextOverrides: any[];
+      try {
+        nextOverrides = structuredClone(curOverrides);
+      } catch {
+        nextOverrides = JSON.parse(JSON.stringify(curOverrides));
+      }
+      nextOverrides = nextOverrides.slice(0, next.colors.length);
+      while (nextOverrides.length < next.colors.length) nextOverrides.push(null);
+      (next as any).palette = { overrides: nextOverrides };
+    }
     next.backgroundColor = current.backgroundColor;
     next.texture = current.texture;
     next.textureParams = {
@@ -1179,6 +1307,55 @@
     void c.height;
     void c.seed;
     void c.colors.join(',');
+    {
+      const ovs: any[] | undefined = (c as any).palette?.overrides;
+      if (Array.isArray(ovs)) {
+        for (const o of ovs) {
+          if (!o || typeof o !== 'object') continue;
+          void o.enabled;
+          void o.emission?.enabled;
+          void o.emission?.intensity;
+          void o.texture?.type;
+          void o.texture?.params?.drywall?.grainAmount;
+          void o.texture?.params?.drywall?.grainScale;
+          void o.texture?.params?.glass?.style;
+          void o.texture?.params?.cel?.bands;
+          void o.texture?.params?.cel?.halftone;
+          void o.facades?.grazing?.enabled;
+          void o.facades?.grazing?.mode;
+          void o.facades?.grazing?.color;
+          void o.facades?.grazing?.strength;
+          void o.facades?.grazing?.power;
+          void o.facades?.grazing?.width;
+          void o.facades?.grazing?.noise;
+          void o.facades?.side?.enabled;
+          void o.facades?.side?.tintColor;
+          void o.facades?.side?.tintAmount;
+          void o.facades?.side?.materialAmount;
+          void o.facades?.side?.roughness;
+          void o.facades?.side?.metalness;
+          void o.facades?.side?.clearcoat;
+          void o.facades?.side?.envIntensityMult;
+          void o.facades?.outline?.enabled;
+          void o.facades?.outline?.color;
+          void o.facades?.outline?.thickness;
+          void o.facades?.outline?.opacity;
+          void o.edge?.hollow;
+          void o.edge?.seam?.enabled;
+          void o.edge?.seam?.color;
+          void o.edge?.seam?.opacity;
+          void o.edge?.seam?.width;
+          void o.edge?.seam?.noise;
+          void o.edge?.seam?.emissiveIntensity;
+          void o.edge?.band?.enabled;
+          void o.edge?.band?.color;
+          void o.edge?.band?.opacity;
+          void o.edge?.band?.width;
+          void o.edge?.band?.noise;
+          void o.edge?.band?.emissiveIntensity;
+        }
+      }
+    }
     void c.texture;
     void c.textureParams.drywall.grainAmount;
     void c.textureParams.drywall.grainScale;
@@ -1639,6 +1816,839 @@
           {/each}
           <button class="add-btn" onclick={addColor}>+ Add Color</button>
         </div>
+
+        <details class="control-details">
+          <summary class="control-details-summary">Per-color overrides</summary>
+          <div class="palette-overrides">
+            {#each config.colors as c, i}
+              {@const ov = (config as any).palette?.overrides?.[i]}
+              {@const ovEnabled = !!ov?.enabled}
+              <details class="palette-override-item">
+                <summary class="palette-override-summary">
+                  <span class="mono">#{i}</span>
+                  <span class="swatch" style={`background: ${c}`}></span>
+                  <span class="mono">{c}</span>
+                </summary>
+
+                <label class="control-row checkbox">
+                  <input type="checkbox" checked={ovEnabled} oninput={() => togglePaletteOverride(i)} />
+                  <span class="setting-title">Enable overrides</span>
+                </label>
+
+                {#if ovEnabled}
+                  {#if supportsEmission}
+                    <details class="control-details">
+                      <summary class="control-details-summary">Emission</summary>
+                      <label class="control-row checkbox">
+                        <input type="checkbox" checked={!!ov?.emission} oninput={() => togglePaletteBlock(i, 'emission')} />
+                        <span class="setting-title">Override emission</span>
+                      </label>
+
+                      {#if ov?.emission}
+                        <label class="control-row checkbox">
+                          <input
+                            type="checkbox"
+                            checked={!!ov.emission.enabled}
+                            oninput={(e) => {
+                              const checked = (e.currentTarget as HTMLInputElement).checked;
+                              updatePaletteOverride(i, (cur) => ({
+                                ...(cur ?? { enabled: true }),
+                                enabled: true,
+                                emission: { ...(cur?.emission ?? {}), enabled: checked }
+                              }));
+                            }}
+                          />
+                          <span class="setting-title">Emit</span>
+                        </label>
+                        <label class="control-row slider">
+                          <span class="setting-title">Intensity: {Number(ov.emission.intensity ?? config.emission.intensity).toFixed(2)}</span>
+                          <input
+                            type="range"
+                            value={Number(ov.emission.intensity ?? config.emission.intensity)}
+                            min="0"
+                            max="20"
+                            step="0.05"
+                            oninput={(e) => {
+                              const v = Number((e.currentTarget as HTMLInputElement).value);
+                              updatePaletteOverride(i, (cur) => ({
+                                ...(cur ?? { enabled: true }),
+                                enabled: true,
+                                emission: { ...(cur?.emission ?? {}), intensity: v }
+                              }));
+                            }}
+                          />
+                        </label>
+                      {/if}
+                    </details>
+                  {/if}
+
+                  {#if is3DType}
+                    <details class="control-details">
+                      <summary class="control-details-summary">Texture</summary>
+                      <label class="control-row checkbox">
+                        <input type="checkbox" checked={!!ov?.texture} oninput={() => togglePaletteBlock(i, 'texture')} />
+                        <span class="setting-title">Override texture</span>
+                      </label>
+
+                      {#if ov?.texture}
+                        <label class="control-row">
+                          <span class="setting-title">Type</span>
+                          <select
+                            value={ov.texture.type ?? config.texture}
+                            oninput={(e) => {
+                              const value = (e.currentTarget as HTMLSelectElement).value;
+                              updatePaletteOverride(i, (cur) => ({
+                                ...(cur ?? { enabled: true }),
+                                enabled: true,
+                                texture: { ...(cur?.texture ?? {}), type: value }
+                              }));
+                            }}
+                          >
+                            <option value="glossy">Glossy</option>
+                            <option value="matte">Matte</option>
+                            <option value="metallic">Metallic</option>
+                            <option value="drywall">Drywall</option>
+                            <option value="glass">Glass</option>
+                            <option value="mirror">Mirror</option>
+                            <option value="cel">Cel</option>
+                          </select>
+                        </label>
+
+                        {#if (ov.texture.type ?? config.texture) === 'drywall'}
+                          <label class="control-row slider">
+                            <span class="setting-title">Grain: {Number(ov.texture.params?.drywall?.grainAmount ?? config.textureParams.drywall.grainAmount).toFixed(2)}</span>
+                            <input
+                              type="range"
+                              value={Number(ov.texture.params?.drywall?.grainAmount ?? config.textureParams.drywall.grainAmount)}
+                              min="0"
+                              max="1"
+                              step="0.01"
+                              oninput={(e) => {
+                                const v = Number((e.currentTarget as HTMLInputElement).value);
+                                updatePaletteOverride(i, (cur) => ({
+                                  ...(cur ?? { enabled: true }),
+                                  enabled: true,
+                                  texture: {
+                                    ...(cur?.texture ?? {}),
+                                    params: {
+                                      ...((cur?.texture as any)?.params ?? {}),
+                                      drywall: { ...(((cur?.texture as any)?.params?.drywall ?? {}) as any), grainAmount: v }
+                                    }
+                                  }
+                                }));
+                              }}
+                            />
+                          </label>
+                          <label class="control-row slider">
+                            <span class="setting-title">Grain Scale: {Number(ov.texture.params?.drywall?.grainScale ?? config.textureParams.drywall.grainScale).toFixed(2)}</span>
+                            <input
+                              type="range"
+                              value={Number(ov.texture.params?.drywall?.grainScale ?? config.textureParams.drywall.grainScale)}
+                              min="0.5"
+                              max="8"
+                              step="0.05"
+                              oninput={(e) => {
+                                const v = Number((e.currentTarget as HTMLInputElement).value);
+                                updatePaletteOverride(i, (cur) => ({
+                                  ...(cur ?? { enabled: true }),
+                                  enabled: true,
+                                  texture: {
+                                    ...(cur?.texture ?? {}),
+                                    params: {
+                                      ...((cur?.texture as any)?.params ?? {}),
+                                      drywall: { ...(((cur?.texture as any)?.params?.drywall ?? {}) as any), grainScale: v }
+                                    }
+                                  }
+                                }));
+                              }}
+                            />
+                          </label>
+                        {/if}
+
+                        {#if (ov.texture.type ?? config.texture) === 'glass'}
+                          <label class="control-row">
+                            <span class="setting-title">Glass Style</span>
+                            <select
+                              value={ov.texture.params?.glass?.style ?? config.textureParams.glass.style}
+                              oninput={(e) => {
+                                const v = (e.currentTarget as HTMLSelectElement).value;
+                                updatePaletteOverride(i, (cur) => ({
+                                  ...(cur ?? { enabled: true }),
+                                  enabled: true,
+                                  texture: {
+                                    ...(cur?.texture ?? {}),
+                                    params: { ...((cur?.texture as any)?.params ?? {}), glass: { style: v } }
+                                  }
+                                }));
+                              }}
+                            >
+                              <option value="simple">Simple</option>
+                              <option value="frosted">Frosted</option>
+                              <option value="thick">Thick</option>
+                              <option value="stylized">Stylized</option>
+                            </select>
+                          </label>
+                        {/if}
+
+                        {#if (ov.texture.type ?? config.texture) === 'cel'}
+                          <label class="control-row slider">
+                            <span class="setting-title">Bands: {Math.round(Number(ov.texture.params?.cel?.bands ?? config.textureParams.cel.bands))}</span>
+                            <input
+                              type="range"
+                              value={Number(ov.texture.params?.cel?.bands ?? config.textureParams.cel.bands)}
+                              min="2"
+                              max="8"
+                              step="1"
+                              oninput={(e) => {
+                                const v = Number((e.currentTarget as HTMLInputElement).value);
+                                updatePaletteOverride(i, (cur) => ({
+                                  ...(cur ?? { enabled: true }),
+                                  enabled: true,
+                                  texture: {
+                                    ...(cur?.texture ?? {}),
+                                    params: { ...((cur?.texture as any)?.params ?? {}), cel: { ...(((cur?.texture as any)?.params?.cel ?? {}) as any), bands: v } }
+                                  }
+                                }));
+                              }}
+                            />
+                          </label>
+                          <label class="control-row checkbox">
+                            <input
+                              type="checkbox"
+                              checked={!!(ov.texture.params?.cel?.halftone ?? config.textureParams.cel.halftone)}
+                              oninput={(e) => {
+                                const checked = (e.currentTarget as HTMLInputElement).checked;
+                                updatePaletteOverride(i, (cur) => ({
+                                  ...(cur ?? { enabled: true }),
+                                  enabled: true,
+                                  texture: {
+                                    ...(cur?.texture ?? {}),
+                                    params: { ...((cur?.texture as any)?.params ?? {}), cel: { ...(((cur?.texture as any)?.params?.cel ?? {}) as any), halftone: checked } }
+                                  }
+                                }));
+                              }}
+                            />
+                            <span class="setting-title">Halftone</span>
+                          </label>
+                        {/if}
+                      {/if}
+                    </details>
+                  {/if}
+
+                  {#if is3DType}
+                    <details class="control-details">
+                      <summary class="control-details-summary">Facades</summary>
+
+                      <label class="control-row checkbox">
+                        <input type="checkbox" checked={!!ov?.facades?.grazing} oninput={() => togglePaletteBlock(i, 'grazing')} />
+                        <span class="setting-title">Override grazing</span>
+                      </label>
+                      {#if ov?.facades?.grazing}
+                        <label class="control-row checkbox">
+                          <input
+                            type="checkbox"
+                            checked={!!ov.facades.grazing.enabled}
+                            oninput={(e) => {
+                              const checked = (e.currentTarget as HTMLInputElement).checked;
+                              updatePaletteOverride(i, (cur) => ({
+                                ...(cur ?? { enabled: true }),
+                                enabled: true,
+                                facades: { ...(cur?.facades ?? {}), grazing: { ...(cur?.facades?.grazing ?? {}), enabled: checked } }
+                              }));
+                            }}
+                          />
+                          <span class="setting-title">Grazing enable</span>
+                        </label>
+                        <label class="control-row">
+                          <span class="setting-title">Mode</span>
+                          <select
+                            value={ov.facades.grazing.mode ?? config.facades.grazing.mode}
+                            oninput={(e) => {
+                              const v = (e.currentTarget as HTMLSelectElement).value;
+                              updatePaletteOverride(i, (cur) => ({
+                                ...(cur ?? { enabled: true }),
+                                enabled: true,
+                                facades: { ...(cur?.facades ?? {}), grazing: { ...(cur?.facades?.grazing ?? {}), mode: v } }
+                              }));
+                            }}
+                          >
+                            <option value="add">Add</option>
+                            <option value="mix">Mix</option>
+                          </select>
+                        </label>
+                        <label class="control-row">
+                          <span class="setting-title">Color</span>
+                          <input
+                            type="color"
+                            value={ov.facades.grazing.color ?? config.facades.grazing.color}
+                            oninput={(e) => {
+                              const v = (e.currentTarget as HTMLInputElement).value;
+                              updatePaletteOverride(i, (cur) => ({
+                                ...(cur ?? { enabled: true }),
+                                enabled: true,
+                                facades: { ...(cur?.facades ?? {}), grazing: { ...(cur?.facades?.grazing ?? {}), color: v } }
+                              }));
+                            }}
+                          />
+                        </label>
+
+                        <label class="control-row slider">
+                          <span class="setting-title">Strength: {Number(ov.facades.grazing.strength ?? config.facades.grazing.strength).toFixed(2)}</span>
+                          <input
+                            type="range"
+                            value={Number(ov.facades.grazing.strength ?? config.facades.grazing.strength)}
+                            min="0"
+                            max={(ov.facades.grazing.mode ?? config.facades.grazing.mode) === 'add' ? 5 : 1}
+                            step="0.01"
+                            oninput={(e) => {
+                              const v = Number((e.currentTarget as HTMLInputElement).value);
+                              updatePaletteOverride(i, (cur) => ({
+                                ...(cur ?? { enabled: true }),
+                                enabled: true,
+                                facades: { ...(cur?.facades ?? {}), grazing: { ...(cur?.facades?.grazing ?? {}), strength: v } }
+                              }));
+                            }}
+                          />
+                        </label>
+
+                        <label class="control-row slider">
+                          <span class="setting-title">Power: {Number(ov.facades.grazing.power ?? config.facades.grazing.power).toFixed(2)}</span>
+                          <input
+                            type="range"
+                            value={Number(ov.facades.grazing.power ?? config.facades.grazing.power)}
+                            min="0.5"
+                            max="8"
+                            step="0.05"
+                            oninput={(e) => {
+                              const v = Number((e.currentTarget as HTMLInputElement).value);
+                              updatePaletteOverride(i, (cur) => ({
+                                ...(cur ?? { enabled: true }),
+                                enabled: true,
+                                facades: { ...(cur?.facades ?? {}), grazing: { ...(cur?.facades?.grazing ?? {}), power: v } }
+                              }));
+                            }}
+                          />
+                        </label>
+
+                        <label class="control-row slider">
+                          <span class="setting-title">Width: {Number(ov.facades.grazing.width ?? config.facades.grazing.width).toFixed(2)}</span>
+                          <input
+                            type="range"
+                            value={Number(ov.facades.grazing.width ?? config.facades.grazing.width)}
+                            min="0"
+                            max="1"
+                            step="0.01"
+                            disabled={(ov.facades.grazing.mode ?? config.facades.grazing.mode) === 'add'}
+                            oninput={(e) => {
+                              const v = Number((e.currentTarget as HTMLInputElement).value);
+                              updatePaletteOverride(i, (cur) => ({
+                                ...(cur ?? { enabled: true }),
+                                enabled: true,
+                                facades: { ...(cur?.facades ?? {}), grazing: { ...(cur?.facades?.grazing ?? {}), width: v } }
+                              }));
+                            }}
+                          />
+                        </label>
+
+                        <label class="control-row slider">
+                          <span class="setting-title">Noise: {Number(ov.facades.grazing.noise ?? config.facades.grazing.noise).toFixed(2)}</span>
+                          <input
+                            type="range"
+                            value={Number(ov.facades.grazing.noise ?? config.facades.grazing.noise)}
+                            min="0"
+                            max="1"
+                            step="0.01"
+                            oninput={(e) => {
+                              const v = Number((e.currentTarget as HTMLInputElement).value);
+                              updatePaletteOverride(i, (cur) => ({
+                                ...(cur ?? { enabled: true }),
+                                enabled: true,
+                                facades: { ...(cur?.facades ?? {}), grazing: { ...(cur?.facades?.grazing ?? {}), noise: v } }
+                              }));
+                            }}
+                          />
+                        </label>
+                      {/if}
+
+                      <label class="control-row checkbox">
+                        <input type="checkbox" checked={!!ov?.facades?.outline} oninput={() => togglePaletteBlock(i, 'outline')} />
+                        <span class="setting-title">Override outline</span>
+                      </label>
+                      {#if ov?.facades?.outline}
+                        <label class="control-row checkbox">
+                          <input
+                            type="checkbox"
+                            checked={!!ov.facades.outline.enabled}
+                            oninput={(e) => {
+                              const checked = (e.currentTarget as HTMLInputElement).checked;
+                              updatePaletteOverride(i, (cur) => ({
+                                ...(cur ?? { enabled: true }),
+                                enabled: true,
+                                facades: { ...(cur?.facades ?? {}), outline: { ...(cur?.facades?.outline ?? {}), enabled: checked } }
+                              }));
+                            }}
+                          />
+                          <span class="setting-title">Outline enable</span>
+                        </label>
+                        <label class="control-row">
+                          <span class="setting-title">Color</span>
+                          <input
+                            type="color"
+                            value={ov.facades.outline.color ?? config.facades.outline.color}
+                            oninput={(e) => {
+                              const v = (e.currentTarget as HTMLInputElement).value;
+                              updatePaletteOverride(i, (cur) => ({
+                                ...(cur ?? { enabled: true }),
+                                enabled: true,
+                                facades: { ...(cur?.facades ?? {}), outline: { ...(cur?.facades?.outline ?? {}), color: v } }
+                              }));
+                            }}
+                          />
+                        </label>
+
+                        <label class="control-row slider">
+                          <span class="setting-title">Thickness: {Number(ov.facades.outline.thickness ?? config.facades.outline.thickness).toFixed(3)}</span>
+                          <input
+                            type="range"
+                            value={Number(ov.facades.outline.thickness ?? config.facades.outline.thickness)}
+                            min="0"
+                            max="0.12"
+                            step="0.001"
+                            oninput={(e) => {
+                              const v = Number((e.currentTarget as HTMLInputElement).value);
+                              updatePaletteOverride(i, (cur) => ({
+                                ...(cur ?? { enabled: true }),
+                                enabled: true,
+                                facades: { ...(cur?.facades ?? {}), outline: { ...(cur?.facades?.outline ?? {}), thickness: v } }
+                              }));
+                            }}
+                          />
+                        </label>
+
+                        <label class="control-row slider">
+                          <span class="setting-title">Opacity: {Number(ov.facades.outline.opacity ?? config.facades.outline.opacity).toFixed(2)}</span>
+                          <input
+                            type="range"
+                            value={Number(ov.facades.outline.opacity ?? config.facades.outline.opacity)}
+                            min="0"
+                            max="1"
+                            step="0.01"
+                            oninput={(e) => {
+                              const v = Number((e.currentTarget as HTMLInputElement).value);
+                              updatePaletteOverride(i, (cur) => ({
+                                ...(cur ?? { enabled: true }),
+                                enabled: true,
+                                facades: { ...(cur?.facades ?? {}), outline: { ...(cur?.facades?.outline ?? {}), opacity: v } }
+                              }));
+                            }}
+                          />
+                        </label>
+                      {/if}
+
+                      {#if config.type === 'popsicle'}
+                        <label class="control-row checkbox">
+                          <input type="checkbox" checked={!!ov?.facades?.side} oninput={() => togglePaletteBlock(i, 'side')} />
+                          <span class="setting-title">Override side</span>
+                        </label>
+                        {#if ov?.facades?.side}
+                          <label class="control-row checkbox">
+                            <input
+                              type="checkbox"
+                              checked={!!ov.facades.side.enabled}
+                              oninput={(e) => {
+                                const checked = (e.currentTarget as HTMLInputElement).checked;
+                                updatePaletteOverride(i, (cur) => ({
+                                  ...(cur ?? { enabled: true }),
+                                  enabled: true,
+                                  facades: { ...(cur?.facades ?? {}), side: { ...(cur?.facades?.side ?? {}), enabled: checked } }
+                                }));
+                              }}
+                            />
+                            <span class="setting-title">Side enable</span>
+                          </label>
+                          <label class="control-row">
+                            <span class="setting-title">Tint</span>
+                            <input
+                              type="color"
+                              value={ov.facades.side.tintColor ?? config.facades.side.tintColor}
+                              oninput={(e) => {
+                                const v = (e.currentTarget as HTMLInputElement).value;
+                                updatePaletteOverride(i, (cur) => ({
+                                  ...(cur ?? { enabled: true }),
+                                  enabled: true,
+                                  facades: { ...(cur?.facades ?? {}), side: { ...(cur?.facades?.side ?? {}), tintColor: v } }
+                                }));
+                              }}
+                            />
+                          </label>
+
+                          <label class="control-row slider">
+                            <span class="setting-title">Tint amount: {Number(ov.facades.side.tintAmount ?? config.facades.side.tintAmount).toFixed(2)}</span>
+                            <input
+                              type="range"
+                              value={Number(ov.facades.side.tintAmount ?? config.facades.side.tintAmount)}
+                              min="0"
+                              max="1"
+                              step="0.01"
+                              disabled={!ov.facades.side.enabled}
+                              oninput={(e) => {
+                                const v = Number((e.currentTarget as HTMLInputElement).value);
+                                updatePaletteOverride(i, (cur) => ({
+                                  ...(cur ?? { enabled: true }),
+                                  enabled: true,
+                                  facades: { ...(cur?.facades ?? {}), side: { ...(cur?.facades?.side ?? {}), tintAmount: v } }
+                                }));
+                              }}
+                            />
+                          </label>
+
+                          <label class="control-row slider">
+                            <span class="setting-title">Material amount: {Number(ov.facades.side.materialAmount ?? config.facades.side.materialAmount).toFixed(2)}</span>
+                            <input
+                              type="range"
+                              value={Number(ov.facades.side.materialAmount ?? config.facades.side.materialAmount)}
+                              min="0"
+                              max="1"
+                              step="0.01"
+                              disabled={!ov.facades.side.enabled}
+                              oninput={(e) => {
+                                const v = Number((e.currentTarget as HTMLInputElement).value);
+                                updatePaletteOverride(i, (cur) => ({
+                                  ...(cur ?? { enabled: true }),
+                                  enabled: true,
+                                  facades: { ...(cur?.facades ?? {}), side: { ...(cur?.facades?.side ?? {}), materialAmount: v } }
+                                }));
+                              }}
+                            />
+                          </label>
+
+                          <label class="control-row slider">
+                            <span class="setting-title">Roughness: {Number(ov.facades.side.roughness ?? config.facades.side.roughness).toFixed(2)}</span>
+                            <input
+                              type="range"
+                              value={Number(ov.facades.side.roughness ?? config.facades.side.roughness)}
+                              min="0"
+                              max="1"
+                              step="0.01"
+                              disabled={!ov.facades.side.enabled}
+                              oninput={(e) => {
+                                const v = Number((e.currentTarget as HTMLInputElement).value);
+                                updatePaletteOverride(i, (cur) => ({
+                                  ...(cur ?? { enabled: true }),
+                                  enabled: true,
+                                  facades: { ...(cur?.facades ?? {}), side: { ...(cur?.facades?.side ?? {}), roughness: v } }
+                                }));
+                              }}
+                            />
+                          </label>
+
+                          <label class="control-row slider">
+                            <span class="setting-title">Metalness: {Number(ov.facades.side.metalness ?? config.facades.side.metalness).toFixed(2)}</span>
+                            <input
+                              type="range"
+                              value={Number(ov.facades.side.metalness ?? config.facades.side.metalness)}
+                              min="0"
+                              max="1"
+                              step="0.01"
+                              disabled={!ov.facades.side.enabled}
+                              oninput={(e) => {
+                                const v = Number((e.currentTarget as HTMLInputElement).value);
+                                updatePaletteOverride(i, (cur) => ({
+                                  ...(cur ?? { enabled: true }),
+                                  enabled: true,
+                                  facades: { ...(cur?.facades ?? {}), side: { ...(cur?.facades?.side ?? {}), metalness: v } }
+                                }));
+                              }}
+                            />
+                          </label>
+
+                          <label class="control-row slider">
+                            <span class="setting-title">Clearcoat: {Number(ov.facades.side.clearcoat ?? config.facades.side.clearcoat).toFixed(2)}</span>
+                            <input
+                              type="range"
+                              value={Number(ov.facades.side.clearcoat ?? config.facades.side.clearcoat)}
+                              min="0"
+                              max="1"
+                              step="0.01"
+                              disabled={!ov.facades.side.enabled}
+                              oninput={(e) => {
+                                const v = Number((e.currentTarget as HTMLInputElement).value);
+                                updatePaletteOverride(i, (cur) => ({
+                                  ...(cur ?? { enabled: true }),
+                                  enabled: true,
+                                  facades: { ...(cur?.facades ?? {}), side: { ...(cur?.facades?.side ?? {}), clearcoat: v } }
+                                }));
+                              }}
+                            />
+                          </label>
+
+                          <label class="control-row slider">
+                            <span class="setting-title">Env mult: {Number(ov.facades.side.envIntensityMult ?? config.facades.side.envIntensityMult).toFixed(2)}</span>
+                            <input
+                              type="range"
+                              value={Number(ov.facades.side.envIntensityMult ?? config.facades.side.envIntensityMult)}
+                              min="0"
+                              max="3"
+                              step="0.01"
+                              disabled={!ov.facades.side.enabled}
+                              oninput={(e) => {
+                                const v = Number((e.currentTarget as HTMLInputElement).value);
+                                updatePaletteOverride(i, (cur) => ({
+                                  ...(cur ?? { enabled: true }),
+                                  enabled: true,
+                                  facades: { ...(cur?.facades ?? {}), side: { ...(cur?.facades?.side ?? {}), envIntensityMult: v } }
+                                }));
+                              }}
+                            />
+                          </label>
+                        {/if}
+                      {/if}
+                    </details>
+                  {/if}
+
+                  {#if config.type === 'popsicle'}
+                    <details class="control-details">
+                      <summary class="control-details-summary">Edge</summary>
+                      <label class="control-row checkbox">
+                        <input type="checkbox" checked={!!ov?.edge} oninput={() => togglePaletteBlock(i, 'edge')} />
+                        <span class="setting-title">Override edge</span>
+                      </label>
+                      {#if ov?.edge}
+                        <label class="control-row checkbox">
+                          <input
+                            type="checkbox"
+                            checked={!!ov.edge.hollow}
+                            oninput={(e) => {
+                              const checked = (e.currentTarget as HTMLInputElement).checked;
+                              updatePaletteOverride(i, (cur) => ({
+                                ...(cur ?? { enabled: true }),
+                                enabled: true,
+                                edge: { ...(cur?.edge ?? {}), hollow: checked }
+                              }));
+                            }}
+                          />
+                          <span class="setting-title">Hollow</span>
+                        </label>
+
+                        <details class="control-details">
+                          <summary class="control-details-summary">Seam</summary>
+                          <label class="control-row checkbox">
+                            <input
+                              type="checkbox"
+                              checked={!!ov.edge.seam?.enabled}
+                              oninput={(e) => {
+                                const checked = (e.currentTarget as HTMLInputElement).checked;
+                                updatePaletteOverride(i, (cur) => ({
+                                  ...(cur ?? { enabled: true }),
+                                  enabled: true,
+                                  edge: { ...(cur?.edge ?? {}), seam: { ...(cur?.edge?.seam ?? {}), enabled: checked } }
+                                }));
+                              }}
+                            />
+                            <span class="setting-title">Enable</span>
+                          </label>
+                          <label class="control-row">
+                            <span class="setting-title">Color</span>
+                            <input
+                              type="color"
+                              value={ov.edge.seam?.color ?? config.edge.seam.color}
+                              oninput={(e) => {
+                                const v = (e.currentTarget as HTMLInputElement).value;
+                                updatePaletteOverride(i, (cur) => ({
+                                  ...(cur ?? { enabled: true }),
+                                  enabled: true,
+                                  edge: { ...(cur?.edge ?? {}), seam: { ...(cur?.edge?.seam ?? {}), color: v } }
+                                }));
+                              }}
+                            />
+                          </label>
+                          <label class="control-row slider">
+                            <span class="setting-title">Opacity: {Number(ov.edge.seam?.opacity ?? config.edge.seam.opacity).toFixed(2)}</span>
+                            <input
+                              type="range"
+                              value={Number(ov.edge.seam?.opacity ?? config.edge.seam.opacity)}
+                              min="0"
+                              max="1"
+                              step="0.01"
+                              oninput={(e) => {
+                                const v = Number((e.currentTarget as HTMLInputElement).value);
+                                updatePaletteOverride(i, (cur) => ({
+                                  ...(cur ?? { enabled: true }),
+                                  enabled: true,
+                                  edge: { ...(cur?.edge ?? {}), seam: { ...(cur?.edge?.seam ?? {}), opacity: v } }
+                                }));
+                              }}
+                            />
+                          </label>
+                          <label class="control-row slider">
+                            <span class="setting-title">Width: {Number(ov.edge.seam?.width ?? config.edge.seam.width).toFixed(3)}</span>
+                            <input
+                              type="range"
+                              value={Number(ov.edge.seam?.width ?? config.edge.seam.width)}
+                              min="0"
+                              max="0.25"
+                              step="0.001"
+                              oninput={(e) => {
+                                const v = Number((e.currentTarget as HTMLInputElement).value);
+                                updatePaletteOverride(i, (cur) => ({
+                                  ...(cur ?? { enabled: true }),
+                                  enabled: true,
+                                  edge: { ...(cur?.edge ?? {}), seam: { ...(cur?.edge?.seam ?? {}), width: v } }
+                                }));
+                              }}
+                            />
+                          </label>
+                          <label class="control-row slider">
+                            <span class="setting-title">Noise: {Number(ov.edge.seam?.noise ?? config.edge.seam.noise).toFixed(2)}</span>
+                            <input
+                              type="range"
+                              value={Number(ov.edge.seam?.noise ?? config.edge.seam.noise)}
+                              min="0"
+                              max="1"
+                              step="0.01"
+                              oninput={(e) => {
+                                const v = Number((e.currentTarget as HTMLInputElement).value);
+                                updatePaletteOverride(i, (cur) => ({
+                                  ...(cur ?? { enabled: true }),
+                                  enabled: true,
+                                  edge: { ...(cur?.edge ?? {}), seam: { ...(cur?.edge?.seam ?? {}), noise: v } }
+                                }));
+                              }}
+                            />
+                          </label>
+                          <label class="control-row slider">
+                            <span class="setting-title">Emissive: {Number(ov.edge.seam?.emissiveIntensity ?? config.edge.seam.emissiveIntensity).toFixed(2)}</span>
+                            <input
+                              type="range"
+                              value={Number(ov.edge.seam?.emissiveIntensity ?? config.edge.seam.emissiveIntensity)}
+                              min="0"
+                              max="20"
+                              step="0.1"
+                              oninput={(e) => {
+                                const v = Number((e.currentTarget as HTMLInputElement).value);
+                                updatePaletteOverride(i, (cur) => ({
+                                  ...(cur ?? { enabled: true }),
+                                  enabled: true,
+                                  edge: { ...(cur?.edge ?? {}), seam: { ...(cur?.edge?.seam ?? {}), emissiveIntensity: v } }
+                                }));
+                              }}
+                            />
+                          </label>
+                        </details>
+
+                        <details class="control-details">
+                          <summary class="control-details-summary">Band</summary>
+                          <label class="control-row checkbox">
+                            <input
+                              type="checkbox"
+                              checked={!!ov.edge.band?.enabled}
+                              oninput={(e) => {
+                                const checked = (e.currentTarget as HTMLInputElement).checked;
+                                updatePaletteOverride(i, (cur) => ({
+                                  ...(cur ?? { enabled: true }),
+                                  enabled: true,
+                                  edge: { ...(cur?.edge ?? {}), band: { ...(cur?.edge?.band ?? {}), enabled: checked } }
+                                }));
+                              }}
+                            />
+                            <span class="setting-title">Enable</span>
+                          </label>
+                          <label class="control-row">
+                            <span class="setting-title">Color</span>
+                            <input
+                              type="color"
+                              value={ov.edge.band?.color ?? config.edge.band.color}
+                              oninput={(e) => {
+                                const v = (e.currentTarget as HTMLInputElement).value;
+                                updatePaletteOverride(i, (cur) => ({
+                                  ...(cur ?? { enabled: true }),
+                                  enabled: true,
+                                  edge: { ...(cur?.edge ?? {}), band: { ...(cur?.edge?.band ?? {}), color: v } }
+                                }));
+                              }}
+                            />
+                          </label>
+                          <label class="control-row slider">
+                            <span class="setting-title">Opacity: {Number(ov.edge.band?.opacity ?? config.edge.band.opacity).toFixed(2)}</span>
+                            <input
+                              type="range"
+                              value={Number(ov.edge.band?.opacity ?? config.edge.band.opacity)}
+                              min="0"
+                              max="1"
+                              step="0.01"
+                              oninput={(e) => {
+                                const v = Number((e.currentTarget as HTMLInputElement).value);
+                                updatePaletteOverride(i, (cur) => ({
+                                  ...(cur ?? { enabled: true }),
+                                  enabled: true,
+                                  edge: { ...(cur?.edge ?? {}), band: { ...(cur?.edge?.band ?? {}), opacity: v } }
+                                }));
+                              }}
+                            />
+                          </label>
+                          <label class="control-row slider">
+                            <span class="setting-title">Width: {Number(ov.edge.band?.width ?? config.edge.band.width).toFixed(3)}</span>
+                            <input
+                              type="range"
+                              value={Number(ov.edge.band?.width ?? config.edge.band.width)}
+                              min="0"
+                              max="0.6"
+                              step="0.001"
+                              oninput={(e) => {
+                                const v = Number((e.currentTarget as HTMLInputElement).value);
+                                updatePaletteOverride(i, (cur) => ({
+                                  ...(cur ?? { enabled: true }),
+                                  enabled: true,
+                                  edge: { ...(cur?.edge ?? {}), band: { ...(cur?.edge?.band ?? {}), width: v } }
+                                }));
+                              }}
+                            />
+                          </label>
+                          <label class="control-row slider">
+                            <span class="setting-title">Noise: {Number(ov.edge.band?.noise ?? config.edge.band.noise).toFixed(2)}</span>
+                            <input
+                              type="range"
+                              value={Number(ov.edge.band?.noise ?? config.edge.band.noise)}
+                              min="0"
+                              max="1"
+                              step="0.01"
+                              oninput={(e) => {
+                                const v = Number((e.currentTarget as HTMLInputElement).value);
+                                updatePaletteOverride(i, (cur) => ({
+                                  ...(cur ?? { enabled: true }),
+                                  enabled: true,
+                                  edge: { ...(cur?.edge ?? {}), band: { ...(cur?.edge?.band ?? {}), noise: v } }
+                                }));
+                              }}
+                            />
+                          </label>
+                          <label class="control-row slider">
+                            <span class="setting-title">Emissive: {Number(ov.edge.band?.emissiveIntensity ?? config.edge.band.emissiveIntensity).toFixed(2)}</span>
+                            <input
+                              type="range"
+                              value={Number(ov.edge.band?.emissiveIntensity ?? config.edge.band.emissiveIntensity)}
+                              min="0"
+                              max="20"
+                              step="0.1"
+                              oninput={(e) => {
+                                const v = Number((e.currentTarget as HTMLInputElement).value);
+                                updatePaletteOverride(i, (cur) => ({
+                                  ...(cur ?? { enabled: true }),
+                                  enabled: true,
+                                  edge: { ...(cur?.edge ?? {}), band: { ...(cur?.edge?.band ?? {}), emissiveIntensity: v } }
+                                }));
+                              }}
+                            />
+                          </label>
+                        </details>
+                      {/if}
+                    </details>
+                  {/if}
+                {/if}
+              </details>
+            {/each}
+          </div>
+        </details>
       </section>
       
       <!-- Appearance -->
@@ -4026,6 +5036,39 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
+  }
+
+  .palette-overrides {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+  }
+
+  .palette-override-item {
+    border: 1px solid #252530;
+    border-radius: 8px;
+    background: #141420;
+    padding: 0.25rem 0.5rem;
+  }
+
+  .palette-override-summary {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .palette-override-summary .swatch {
+    width: 14px;
+    height: 14px;
+    border-radius: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+  }
+
+  .mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.8rem;
+    color: #cbd5e1;
   }
   
   .color-item input[type="color"] {
