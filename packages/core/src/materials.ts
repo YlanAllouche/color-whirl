@@ -294,7 +294,7 @@ export function createStickMeshMaterial(
     emissive
   });
 
-  const applyEdgeFx = (m: THREE.Material) => {
+  const applyEdgeFx = (m: THREE.Material, surfaceKind: 'cap' | 'side') => {
     const seam = config.edge?.seam;
     const band = config.edge?.band;
     if (!seam?.enabled && !band?.enabled) return;
@@ -304,6 +304,11 @@ export function createStickMeshMaterial(
     const halfH = Math.max(1e-6, stickDimensions.height / 2);
     const halfD = Math.max(1e-6, stickDimensions.depth / 2);
     const minHalf = Math.max(1e-6, Math.min(halfW, halfH, halfD));
+
+    const stickRoundness = clamp(Number((config as any).stickRoundness) || 0, 0, 1);
+    const corner = Math.max(0, Math.min(Math.min(halfW, halfH), Math.min(halfW, halfH) * stickRoundness));
+    const profileRaw = String((config as any).stickEndProfile ?? 'rounded');
+    const profile = profileRaw === 'chamfer' ? 1 : profileRaw === 'chipped' ? 2 : 0;
 
     const seamWidth = clamp(Number(seam?.width) || 0, 0, 0.25) * minHalf;
     const seamOpacity = clamp(Number(seam?.opacity) || 0, 0, 1);
@@ -318,7 +323,7 @@ export function createStickMeshMaterial(
     const bandColor = new THREE.Color(typeof band?.color === 'string' ? band.color : '#ffffff');
 
     const key =
-      `edgefx-v1:${halfW.toFixed(4)}:${halfH.toFixed(4)}:${halfD.toFixed(4)}:` +
+      `edgefx-v2:${surfaceKind}:${profile}:${corner.toFixed(4)}:${halfW.toFixed(4)}:${halfH.toFixed(4)}:${halfD.toFixed(4)}:` +
       `${seam?.enabled ? 1 : 0}:${seamColor.getHexString()}:${seamOpacity.toFixed(3)}:${seamWidth.toFixed(4)}:${seamNoise.toFixed(3)}:${seamEm.toFixed(3)}:` +
       `${band?.enabled ? 1 : 0}:${bandColor.getHexString()}:${bandOpacity.toFixed(3)}:${bandWidth.toFixed(4)}:${bandNoise.toFixed(3)}:${bandEm.toFixed(3)}`;
 
@@ -326,6 +331,10 @@ export function createStickMeshMaterial(
       m,
       (shader) => {
         shader.uniforms.wmEdgeHalfSize = { value: new THREE.Vector3(halfW, halfH, halfD) };
+        shader.uniforms.wmEdgeSurfaceKind = { value: surfaceKind === 'cap' ? 0 : 1 };
+        shader.uniforms.wmStickHalfXY = { value: new THREE.Vector2(halfW, halfH) };
+        shader.uniforms.wmStickCorner = { value: corner };
+        shader.uniforms.wmStickProfile = { value: profile };
 
         shader.uniforms.wmEdgeSeamEnabled = { value: seam?.enabled ? 1 : 0 };
         shader.uniforms.wmEdgeSeamColor = { value: seamColor };
@@ -354,6 +363,10 @@ export function createStickMeshMaterial(
 
         const fragUniforms = `
 uniform vec3 wmEdgeHalfSize;
+uniform int wmEdgeSurfaceKind;
+uniform vec2 wmStickHalfXY;
+uniform float wmStickCorner;
+uniform int wmStickProfile;
 uniform int wmEdgeSeamEnabled;
 uniform vec3 wmEdgeSeamColor;
 uniform float wmEdgeSeamOpacity;
@@ -377,7 +390,7 @@ varying vec3 wmObjPos;
 
         shader.fragmentShader = shader.fragmentShader.replace(
           '#include <dithering_fragment>',
-          `#include <dithering_fragment>\n\n// Edge effects (virtual seam + band)\nvec3 aPos = abs(wmObjPos);\nvec3 d = wmEdgeHalfSize - aPos;\nfloat dx = max(0.0, d.x);\nfloat dy = max(0.0, d.y);\nfloat dz = max(0.0, d.z);\nfloat s1 = min(dx, min(dy, dz));\nfloat s3 = max(dx, max(dy, dz));\nfloat s2 = (dx + dy + dz) - s1 - s3;\nfloat n = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);\nif (wmEdgeBandEnabled == 1 && wmEdgeBandWidth > 0.0) {\n  float bm = 1.0 - smoothstep(wmEdgeBandWidth, wmEdgeBandWidth * 2.0, s2);\n  bm *= mix(1.0, n, wmEdgeBandNoise);\n  float bAmt = clamp(bm * wmEdgeBandOpacity, 0.0, 1.0);\n  gl_FragColor.rgb = mix(gl_FragColor.rgb, wmEdgeBandColor, bAmt);\n  gl_FragColor.rgb += wmEdgeBandColor * (bm * wmEdgeBandEmissive);\n}\nif (wmEdgeSeamEnabled == 1 && wmEdgeSeamWidth > 0.0) {\n  float sm = 1.0 - smoothstep(wmEdgeSeamWidth, wmEdgeSeamWidth * 2.0, s2);\n  sm *= mix(1.0, n, wmEdgeSeamNoise);\n  float sAmt = clamp(sm * wmEdgeSeamOpacity, 0.0, 1.0);\n  gl_FragColor.rgb = mix(gl_FragColor.rgb, wmEdgeSeamColor, sAmt);\n  gl_FragColor.rgb += wmEdgeSeamColor * (sm * wmEdgeSeamEmissive);\n}`
+          `#include <dithering_fragment>\n\n// Edge effects (cap perimeter + side seams)\nvec3 aPos3 = abs(wmObjPos);\nvec2 aXY = abs(wmObjPos.xy);\nfloat dzEdge = max(0.0, wmEdgeHalfSize.z - aPos3.z);\nfloat n = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);\n\nfloat capMargin = 0.0;\n{\n  float hx = wmStickHalfXY.x;\n  float hy = wmStickHalfXY.y;\n  float c = clamp(wmStickCorner, 0.0, min(hx, hy));\n  if (wmStickProfile == 0) {\n    vec2 q = aXY - (vec2(hx, hy) - vec2(c));\n    float sd = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - c;\n    capMargin = max(0.0, -sd);\n  } else {\n    float m1 = hx - aXY.x;\n    float m2 = hy - aXY.y;\n    float m3 = ((hx + hy - c) - (aXY.x + aXY.y)) * 0.70710678;\n    capMargin = max(0.0, min(m1, min(m2, m3)));\n  }\n}\n\nfloat base = wmEdgeSurfaceKind == 0 ? capMargin : dzEdge;\n\nif (wmEdgeBandEnabled == 1 && wmEdgeBandWidth > 0.0) {\n  float bm = 1.0 - smoothstep(wmEdgeBandWidth, wmEdgeBandWidth * 2.0, base);\n  bm *= mix(1.0, n, wmEdgeBandNoise);\n  float bAmt = clamp(bm * wmEdgeBandOpacity, 0.0, 1.0);\n  gl_FragColor.rgb = mix(gl_FragColor.rgb, wmEdgeBandColor, bAmt);\n  gl_FragColor.rgb += wmEdgeBandColor * (bm * wmEdgeBandEmissive);\n}\nif (wmEdgeSeamEnabled == 1 && wmEdgeSeamWidth > 0.0) {\n  float sm = 1.0 - smoothstep(wmEdgeSeamWidth, wmEdgeSeamWidth * 2.0, base);\n  sm *= mix(1.0, n, wmEdgeSeamNoise);\n  float sAmt = clamp(sm * wmEdgeSeamOpacity, 0.0, 1.0);\n  gl_FragColor.rgb = mix(gl_FragColor.rgb, wmEdgeSeamColor, sAmt);\n  gl_FragColor.rgb += wmEdgeSeamColor * (sm * wmEdgeSeamEmissive);\n}`
         );
       },
       key
@@ -394,10 +407,11 @@ varying vec3 wmObjPos;
     !!sideCfg?.enabled && (clamp(Number(sideCfg.tintAmount) || 0, 0, 1) > 0 || clamp(Number(sideCfg.materialAmount) || 0, 0, 1) > 0);
 
   const wantsHollow = !!config.edge?.hollow;
-  const needsSplitMaterial = wantsHollow || needsSideOverrides || (grazing?.enabled && grazing.mode === 'mix');
+  const edgeEnabled = !!config.edge?.seam?.enabled || !!config.edge?.band?.enabled;
+  const needsSplitMaterial = wantsHollow || needsSideOverrides || (grazing?.enabled && grazing.mode === 'mix') || edgeEnabled;
 
   if (!needsSplitMaterial) {
-    applyEdgeFx(face);
+    applyEdgeFx(face, 'cap');
     return face;
   }
 
@@ -433,8 +447,8 @@ varying vec3 wmObjPos;
 
   // Apply edge effects late so they exist on both cap and side materials.
   // (Material.clone() does not reliably preserve onBeforeCompile/customProgramCacheKey across runtimes.)
-  applyEdgeFx(cap);
-  applyEdgeFx(side);
+  applyEdgeFx(cap, 'cap');
+  applyEdgeFx(side, 'side');
 
   return [cap, side];
 }
