@@ -8,7 +8,9 @@ import type {
   Polygon2DConfig,
   Triangles2DConfig,
   HexGrid2DConfig,
-  Ridges2DConfig
+  Ridges2DConfig,
+  Svg2DConfig,
+  Svg3DConfig
 } from '../types.js';
 
 import { createPopsicleScene, renderPopsicleToCanvas } from './popsicle.js';
@@ -19,6 +21,8 @@ import { renderPolygon2DToCanvas } from './polygon2d.js';
 import { renderTriangles2DToCanvas } from './triangles2d.js';
 import { renderHexGrid2DToCanvas } from './hexgrid2d.js';
 import { renderRidges2DToCanvas } from './ridges2d.js';
+import { renderSvg2DToCanvas } from './svg2d.js';
+import { createSvg3DScene, renderSvg3DToCanvas } from './svg3d.js';
 
 export function createWallpaperScene(
   config: WallpaperConfig,
@@ -44,6 +48,8 @@ export function createWallpaperScene(
       return createSpheres3DScene(config as Spheres3DConfig, options);
     case 'triangles3d':
       return createTriangles3DScene(config as Triangles3DConfig, options);
+    case 'svg3d':
+      return createSvg3DScene(config as Svg3DConfig, options);
     default:
       throw new Error(`createWallpaperScene not supported for type: ${config.type}`);
   }
@@ -67,6 +73,10 @@ export function renderWallpaperToCanvas(config: WallpaperConfig, canvas?: HTMLCa
       return renderHexGrid2DToCanvas(config as HexGrid2DConfig, canvas);
     case 'ridges2d':
       return renderRidges2DToCanvas(config as Ridges2DConfig, canvas);
+    case 'svg2d':
+      return renderSvg2DToCanvas(config as Svg2DConfig, canvas);
+    case 'svg3d':
+      return renderSvg3DToCanvas(config as Svg3DConfig, canvas);
     default:
       throw new Error(`Unknown wallpaper type: ${(config as any).type}`);
   }

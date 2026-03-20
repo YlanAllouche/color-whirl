@@ -10,4 +10,6 @@ export * from './generators/polygon2d.js';
 export * from './generators/triangles2d.js';
 export * from './generators/hexgrid2d.js';
 export * from './generators/ridges2d.js';
+export * from './generators/svg2d.js';
+export * from './generators/svg3d.js';
 export * from './export/index.js';

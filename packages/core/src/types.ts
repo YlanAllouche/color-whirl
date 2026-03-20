@@ -233,7 +233,9 @@ export type WallpaperType =
   | 'triangles2d'
   | 'triangles3d'
   | 'hexgrid2d'
-  | 'ridges2d';
+  | 'ridges2d'
+  | 'svg2d'
+  | 'svg3d';
 
 export interface BaseWallpaperConfig {
   type: WallpaperType;
@@ -520,6 +522,60 @@ export interface Ridges2DConfig extends BaseWallpaperConfig {
   };
 }
 
+export interface Svg2DConfig extends BaseWallpaperConfig {
+  type: 'svg2d';
+  svg: {
+    /** Raw SVG source string */
+    source: string;
+    count: number;
+    rMinPx: number;
+    rMaxPx: number;
+    /** 0..1 */
+    jitter: number;
+    rotateJitterDeg: number;
+    /** 0..1 */
+    fillOpacity: number;
+    stroke: {
+      enabled: boolean;
+      widthPx: number;
+      color: string;
+      /** 0..1 */
+      opacity: number;
+    };
+    paletteMode: PaletteAssignMode;
+    colorWeights: number[];
+  };
+}
+
+export interface Svg3DConfig extends BaseWallpaperConfig {
+  type: 'svg3d';
+  svg: {
+    /** Raw SVG source string */
+    source: string;
+    count: number;
+    /** Scene units: XY spread */
+    spread: number;
+    /** Scene units: Z spread */
+    depth: number;
+    /** Scene units: overall XY size */
+    sizeMin: number;
+    /** Scene units: overall XY size */
+    sizeMax: number;
+    /** Scene units: extrusion depth (independent of size) */
+    extrudeDepth: number;
+    bevel: {
+      enabled: boolean;
+      /** 0..0.2: bevel size as fraction of base shape */
+      size: number;
+      segments: number;
+    };
+    paletteMode: PaletteAssignMode;
+    colorWeights: number[];
+    /** 0..1 */
+    opacity: number;
+  };
+}
+
 export type WallpaperConfig =
   | PopsicleConfig
   | Spheres3DConfig
@@ -528,7 +584,9 @@ export type WallpaperConfig =
   | Triangles2DConfig
   | Triangles3DConfig
   | HexGrid2DConfig
-  | Ridges2DConfig;
+  | Ridges2DConfig
+  | Svg2DConfig
+  | Svg3DConfig;
 
 export const RESOLUTION_PRESETS = {
   '1080p': { width: 1920, height: 1080 },
@@ -817,6 +875,44 @@ export const DEFAULT_RIDGES2D_CONFIG: Ridges2DConfig = {
   }
 };
 
+export const DEFAULT_SVG_SOURCE =
+  `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-app-window-icon lucide-app-window"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M10 4v4"/><path d="M2 8h20"/><path d="M6 4v4"/></svg>`;
+
+export const DEFAULT_SVG2D_CONFIG: Svg2DConfig = {
+  ...DEFAULT_POPSICLE_CONFIG,
+  type: 'svg2d',
+  svg: {
+    source: DEFAULT_SVG_SOURCE,
+    count: 220,
+    rMinPx: 18,
+    rMaxPx: 150,
+    jitter: 1.0,
+    rotateJitterDeg: 180,
+    fillOpacity: 0.95,
+    stroke: { enabled: false, widthPx: 2, color: '#0b0b10', opacity: 0.7 },
+    paletteMode: 'weighted',
+    colorWeights: [0.34, 0.28, 0.18, 0.12, 0.08]
+  }
+};
+
+export const DEFAULT_SVG3D_CONFIG: Svg3DConfig = {
+  ...DEFAULT_POPSICLE_CONFIG,
+  type: 'svg3d',
+  svg: {
+    source: DEFAULT_SVG_SOURCE,
+    count: 160,
+    spread: 4.4,
+    depth: 4.0,
+    sizeMin: 0.14,
+    sizeMax: 0.5,
+    extrudeDepth: 0.22,
+    bevel: { enabled: true, size: 0.06, segments: 2 },
+    paletteMode: 'weighted',
+    colorWeights: [0.34, 0.28, 0.18, 0.12, 0.08],
+    opacity: 1.0
+  }
+};
+
 export const DEFAULT_CONFIG_BY_TYPE: Record<WallpaperType, WallpaperConfig> = {
   popsicle: DEFAULT_POPSICLE_CONFIG,
   spheres3d: DEFAULT_SPHERES3D_CONFIG,
@@ -825,7 +921,9 @@ export const DEFAULT_CONFIG_BY_TYPE: Record<WallpaperType, WallpaperConfig> = {
   triangles2d: DEFAULT_TRIANGLES2D_CONFIG,
   triangles3d: DEFAULT_TRIANGLES3D_CONFIG,
   hexgrid2d: DEFAULT_HEXGRID2D_CONFIG,
-  ridges2d: DEFAULT_RIDGES2D_CONFIG
+  ridges2d: DEFAULT_RIDGES2D_CONFIG,
+  svg2d: DEFAULT_SVG2D_CONFIG,
+  svg3d: DEFAULT_SVG3D_CONFIG
 };
 
 function isPlainObject(value: unknown): value is Record<string, any> {
@@ -991,6 +1089,53 @@ export function normalizeWallpaperConfig(input: any): WallpaperConfig {
       const by = Number(prisms.wallBulgeY);
       prisms.wallBulgeX = Number.isFinite(bx) ? clamp(bx, -1, 1) : 0;
       prisms.wallBulgeY = Number.isFinite(by) ? clamp(by, -1, 1) : 0;
+    }
+  }
+
+  // Basic svg config validation.
+  if ((merged as any).type === 'svg2d' || (merged as any).type === 'svg3d') {
+    const baseSvg: any = (base as any).svg;
+    const sAny: any = (merged as any).svg;
+
+    if (!sAny || typeof sAny !== 'object') {
+      (merged as any).svg = cloneJson(baseSvg);
+    } else {
+      if (typeof sAny.source !== 'string') sAny.source = String(sAny.source ?? baseSvg?.source ?? '');
+      const cnt = Number(sAny.count);
+      sAny.count = Number.isFinite(cnt) ? Math.max(0, Math.round(cnt)) : Math.round(Number(baseSvg?.count) || 0);
+      if ((merged as any).type === 'svg2d') {
+        const rMin = Number(sAny.rMinPx);
+        const rMax = Number(sAny.rMaxPx);
+        sAny.rMinPx = Number.isFinite(rMin) ? Math.max(0, rMin) : Math.max(0, Number(baseSvg?.rMinPx) || 0);
+        sAny.rMaxPx = Number.isFinite(rMax) ? Math.max(sAny.rMinPx, rMax) : Math.max(sAny.rMinPx, Number(baseSvg?.rMaxPx) || sAny.rMinPx);
+        sAny.jitter = Number.isFinite(Number(sAny.jitter)) ? clamp(Number(sAny.jitter), 0, 1) : clamp(Number(baseSvg?.jitter) || 0, 0, 1);
+        sAny.rotateJitterDeg = Number.isFinite(Number(sAny.rotateJitterDeg)) ? Number(sAny.rotateJitterDeg) : Number(baseSvg?.rotateJitterDeg) || 0;
+        sAny.fillOpacity = Number.isFinite(Number(sAny.fillOpacity)) ? clamp(Number(sAny.fillOpacity), 0, 1) : clamp(Number(baseSvg?.fillOpacity) || 0, 0, 1);
+        if (!sAny.stroke || typeof sAny.stroke !== 'object') sAny.stroke = cloneJson(baseSvg?.stroke);
+        sAny.paletteMode = sAny.paletteMode === 'cycle' ? 'cycle' : 'weighted';
+        if (!Array.isArray(sAny.colorWeights)) sAny.colorWeights = Array.isArray(baseSvg?.colorWeights) ? baseSvg.colorWeights.slice() : [];
+      } else {
+        const spread = Number(sAny.spread);
+        const depth = Number(sAny.depth);
+        sAny.spread = Number.isFinite(spread) ? Math.max(0, spread) : Math.max(0, Number(baseSvg?.spread) || 0);
+        sAny.depth = Number.isFinite(depth) ? Math.max(0, depth) : Math.max(0, Number(baseSvg?.depth) || 0);
+        const sMin = Number(sAny.sizeMin);
+        const sMax = Number(sAny.sizeMax);
+        sAny.sizeMin = Number.isFinite(sMin) ? Math.max(0.0001, sMin) : Math.max(0.0001, Number(baseSvg?.sizeMin) || 0.0001);
+        sAny.sizeMax = Number.isFinite(sMax) ? Math.max(sAny.sizeMin, sMax) : Math.max(sAny.sizeMin, Number(baseSvg?.sizeMax) || sAny.sizeMin);
+        const ed = Number(sAny.extrudeDepth);
+        sAny.extrudeDepth = Number.isFinite(ed) ? Math.max(0.000001, ed) : Math.max(0.000001, Number(baseSvg?.extrudeDepth) || 0.000001);
+        if (!sAny.bevel || typeof sAny.bevel !== 'object') sAny.bevel = cloneJson(baseSvg?.bevel);
+        sAny.bevel.enabled = typeof sAny.bevel.enabled === 'boolean' ? sAny.bevel.enabled : !!sAny.bevel.enabled;
+        const bs = Number(sAny.bevel.size);
+        sAny.bevel.size = Number.isFinite(bs) ? clamp(bs, 0, 0.2) : clamp(Number(baseSvg?.bevel?.size) || 0, 0, 0.2);
+        const seg = Number(sAny.bevel.segments);
+        sAny.bevel.segments = Number.isFinite(seg) ? Math.max(0, Math.min(8, Math.round(seg))) : Math.max(0, Math.min(8, Math.round(Number(baseSvg?.bevel?.segments) || 0)));
+        sAny.paletteMode = sAny.paletteMode === 'cycle' ? 'cycle' : 'weighted';
+        if (!Array.isArray(sAny.colorWeights)) sAny.colorWeights = Array.isArray(baseSvg?.colorWeights) ? baseSvg.colorWeights.slice() : [];
+        const op = Number(sAny.opacity);
+        sAny.opacity = Number.isFinite(op) ? clamp(op, 0, 1) : clamp(Number(baseSvg?.opacity) || 1, 0, 1);
+      }
     }
   }
 
@@ -1198,7 +1343,7 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
   const emissionEnabled = chance(0.22);
   const bloomEnabled = chance(0.35);
 
-  const is3DType = type === 'popsicle' || type === 'spheres3d' || type === 'triangles3d';
+  const is3DType = type === 'popsicle' || type === 'spheres3d' || type === 'triangles3d' || type === 'svg3d';
 
   // Rare: procedural cavity cutouts (raster-only; best-effort for other renderers).
   const gruyereEnabled = (type === 'popsicle' || type === 'spheres3d') && chance(0.035);
@@ -1475,6 +1620,46 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
         }
         };
       }
+    case 'svg2d':
+      return {
+        ...base,
+        bloom: base.emission.enabled ? { ...base.bloom, enabled: true } : { ...base.bloom },
+        type: 'svg2d',
+        svg: {
+          source: DEFAULT_SVG_SOURCE,
+          count: skewCountLow(10, DEFAULT_SVG2D_CONFIG.svg.count, 420, 1600, 0.03),
+          rMinPx: Math.round(randomWeighted(rng, 6, 40, DEFAULT_SVG2D_CONFIG.svg.rMinPx)),
+          rMaxPx: Math.round(randomWeighted(rng, 30, 280, DEFAULT_SVG2D_CONFIG.svg.rMaxPx)),
+          jitter: clamp(randomWeighted(rng, 0, 1, DEFAULT_SVG2D_CONFIG.svg.jitter), 0, 1),
+          rotateJitterDeg: randomWeighted(rng, 0, 360, DEFAULT_SVG2D_CONFIG.svg.rotateJitterDeg),
+          fillOpacity: clamp(randomWeighted(rng, 0.2, 1, DEFAULT_SVG2D_CONFIG.svg.fillOpacity), 0, 1),
+          stroke: { enabled: rng() < 0.25, widthPx: 2, color: '#0b0b10', opacity: 0.7 },
+          paletteMode: rng() < 0.65 ? 'weighted' : 'cycle',
+          colorWeights: [0.34, 0.28, 0.18, 0.12, 0.08]
+        }
+      };
+    case 'svg3d':
+      return {
+        ...base,
+        type: 'svg3d',
+        svg: {
+          source: DEFAULT_SVG_SOURCE,
+          count: skewCountLow(10, DEFAULT_SVG3D_CONFIG.svg.count, 360, 1500, 0.03),
+          spread: randomWeighted(rng, 0.8, 6.5, DEFAULT_SVG3D_CONFIG.svg.spread),
+          depth: randomWeighted(rng, 0.5, 7.0, DEFAULT_SVG3D_CONFIG.svg.depth),
+          sizeMin: randomWeighted(rng, 0.05, 0.32, DEFAULT_SVG3D_CONFIG.svg.sizeMin),
+          sizeMax: randomWeighted(rng, 0.14, 0.9, DEFAULT_SVG3D_CONFIG.svg.sizeMax),
+          extrudeDepth: randomWeighted(rng, 0.02, 0.6, DEFAULT_SVG3D_CONFIG.svg.extrudeDepth),
+          bevel: {
+            enabled: chance(0.7),
+            size: clamp(tri(0.0, DEFAULT_SVG3D_CONFIG.svg.bevel.size, 0.14), 0, 0.2),
+            segments: Math.max(0, Math.min(6, Math.round(tri(0, DEFAULT_SVG3D_CONFIG.svg.bevel.segments, 4))))
+          },
+          paletteMode: rng() < 0.55 ? 'weighted' : 'cycle',
+          colorWeights: [0.34, 0.28, 0.18, 0.12, 0.08],
+          opacity: randomStickOpacity()
+        }
+      };
     case 'hexgrid2d':
       return {
         ...base,

@@ -3,11 +3,11 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 
-import type { Spheres3DConfig, Triangles3DConfig } from '@wallpaper-maker/core';
-import { createSpheres3DScene, createTriangles3DScene } from '@wallpaper-maker/core';
+import type { Spheres3DConfig, Triangles3DConfig, Svg3DConfig } from '@wallpaper-maker/core';
+import { createSpheres3DScene, createTriangles3DScene, createSvg3DScene } from '@wallpaper-maker/core';
 
-export type Basic3DType = 'spheres3d' | 'triangles3d';
-export type Basic3DConfig = Spheres3DConfig | Triangles3DConfig;
+export type Basic3DType = 'spheres3d' | 'triangles3d' | 'svg3d';
+export type Basic3DConfig = Spheres3DConfig | Triangles3DConfig | Svg3DConfig;
 export type PreviewQuality = 'interactive' | 'final';
 
 export type RenderSize = { width: number; height: number };
@@ -323,9 +323,12 @@ export class Basic3DPreview {
 
   private rebuild(config: Basic3DConfig): void {
     const collisionMaskScale = config.collisions?.mode === 'carve' ? 0.6 : 1;
-    const built = this.type === 'spheres3d'
-      ? createSpheres3DScene(config as Spheres3DConfig, { preserveDrawingBuffer: true, pixelRatio: 1, collisionMaskScale })
-      : createTriangles3DScene(config as Triangles3DConfig, { preserveDrawingBuffer: true, pixelRatio: 1, collisionMaskScale });
+    const built =
+      this.type === 'spheres3d'
+        ? createSpheres3DScene(config as Spheres3DConfig, { preserveDrawingBuffer: true, pixelRatio: 1, collisionMaskScale })
+        : this.type === 'svg3d'
+          ? createSvg3DScene(config as Svg3DConfig, { preserveDrawingBuffer: true, pixelRatio: 1, collisionMaskScale })
+          : createTriangles3DScene(config as Triangles3DConfig, { preserveDrawingBuffer: true, pixelRatio: 1, collisionMaskScale });
 
     const nextScene = built.scene;
     const nextCamera = built.camera;

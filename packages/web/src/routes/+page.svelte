@@ -38,6 +38,9 @@
   let fallbackCanvas: HTMLCanvasElement | null = null;
   let renderMode = $state<PreviewRenderMode>('raster');
 
+  // Friendly generator errors (e.g. invalid SVG input).
+  let renderError = $state<string | null>(null);
+
   let collisionDragActive = $state(false);
   let cameraDragActive = $state(false);
   let canvasHoverActive = $state(false);
@@ -118,8 +121,8 @@
   // Derived values
   let aspectRatio = $derived(config.width / config.height);
 
-  let is3DType = $derived(config.type === 'popsicle' || config.type === 'spheres3d' || config.type === 'triangles3d');
-  let supportsOutlineOnly = $derived(config.type === 'spheres3d' || config.type === 'triangles3d');
+  let is3DType = $derived(config.type === 'popsicle' || config.type === 'spheres3d' || config.type === 'triangles3d' || config.type === 'svg3d');
+  let supportsOutlineOnly = $derived(config.type === 'spheres3d' || config.type === 'triangles3d' || config.type === 'svg3d');
   let supportsBloom = $derived(config.type !== 'hexgrid2d' && config.type !== 'ridges2d');
   let supportsCollisions = $derived(
     config.type === 'popsicle' ||
@@ -133,12 +136,14 @@
     config.type === 'popsicle' ||
       config.type === 'spheres3d' ||
       config.type === 'triangles3d' ||
+      config.type === 'svg3d' ||
       config.type === 'circles2d' ||
       config.type === 'polygon2d' ||
-      config.type === 'triangles2d'
+      config.type === 'triangles2d' ||
+      config.type === 'svg2d'
   );
   let showEmissionSection = $derived(
-    supportsEmission && (config.type === 'circles2d' || config.type === 'polygon2d' || config.type === 'triangles2d' ? config.bloom.enabled : true)
+    supportsEmission && (config.type === 'circles2d' || config.type === 'polygon2d' || config.type === 'triangles2d' || config.type === 'svg2d' ? config.bloom.enabled : true)
   );
 
   type FallbackQuality = 'interactive' | 'final';
@@ -197,14 +202,21 @@
       } as any;
     }
 
-    const type = effective.type as Basic3DType;
-    const p = ensureBasic3DPreview(type);
-    p.renderOnce(effective as any, quality, { cameraOnly: !!opts?.cameraOnly, renderSize: { width: previewWidth, height: previewHeight } });
+    try {
+      const type = effective.type as Basic3DType;
+      const p = ensureBasic3DPreview(type);
+      p.renderOnce(effective as any, quality, { cameraOnly: !!opts?.cameraOnly, renderSize: { width: previewWidth, height: previewHeight } });
 
-    const el = p.getDomElement();
-    if (el) {
-      el.style.width = `${Math.max(1, Math.round(cssWidth))}px`;
-      el.style.height = `${Math.max(1, Math.round(cssHeight))}px`;
+      const el = p.getDomElement();
+      if (el) {
+        el.style.width = `${Math.max(1, Math.round(cssWidth))}px`;
+        el.style.height = `${Math.max(1, Math.round(cssHeight))}px`;
+      }
+
+      renderError = null;
+    } catch (err: any) {
+      renderError = String(err?.message || err);
+      console.error('Render failed:', err);
     }
   }
 
@@ -215,13 +227,19 @@
     const { previewWidth, previewHeight, cssWidth, cssHeight } = getFallbackPreviewSize(aspect, quality);
     const effective: WallpaperConfig = { ...config, width: previewWidth, height: previewHeight } as any;
 
-    const next = renderWallpaperToCanvas(effective, fallbackCanvas ?? undefined);
-    next.style.width = `${Math.max(1, Math.round(cssWidth))}px`;
-    next.style.height = `${Math.max(1, Math.round(cssHeight))}px`;
-    fallbackCanvas = next;
-    if (!next.parentElement) {
-      canvasHost.innerHTML = '';
-      canvasHost.appendChild(next);
+    try {
+      const next = renderWallpaperToCanvas(effective, fallbackCanvas ?? undefined);
+      next.style.width = `${Math.max(1, Math.round(cssWidth))}px`;
+      next.style.height = `${Math.max(1, Math.round(cssHeight))}px`;
+      fallbackCanvas = next;
+      if (!next.parentElement) {
+        canvasHost.innerHTML = '';
+        canvasHost.appendChild(next);
+      }
+      renderError = null;
+    } catch (err: any) {
+      renderError = String(err?.message || err);
+      console.error('Render failed:', err);
     }
   }
 
@@ -244,7 +262,7 @@
       return;
     }
 
-    if (config.type === 'spheres3d' || config.type === 'triangles3d') {
+    if (config.type === 'spheres3d' || config.type === 'triangles3d' || config.type === 'svg3d') {
       fallbackCanvas = null;
       renderBasic3DOnce(quality, opts);
       return;
@@ -535,8 +553,8 @@
     };
 
     // 3D collisions are not randomized; preserve them when the type stays 3D.
-    const currentIs3D = current.type === 'popsicle' || current.type === 'spheres3d' || current.type === 'triangles3d';
-    const nextIs3D = merged.type === 'popsicle' || merged.type === 'spheres3d' || merged.type === 'triangles3d';
+    const currentIs3D = current.type === 'popsicle' || current.type === 'spheres3d' || current.type === 'triangles3d' || current.type === 'svg3d';
+    const nextIs3D = merged.type === 'popsicle' || merged.type === 'spheres3d' || merged.type === 'triangles3d' || merged.type === 'svg3d';
     if (currentIs3D && nextIs3D) {
       merged.collisions = cloneAny(current.collisions);
     }
@@ -549,6 +567,15 @@
       const nextVal = getAtPath(merged as any, path);
       if (typeof nextVal === 'undefined') continue;
       setAtPath(merged as any, path, cloneAny(curVal));
+    }
+
+    // Randomize-current special case: never randomize the SVG source.
+    if ((current.type === 'svg2d' || current.type === 'svg3d') && merged.type === current.type) {
+      try {
+        (merged as any).svg = { ...(merged as any).svg, source: (current as any).svg?.source };
+      } catch {
+        // Ignore.
+      }
     }
 
     return merged;
@@ -820,6 +847,74 @@
             colorWeights: [...src.ridges.colorWeights]
           }
         };
+      case 'svg2d':
+        return {
+          ...src,
+          colors: [...src.colors],
+          textureParams: {
+            drywall: { ...src.textureParams.drywall },
+            glass: { ...src.textureParams.glass },
+            cel: { ...src.textureParams.cel }
+          },
+          facades: {
+            side: { ...src.facades.side },
+            grazing: { ...src.facades.grazing },
+            outline: { ...src.facades.outline }
+          },
+          edge: { ...src.edge, seam: { ...src.edge.seam }, band: { ...src.edge.band } },
+          gruyere: { ...(src as any).gruyere },
+          emission: { ...src.emission },
+          bloom: { ...src.bloom },
+          collisions: { ...src.collisions, carve: { ...src.collisions.carve } },
+          lighting: {
+            ...src.lighting,
+            position: { ...src.lighting.position }
+          },
+          camera: { ...src.camera },
+          environment: { ...src.environment },
+          shadows: { ...src.shadows },
+          rendering: { ...src.rendering },
+          geometry: { ...src.geometry },
+          svg: {
+            ...src.svg,
+            stroke: { ...src.svg.stroke },
+            colorWeights: [...(src.svg.colorWeights ?? [])]
+          }
+        };
+      case 'svg3d':
+        return {
+          ...src,
+          colors: [...src.colors],
+          textureParams: {
+            drywall: { ...src.textureParams.drywall },
+            glass: { ...src.textureParams.glass },
+            cel: { ...src.textureParams.cel }
+          },
+          facades: {
+            side: { ...src.facades.side },
+            grazing: { ...src.facades.grazing },
+            outline: { ...src.facades.outline }
+          },
+          edge: { ...src.edge, seam: { ...src.edge.seam }, band: { ...src.edge.band } },
+          gruyere: { ...(src as any).gruyere },
+          emission: { ...src.emission },
+          bloom: { ...src.bloom },
+          collisions: { ...src.collisions, carve: { ...src.collisions.carve } },
+          lighting: {
+            ...src.lighting,
+            position: { ...src.lighting.position }
+          },
+          camera: { ...src.camera },
+          environment: { ...src.environment },
+          shadows: { ...src.shadows },
+          rendering: { ...src.rendering },
+          geometry: { ...src.geometry },
+          svg: {
+            ...src.svg,
+            bevel: { ...src.svg.bevel },
+            colorWeights: [...(src.svg.colorWeights ?? [])]
+          }
+        };
     }
   }
 
@@ -858,11 +953,20 @@
     next.rendering = { ...current.rendering };
     next.geometry = { ...current.geometry };
 
+    // When switching between SVG generators, keep the current source.
+    if ((current as any)?.svg?.source && (next as any)?.svg) {
+      try {
+        (next as any).svg = { ...(next as any).svg, source: (current as any).svg.source };
+      } catch {
+        // Ignore.
+      }
+    }
+
     config = next;
     schedulePreviewRender();
   }
 
-  type WeightTarget = 'spheres' | 'circles' | 'polygons' | 'triangles2d' | 'prisms' | 'hexgrid' | 'ridges';
+  type WeightTarget = 'spheres' | 'circles' | 'polygons' | 'triangles2d' | 'prisms' | 'hexgrid' | 'ridges' | 'svg';
 
   function setEqualWeights(target: WeightTarget) {
     const n = Math.max(0, config.colors.length);
@@ -875,6 +979,7 @@
     if (target === 'prisms' && config.type === 'triangles3d') config.prisms.colorWeights = w;
     if (target === 'hexgrid' && config.type === 'hexgrid2d') config.hexgrid.coloring.weights = w;
     if (target === 'ridges' && config.type === 'ridges2d') config.ridges.colorWeights = w;
+    if (target === 'svg' && (config.type === 'svg2d' || config.type === 'svg3d')) config.svg.colorWeights = w;
   }
 
   function setRandomWeights(target: WeightTarget) {
@@ -888,6 +993,7 @@
     if (target === 'prisms' && config.type === 'triangles3d') config.prisms.colorWeights = w;
     if (target === 'hexgrid' && config.type === 'hexgrid2d') config.hexgrid.coloring.weights = w;
     if (target === 'ridges' && config.type === 'ridges2d') config.ridges.colorWeights = w;
+    if (target === 'svg' && (config.type === 'svg2d' || config.type === 'svg3d')) config.svg.colorWeights = w;
   }
 
   function updateWeight(target: WeightTarget, index: number, value: number) {
@@ -935,6 +1041,12 @@
       a[i] = v;
       config.ridges.colorWeights = a;
     }
+
+    if (target === 'svg' && (config.type === 'svg2d' || config.type === 'svg3d')) {
+      const a = [...(config.svg.colorWeights ?? [])];
+      a[i] = v;
+      config.svg.colorWeights = a;
+    }
   }
 
   function generateRandomGeneratedColors() {
@@ -946,7 +1058,7 @@
 
   function generateRandomIncludingType() {
     const seed = randomSeedU32();
-    const types: WallpaperType[] = ['popsicle', 'spheres3d', 'circles2d', 'polygon2d', 'triangles2d', 'ridges2d', 'triangles3d', 'hexgrid2d'];
+    const types: WallpaperType[] = ['popsicle', 'spheres3d', 'svg3d', 'circles2d', 'polygon2d', 'svg2d', 'triangles2d', 'ridges2d', 'triangles3d', 'hexgrid2d'];
     const currentType = config.type;
     let nextType = types[seed % types.length] ?? 'popsicle';
     if (types.length > 1 && nextType === currentType) {
@@ -1223,6 +1335,36 @@
       void c.prisms.colorWeights.join(',');
       void c.prisms.opacity;
     }
+    if (c.type === 'svg2d') {
+      void (c as any).svg?.source;
+      void (c as any).svg?.count;
+      void (c as any).svg?.rMinPx;
+      void (c as any).svg?.rMaxPx;
+      void (c as any).svg?.jitter;
+      void (c as any).svg?.rotateJitterDeg;
+      void (c as any).svg?.fillOpacity;
+      void (c as any).svg?.stroke?.enabled;
+      void (c as any).svg?.stroke?.widthPx;
+      void (c as any).svg?.stroke?.color;
+      void (c as any).svg?.stroke?.opacity;
+      void (c as any).svg?.paletteMode;
+      void (c as any).svg?.colorWeights?.join(',');
+    }
+    if (c.type === 'svg3d') {
+      void (c as any).svg?.source;
+      void (c as any).svg?.count;
+      void (c as any).svg?.spread;
+      void (c as any).svg?.depth;
+      void (c as any).svg?.sizeMin;
+      void (c as any).svg?.sizeMax;
+      void (c as any).svg?.extrudeDepth;
+      void (c as any).svg?.bevel?.enabled;
+      void (c as any).svg?.bevel?.size;
+      void (c as any).svg?.bevel?.segments;
+      void (c as any).svg?.paletteMode;
+      void (c as any).svg?.colorWeights?.join(',');
+      void (c as any).svg?.opacity;
+    }
     if (c.type === 'hexgrid2d') {
       void c.hexgrid.radiusPx;
       void c.hexgrid.marginPx;
@@ -1444,9 +1586,11 @@
               <option value="spheres3d">Spheres (3D)</option>
               <option value="circles2d">Circles (2D)</option>
               <option value="polygon2d">Polygon (2D)</option>
+              <option value="svg2d">SVG (2D)</option>
               <option value="triangles2d">Triangles (2D)</option>
               <option value="ridges2d">Ridges (2D)</option>
               <option value="triangles3d">Triangles (3D)</option>
+              <option value="svg3d">SVG (3D)</option>
               <option value="hexgrid2d">Hex Grid (2D)</option>
             </select>
           </label>
@@ -2344,6 +2488,118 @@
             {/if}
           </details>
         </section>
+       {:else if config.type === 'svg2d'}
+         <section class="control-section">
+           <h3>SVG (2D)</h3>
+
+           <label class="control-row">
+             <button type="button" class="setting-title" class:locked={isLocked('svg.source')} onclick={() => toggleLock('svg.source')} title="Click to lock/unlock for randomize">
+               Source
+             </button>
+           </label>
+           <textarea
+             bind:value={(config as any).svg.source}
+             rows="6"
+             spellcheck="false"
+             style="width:100%; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size: 12px;"
+           ></textarea>
+           {#if renderError}
+             <div class="error-box" style="margin-top:0.5rem;">{renderError}</div>
+           {/if}
+
+           <label class="control-row slider">
+             <button type="button" class="setting-title" class:locked={isLocked('svg.count')} onclick={() => toggleLock('svg.count')} title="Click to lock/unlock for randomize">Count: {(config as any).svg.count}</button>
+             <input type="range" bind:value={(config as any).svg.count} min="0" max="4000" step="10" />
+           </label>
+
+           <label class="control-row slider">
+             <button type="button" class="setting-title" class:locked={isLocked('svg.rMinPx')} onclick={() => toggleLock('svg.rMinPx')} title="Click to lock/unlock for randomize">Size min: {Math.round((config as any).svg.rMinPx)}px</button>
+             <input type="range" bind:value={(config as any).svg.rMinPx} min="1" max="240" step="1" />
+           </label>
+           <label class="control-row slider">
+             <button type="button" class="setting-title" class:locked={isLocked('svg.rMaxPx')} onclick={() => toggleLock('svg.rMaxPx')} title="Click to lock/unlock for randomize">Size max: {Math.round((config as any).svg.rMaxPx)}px</button>
+             <input type="range" bind:value={(config as any).svg.rMaxPx} min="1" max="420" step="1" />
+           </label>
+
+           <label class="control-row slider">
+             <button type="button" class="setting-title" class:locked={isLocked('svg.jitter')} onclick={() => toggleLock('svg.jitter')} title="Click to lock/unlock for randomize">Jitter: {Number((config as any).svg.jitter).toFixed(2)}</button>
+             <input type="range" bind:value={(config as any).svg.jitter} min="0" max="1" step="0.01" />
+           </label>
+
+           <label class="control-row slider">
+             <button type="button" class="setting-title" class:locked={isLocked('svg.rotateJitterDeg')} onclick={() => toggleLock('svg.rotateJitterDeg')} title="Click to lock/unlock for randomize">Rotate jitter: {Math.round((config as any).svg.rotateJitterDeg)}deg</button>
+             <input type="range" bind:value={(config as any).svg.rotateJitterDeg} min="0" max="360" step="1" />
+           </label>
+
+           <label class="control-row slider">
+             <button type="button" class="setting-title" class:locked={isLocked('svg.fillOpacity')} onclick={() => toggleLock('svg.fillOpacity')} title="Click to lock/unlock for randomize">Fill opacity: {Number((config as any).svg.fillOpacity).toFixed(2)}</button>
+             <input type="range" bind:value={(config as any).svg.fillOpacity} min="0" max="1" step="0.01" />
+           </label>
+
+           <details class="control-details">
+             <summary class="control-details-summary">Stroke</summary>
+             <label class="control-row checkbox">
+               <input type="checkbox" bind:checked={(config as any).svg.stroke.enabled} />
+               <button
+                 type="button"
+                 class="setting-title"
+                 class:locked={isLocked('svg.stroke.enabled')}
+                 onclick={(e) => {
+                   e.preventDefault();
+                   toggleLock('svg.stroke.enabled');
+                 }}
+                 title="Click to lock/unlock for randomize"
+               >
+                 Enable
+               </button>
+             </label>
+             <label class="control-row slider">
+               <button type="button" class="setting-title" class:locked={isLocked('svg.stroke.widthPx')} onclick={() => toggleLock('svg.stroke.widthPx')} title="Click to lock/unlock for randomize">Width: {Math.round((config as any).svg.stroke.widthPx)}px</button>
+               <input type="range" bind:value={(config as any).svg.stroke.widthPx} min="0" max="24" step="1" disabled={!((config as any).svg.stroke.enabled)} />
+             </label>
+             <label class="control-row">
+               <button type="button" class="setting-title" class:locked={isLocked('svg.stroke.color')} onclick={() => toggleLock('svg.stroke.color')} title="Click to lock/unlock for randomize">Color</button>
+               <input type="color" bind:value={(config as any).svg.stroke.color} disabled={!((config as any).svg.stroke.enabled)} />
+             </label>
+             <label class="control-row slider">
+               <button type="button" class="setting-title" class:locked={isLocked('svg.stroke.opacity')} onclick={() => toggleLock('svg.stroke.opacity')} title="Click to lock/unlock for randomize">Opacity: {Number((config as any).svg.stroke.opacity).toFixed(2)}</button>
+               <input type="range" bind:value={(config as any).svg.stroke.opacity} min="0" max="1" step="0.01" disabled={!((config as any).svg.stroke.enabled)} />
+             </label>
+           </details>
+
+           <details class="control-details">
+             <summary class="control-details-summary">Palette</summary>
+             <label class="control-row">
+               <button type="button" class="setting-title" class:locked={isLocked('svg.paletteMode')} onclick={() => toggleLock('svg.paletteMode')} title="Click to lock/unlock for randomize">Mode</button>
+               <select bind:value={(config as any).svg.paletteMode}>
+                 <option value="cycle">Cycle</option>
+                 <option value="weighted">Weighted</option>
+               </select>
+             </label>
+
+             {#if (config as any).svg.paletteMode === 'weighted'}
+               <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-top:0.5rem;">
+                 <button type="button" onclick={() => setEqualWeights('svg')}>Equal weights</button>
+                 <button type="button" onclick={() => setRandomWeights('svg')}>Random weights</button>
+               </div>
+               {#each config.colors as c, i}
+                 <label class="control-row slider">
+                   <button type="button" class="setting-title" class:locked={isLocked('svg.colorWeights')} onclick={() => toggleLock('svg.colorWeights')} title="Click to lock/unlock for randomize">w{i + 1}: {(((config as any).svg.colorWeights[i] ?? 1) as number).toFixed(2)} {c}</button>
+                   <input
+                     type="range"
+                     min="0"
+                     max="5"
+                     step="0.05"
+                     value={(config as any).svg.colorWeights[i] ?? 1}
+                     oninput={(e) => {
+                       updateWeight('svg', i, Number((e.currentTarget as HTMLInputElement).value));
+                     }}
+                   />
+                 </label>
+               {/each}
+             {/if}
+           </details>
+         </section>
        {:else if config.type === 'triangles2d'}
          <section class="control-section">
            <h3>Triangles (2D)</h3>
@@ -2692,9 +2948,122 @@
             {/if}
           </details>
         </section>
+       {:else if config.type === 'svg3d'}
+         <section class="control-section">
+           <h3>SVG (3D)</h3>
+
+           <label class="control-row">
+             <button type="button" class="setting-title" class:locked={isLocked('svg.source')} onclick={() => toggleLock('svg.source')} title="Click to lock/unlock for randomize">
+               Source
+             </button>
+           </label>
+           <textarea
+             bind:value={(config as any).svg.source}
+             rows="6"
+             spellcheck="false"
+             style="width:100%; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size: 12px;"
+           ></textarea>
+           {#if renderError}
+             <div class="error-box" style="margin-top:0.5rem;">{renderError}</div>
+           {/if}
+
+           <label class="control-row slider">
+             <button type="button" class="setting-title" class:locked={isLocked('svg.count')} onclick={() => toggleLock('svg.count')} title="Click to lock/unlock for randomize">Count: {(config as any).svg.count}</button>
+             <input type="range" bind:value={(config as any).svg.count} min="0" max="2000" step="10" />
+           </label>
+
+           <label class="control-row slider">
+             <button type="button" class="setting-title" class:locked={isLocked('svg.spread')} onclick={() => toggleLock('svg.spread')} title="Click to lock/unlock for randomize">Spread: {Number((config as any).svg.spread).toFixed(2)}</button>
+             <input type="range" bind:value={(config as any).svg.spread} min="0" max="8" step="0.05" />
+           </label>
+
+           <label class="control-row slider">
+             <button type="button" class="setting-title" class:locked={isLocked('svg.depth')} onclick={() => toggleLock('svg.depth')} title="Click to lock/unlock for randomize">Depth: {Number((config as any).svg.depth).toFixed(2)}</button>
+             <input type="range" bind:value={(config as any).svg.depth} min="0" max="8" step="0.05" />
+           </label>
+
+           <label class="control-row slider">
+             <button type="button" class="setting-title" class:locked={isLocked('svg.sizeMin')} onclick={() => toggleLock('svg.sizeMin')} title="Click to lock/unlock for randomize">Size min: {Number((config as any).svg.sizeMin).toFixed(3)}</button>
+             <input type="range" bind:value={(config as any).svg.sizeMin} min="0.02" max="1.0" step="0.005" />
+           </label>
+           <label class="control-row slider">
+             <button type="button" class="setting-title" class:locked={isLocked('svg.sizeMax')} onclick={() => toggleLock('svg.sizeMax')} title="Click to lock/unlock for randomize">Size max: {Number((config as any).svg.sizeMax).toFixed(3)}</button>
+             <input type="range" bind:value={(config as any).svg.sizeMax} min="0.02" max="1.4" step="0.005" />
+           </label>
+
+           <label class="control-row slider">
+             <button type="button" class="setting-title" class:locked={isLocked('svg.extrudeDepth')} onclick={() => toggleLock('svg.extrudeDepth')} title="Click to lock/unlock for randomize">Extrude depth: {Number((config as any).svg.extrudeDepth).toFixed(3)}</button>
+             <input type="range" bind:value={(config as any).svg.extrudeDepth} min="0.005" max="1.0" step="0.005" />
+           </label>
+
+           <details class="control-details">
+             <summary class="control-details-summary">Bevel</summary>
+             <label class="control-row checkbox">
+               <input type="checkbox" bind:checked={(config as any).svg.bevel.enabled} />
+               <button
+                 type="button"
+                 class="setting-title"
+                 class:locked={isLocked('svg.bevel.enabled')}
+                 onclick={(e) => {
+                   e.preventDefault();
+                   toggleLock('svg.bevel.enabled');
+                 }}
+                 title="Click to lock/unlock for randomize"
+               >
+                 Enable
+               </button>
+             </label>
+             <label class="control-row slider">
+               <button type="button" class="setting-title" class:locked={isLocked('svg.bevel.size')} onclick={() => toggleLock('svg.bevel.size')} title="Click to lock/unlock for randomize">Size: {Number((config as any).svg.bevel.size).toFixed(3)}</button>
+               <input type="range" bind:value={(config as any).svg.bevel.size} min="0" max="0.2" step="0.005" disabled={!((config as any).svg.bevel.enabled)} />
+             </label>
+             <label class="control-row slider">
+               <button type="button" class="setting-title" class:locked={isLocked('svg.bevel.segments')} onclick={() => toggleLock('svg.bevel.segments')} title="Click to lock/unlock for randomize">Segments: {Math.round((config as any).svg.bevel.segments)}</button>
+               <input type="range" bind:value={(config as any).svg.bevel.segments} min="0" max="6" step="1" disabled={!((config as any).svg.bevel.enabled)} />
+             </label>
+           </details>
+
+           <label class="control-row slider">
+             <button type="button" class="setting-title" class:locked={isLocked('svg.opacity')} onclick={() => toggleLock('svg.opacity')} title="Click to lock/unlock for randomize">Opacity: {Number((config as any).svg.opacity).toFixed(2)}</button>
+             <input type="range" bind:value={(config as any).svg.opacity} min="0" max="1" step="0.01" />
+           </label>
+
+           <details class="control-details">
+             <summary class="control-details-summary">Palette</summary>
+             <label class="control-row">
+               <button type="button" class="setting-title" class:locked={isLocked('svg.paletteMode')} onclick={() => toggleLock('svg.paletteMode')} title="Click to lock/unlock for randomize">Mode</button>
+               <select bind:value={(config as any).svg.paletteMode}>
+                 <option value="cycle">Cycle</option>
+                 <option value="weighted">Weighted</option>
+               </select>
+             </label>
+
+             {#if (config as any).svg.paletteMode === 'weighted'}
+               <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-top:0.5rem;">
+                 <button type="button" onclick={() => setEqualWeights('svg')}>Equal weights</button>
+                 <button type="button" onclick={() => setRandomWeights('svg')}>Random weights</button>
+               </div>
+               {#each config.colors as c, i}
+                 <label class="control-row slider">
+                   <button type="button" class="setting-title" class:locked={isLocked('svg.colorWeights')} onclick={() => toggleLock('svg.colorWeights')} title="Click to lock/unlock for randomize">w{i + 1}: {(((config as any).svg.colorWeights[i] ?? 1) as number).toFixed(2)} {c}</button>
+                   <input
+                     type="range"
+                     min="0"
+                     max="5"
+                     step="0.05"
+                     value={(config as any).svg.colorWeights[i] ?? 1}
+                     oninput={(e) => {
+                       updateWeight('svg', i, Number((e.currentTarget as HTMLInputElement).value));
+                     }}
+                   />
+                 </label>
+               {/each}
+             {/if}
+           </details>
+         </section>
        {:else if config.type === 'hexgrid2d'}
-        <section class="control-section">
-          <h3>Hex Grid (2D)</h3>
+         <section class="control-section">
+           <h3>Hex Grid (2D)</h3>
 
           <label class="control-row slider">
             <button type="button" class="setting-title" class:locked={isLocked('hexgrid.radiusPx')} onclick={() => toggleLock('hexgrid.radiusPx')} title="Click to lock/unlock for randomize">Radius: {Math.round(config.hexgrid.radiusPx)}px</button>
@@ -3400,6 +3769,17 @@
     border-radius: 8px;
     padding: 1rem;
     border: 1px solid #252530;
+  }
+
+  .error-box {
+    background: rgba(220, 38, 38, 0.12);
+    border: 1px solid rgba(220, 38, 38, 0.35);
+    color: #fecaca;
+    padding: 0.6rem 0.75rem;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    line-height: 1.25;
+    white-space: pre-wrap;
   }
   
   .control-section h3 {

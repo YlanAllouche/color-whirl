@@ -1,4 +1,5 @@
 import type { ExportOptions, WallpaperConfig } from '../types.js';
+import { extractSvgRootAttributes, stripSvgPresentationAttributes, validateSvgSource } from '../svg-utils.js';
 
 export interface ExportResult {
   data: Uint8Array | string;
@@ -149,6 +150,8 @@ function generateSVGContent(config: WallpaperConfig): string {
       return generateCircles2DSVG(config);
     case 'polygon2d':
       return generatePolygon2DSVG(config);
+    case 'svg2d':
+      return generateSvg2DSVG(config);
     case 'triangles2d':
       return generateTriangles2DSVG(config);
     case 'ridges2d':
@@ -159,6 +162,8 @@ function generateSVGContent(config: WallpaperConfig): string {
       return generateSpheres3DSVG(config);
     case 'triangles3d':
       return generateTriangles3DSVG(config);
+    case 'svg3d':
+      return generateSvg3DSVG(config);
     default:
       throw new Error(`SVG export not supported for type: ${(config as any).type}`);
   }
@@ -757,6 +762,120 @@ function generatePolygon2DSVG(config: Extract<WallpaperConfig, { type: 'polygon2
     }
 
     svg += `  <polygon points="${pts.join(' ')}" fill="${color}" fill-opacity="${fillOpacity}"${strokeAttr}/>` + '\n';
+  }
+
+  svg += svgEnd();
+  return svg;
+}
+
+function generateSvg2DSVG(config: Extract<WallpaperConfig, { type: 'svg2d' }>): string {
+  const { width, height, colors, backgroundColor } = config;
+  const n = Math.max(1, colors.length);
+  const count = Math.max(0, Math.round(Number(config.svg.count) || 0));
+  const rMin = Math.max(0.1, Number(config.svg.rMinPx) || 1);
+  const rMax = Math.max(rMin, Number(config.svg.rMaxPx) || rMin);
+  const fillOpacity = clamp01(Number(config.svg.fillOpacity) || 0);
+  const jitter = clamp01(Number(config.svg.jitter) || 0);
+  const rotJ = ((Number(config.svg.rotateJitterDeg) || 0) * Math.PI) / 180;
+
+  // Validate early for a friendly error.
+  validateSvgSource(config.svg.source);
+  const { viewBox, inner } = extractSvgRootAttributes(config.svg.source);
+  const vbMinX = viewBox.minX;
+  const vbMinY = viewBox.minY;
+  const vbW = Math.max(1e-9, viewBox.width);
+  const vbH = Math.max(1e-9, viewBox.height);
+  const vbMax = Math.max(vbW, vbH);
+  const vbCx = vbMinX + vbW * 0.5;
+  const vbCy = vbMinY + vbH * 0.5;
+  const cleanInner = stripSvgPresentationAttributes(inner);
+
+  const seed = config.seed >>> 0;
+  const rand01 = (i: number, ch: number) => cellRand01(seed, i, 0, ch);
+
+  const weightsNorm = normalizeWeights(config.svg.colorWeights ?? [], n);
+  const pickIndex = (i: number) => {
+    if (config.svg.paletteMode === 'cycle') return i % n;
+    return sampleWeightedIndex01(rand01(i, 1), weightsNorm);
+  };
+
+  const strokeEnabled = !!config.svg.stroke?.enabled;
+  const strokeW = Math.max(0, Number(config.svg.stroke?.widthPx) || 0);
+  const strokeOpacity = clamp01(Number(config.svg.stroke?.opacity) || 0);
+  const strokeColor = typeof config.svg.stroke?.color === 'string' ? config.svg.stroke.color : '#000000';
+
+  let svg = svgStart(width, height, backgroundColor);
+  svg += `  <defs><symbol id="wmSvgShape" viewBox="${vbMinX} ${vbMinY} ${vbW} ${vbH}">${cleanInner}</symbol></defs>\n`;
+
+  for (let i = 0; i < count; i++) {
+    const r = rMin + rand01(i, 2) * (rMax - rMin);
+    const cx0 = rand01(i, 3) * width;
+    const cy0 = rand01(i, 4) * height;
+    const cx = cx0 + (rand01(i, 6) - 0.5) * r * 2 * jitter;
+    const cy = cy0 + (rand01(i, 7) - 0.5) * r * 2 * jitter;
+    const theta = (rand01(i, 8) - 0.5) * rotJ;
+    const rotDeg = (theta * 180) / Math.PI;
+
+    const scale = r / vbMax;
+    const idx = pickIndex(i);
+    const col = colors[idx] ?? '#ffffff';
+
+    const strokeAttrs = strokeEnabled && strokeW > 0 && strokeOpacity > 0
+      ? ` stroke="${strokeColor}" stroke-opacity="${strokeOpacity}" stroke-width="${(strokeW / Math.max(1e-9, scale)).toFixed(3)}" stroke-linejoin="round" stroke-linecap="round"`
+      : ' stroke="none"';
+
+    const transform = `translate(${cx.toFixed(3)} ${cy.toFixed(3)}) rotate(${rotDeg.toFixed(3)}) scale(${scale.toFixed(6)}) translate(${(-vbCx).toFixed(3)} ${(-vbCy).toFixed(3)})`;
+
+    svg += `  <g transform="${transform}" fill="${col}" fill-opacity="${fillOpacity}"${strokeAttrs}><use href="#wmSvgShape"/></g>\n`;
+  }
+
+  svg += svgEnd();
+  return svg;
+}
+
+function generateSvg3DSVG(config: Extract<WallpaperConfig, { type: 'svg3d' }>): string {
+  // 2D approximation.
+  const { width, height, colors, backgroundColor } = config;
+  const n = Math.max(1, colors.length);
+  const count = Math.max(0, Math.round(Number(config.svg.count) || 0));
+
+  validateSvgSource(config.svg.source);
+  const { viewBox, inner } = extractSvgRootAttributes(config.svg.source);
+  const vbMinX = viewBox.minX;
+  const vbMinY = viewBox.minY;
+  const vbW = Math.max(1e-9, viewBox.width);
+  const vbH = Math.max(1e-9, viewBox.height);
+  const vbMax = Math.max(vbW, vbH);
+  const vbCx = vbMinX + vbW * 0.5;
+  const vbCy = vbMinY + vbH * 0.5;
+  const cleanInner = stripSvgPresentationAttributes(inner);
+
+  const rMin = Math.max(0.1, Number(config.svg.sizeMin) * 180);
+  const rMax = Math.max(rMin, Number(config.svg.sizeMax) * 180);
+  const opacity = clamp01(Number(config.svg.opacity) || 1);
+
+  const seed = config.seed >>> 0;
+  const rand01 = (i: number, ch: number) => cellRand01(seed, i, 0, ch);
+  const weightsNorm = normalizeWeights(config.svg.colorWeights ?? [], n);
+  const pickIndex = (i: number) => {
+    if (config.svg.paletteMode === 'cycle') return i % n;
+    return sampleWeightedIndex01(rand01(i, 1), weightsNorm);
+  };
+
+  let svg = svgStart(width, height, backgroundColor);
+  svg += `  <defs><symbol id="wmSvgShape" viewBox="${vbMinX} ${vbMinY} ${vbW} ${vbH}">${cleanInner}</symbol></defs>\n`;
+
+  for (let i = 0; i < count; i++) {
+    const r = rMin + rand01(i, 2) * (rMax - rMin);
+    const cx = rand01(i, 3) * width;
+    const cy = rand01(i, 4) * height;
+    const theta = rand01(i, 8) * Math.PI * 2;
+    const rotDeg = (theta * 180) / Math.PI;
+    const scale = r / vbMax;
+    const idx = pickIndex(i);
+    const col = colors[idx] ?? '#ffffff';
+    const transform = `translate(${cx.toFixed(3)} ${cy.toFixed(3)}) rotate(${rotDeg.toFixed(3)}) scale(${scale.toFixed(6)}) translate(${(-vbCx).toFixed(3)} ${(-vbCy).toFixed(3)})`;
+    svg += `  <g transform="${transform}" fill="${col}" fill-opacity="${opacity}" stroke="none"><use href="#wmSvgShape"/></g>\n`;
   }
 
   svg += svgEnd();
