@@ -1307,6 +1307,7 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
 
       const seamEnabled = rng() < 0.16;
       const bandEnabled = rng() < 0.10;
+      const hollow = rng() < 0.10;
       const edgeEmissiveSeam = seamEnabled && rng() < 0.10;
       const edgeEmissiveBand = bandEnabled && rng() < 0.08;
       const pickEdgeColor = () => {
@@ -1333,7 +1334,7 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
         stickOpacity: randomStickOpacity(),
         edge: {
           ...base.edge,
-          hollow: false,
+          hollow,
           seam: {
             ...base.edge.seam,
             enabled: seamEnabled,
