@@ -203,9 +203,10 @@ function createMaterialForColor(
   paletteIndex: number,
   color: string,
   envIntensity: number,
-  stickOpacity: number
+  stickOpacity: number,
+  stickDimensions?: { width: number; height: number; depth: number }
 ): THREE.Material | THREE.Material[] {
-  return createStickMeshMaterial(config, paletteIndex, color, envIntensity, stickOpacity);
+  return createStickMeshMaterial(config, paletteIndex, color, envIntensity, stickOpacity, stickDimensions);
 }
 
 function createProceduralEquirectDataTexture(style: EnvironmentStyle): THREE.DataTexture {
@@ -663,7 +664,7 @@ export class PopsiclePreview {
       const k = [matBaseKey, String(paletteIndex), hex].join(':');
       const existing = this.stickMaterialCache.get(k);
       if (existing) return existing;
-      const m = createMaterialForColor(effective, paletteIndex, hex, envIntensity, safeStickOpacity);
+      const m = createMaterialForColor(effective, paletteIndex, hex, envIntensity, safeStickOpacity, stickDimensions);
       this.stickMaterialCache.set(k, m);
       return m;
     };
@@ -1109,7 +1110,7 @@ void wmApplyCollisionMask(inout vec4 col) {
         grazing: { ...config.facades.grazing },
         outline: { ...config.facades.outline }
       },
-      edge: { ...config.edge },
+      edge: { ...config.edge, seam: { ...config.edge.seam }, band: { ...config.edge.band } },
       emission: { ...config.emission },
       bloom: { ...config.bloom },
       lighting: {
@@ -1358,7 +1359,7 @@ void wmApplyCollisionMask(inout vec4 col) {
       ].join(':');
       const existing = materialCache.get(k);
       if (existing) return existing;
-      const m = createMaterialForColor(config, paletteIndex, hex, envIntensity, safeStickOpacity);
+      const m = createMaterialForColor(config, paletteIndex, hex, envIntensity, safeStickOpacity, stickDimensions);
       materialCache.set(k, m);
       return m;
     };
@@ -1506,7 +1507,7 @@ export async function renderRasterToCanvas(config: PopsicleConfig): Promise<HTML
     ].join(':');
     const existing = materialCache.get(k);
     if (existing) return existing;
-    const m = createMaterialForColor(config, paletteIndex, hex, envIntensity, safeStickOpacity);
+    const m = createMaterialForColor(config, paletteIndex, hex, envIntensity, safeStickOpacity, stickDimensions);
     materialCache.set(k, m);
     return m;
   };

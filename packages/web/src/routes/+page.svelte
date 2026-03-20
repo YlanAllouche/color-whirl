@@ -449,7 +449,7 @@
              grazing: { ...DEFAULT_CONFIG.facades.grazing },
              outline: { ...DEFAULT_CONFIG.facades.outline }
            },
-           edge: { ...DEFAULT_CONFIG.edge },
+           edge: { ...DEFAULT_CONFIG.edge, seam: { ...DEFAULT_CONFIG.edge.seam }, band: { ...DEFAULT_CONFIG.edge.band } },
            emission: { ...DEFAULT_CONFIG.emission },
            bloom: { ...DEFAULT_CONFIG.bloom },
            collisions: { ...DEFAULT_CONFIG.collisions, carve: { ...DEFAULT_CONFIG.collisions.carve } },
@@ -480,7 +480,7 @@
         grazing: { ...next.facades.grazing },
         outline: { ...next.facades.outline }
       },
-      edge: { ...next.edge },
+      edge: { ...next.edge, seam: { ...next.edge.seam }, band: { ...next.edge.band } },
       emission: { ...next.emission },
       bloom: { ...next.bloom },
       collisions: { ...next.collisions, carve: { ...next.collisions.carve } },
@@ -568,7 +568,7 @@
             grazing: { ...src.facades.grazing },
             outline: { ...src.facades.outline }
           },
-          edge: { ...src.edge },
+          edge: { ...src.edge, seam: { ...src.edge.seam }, band: { ...src.edge.band } },
           emission: { ...src.emission },
           bloom: { ...src.bloom },
           collisions: { ...src.collisions, carve: { ...src.collisions.carve } },
@@ -596,7 +596,7 @@
             grazing: { ...src.facades.grazing },
             outline: { ...src.facades.outline }
           },
-          edge: { ...src.edge },
+          edge: { ...src.edge, seam: { ...src.edge.seam }, band: { ...src.edge.band } },
           emission: { ...src.emission },
           bloom: { ...src.bloom },
           collisions: { ...src.collisions, carve: { ...src.collisions.carve } },
@@ -625,7 +625,7 @@
             grazing: { ...src.facades.grazing },
             outline: { ...src.facades.outline }
           },
-          edge: { ...src.edge },
+          edge: { ...src.edge, seam: { ...src.edge.seam }, band: { ...src.edge.band } },
           emission: { ...src.emission },
           bloom: { ...src.bloom },
           collisions: { ...src.collisions, carve: { ...src.collisions.carve } },
@@ -659,7 +659,7 @@
             grazing: { ...src.facades.grazing },
             outline: { ...src.facades.outline }
           },
-          edge: { ...src.edge },
+          edge: { ...src.edge, seam: { ...src.edge.seam }, band: { ...src.edge.band } },
           emission: { ...src.emission },
           bloom: { ...src.bloom },
           collisions: { ...src.collisions, carve: { ...src.collisions.carve } },
@@ -692,7 +692,7 @@
             grazing: { ...src.facades.grazing },
             outline: { ...src.facades.outline }
           },
-          edge: { ...src.edge },
+          edge: { ...src.edge, seam: { ...src.edge.seam }, band: { ...src.edge.band } },
           emission: { ...src.emission },
           bloom: { ...src.bloom },
           collisions: { ...src.collisions, carve: { ...src.collisions.carve } },
@@ -726,7 +726,7 @@
             grazing: { ...src.facades.grazing },
             outline: { ...src.facades.outline }
           },
-          edge: { ...src.edge },
+          edge: { ...src.edge, seam: { ...src.edge.seam }, band: { ...src.edge.band } },
           emission: { ...src.emission },
           bloom: { ...src.bloom },
           collisions: { ...src.collisions, carve: { ...src.collisions.carve } },
@@ -755,7 +755,7 @@
             grazing: { ...src.facades.grazing },
             outline: { ...src.facades.outline }
           },
-          edge: { ...src.edge },
+          edge: { ...src.edge, seam: { ...src.edge.seam }, band: { ...src.edge.band } },
           emission: { ...src.emission },
           bloom: { ...src.bloom },
           collisions: { ...src.collisions, carve: { ...src.collisions.carve } },
@@ -803,7 +803,7 @@
       grazing: { ...current.facades.grazing },
       outline: { ...current.facades.outline }
     };
-    next.edge = { ...current.edge };
+    next.edge = { ...current.edge, seam: { ...current.edge.seam }, band: { ...current.edge.band } };
     next.emission = { ...current.emission };
     next.bloom = { ...current.bloom };
     next.collisions = { ...current.collisions, carve: { ...current.collisions.carve } };
@@ -1043,6 +1043,18 @@
     void c.facades.outline.opacity;
     void c.edge.hollow;
     void c.edge.showInnerFacades;
+    void c.edge.seam.enabled;
+    void c.edge.seam.color;
+    void c.edge.seam.opacity;
+    void c.edge.seam.width;
+    void c.edge.seam.noise;
+    void c.edge.seam.emissiveIntensity;
+    void c.edge.band.enabled;
+    void c.edge.band.color;
+    void c.edge.band.opacity;
+    void c.edge.band.width;
+    void c.edge.band.noise;
+    void c.edge.band.emissiveIntensity;
     void c.emission.enabled;
     void c.emission.paletteIndex;
     void c.emission.intensity;
@@ -1653,6 +1665,88 @@
             <label class="control-row slider">
               <button type="button" class="setting-title" class:locked={isLocked('facades.outline.opacity')} onclick={() => toggleLock('facades.outline.opacity')} title="Click to lock/unlock for randomize">Opacity: {config.facades.outline.opacity.toFixed(2)}</button>
               <input type="range" bind:value={config.facades.outline.opacity} min="0" max="1" step="0.01" disabled={!config.facades.outline.enabled} />
+            </label>
+          </details>
+        </section>
+
+        <section class="control-section">
+          <h3>Edge</h3>
+
+          <details class="control-details">
+            <summary class="control-details-summary">Seam line</summary>
+            <label class="control-row checkbox">
+              <input type="checkbox" bind:checked={config.edge.seam.enabled} />
+              <button
+                type="button"
+                class="setting-title"
+                class:locked={isLocked('edge.seam.enabled')}
+                onclick={(e) => {
+                  e.preventDefault();
+                  toggleLock('edge.seam.enabled');
+                }}
+                title="Click to lock/unlock for randomize"
+              >
+                Enable
+              </button>
+            </label>
+            <label class="control-row">
+              <button type="button" class="setting-title" class:locked={isLocked('edge.seam.color')} onclick={() => toggleLock('edge.seam.color')} title="Click to lock/unlock for randomize">Color</button>
+              <input type="color" bind:value={config.edge.seam.color} disabled={!config.edge.seam.enabled} />
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('edge.seam.opacity')} onclick={() => toggleLock('edge.seam.opacity')} title="Click to lock/unlock for randomize">Opacity: {config.edge.seam.opacity.toFixed(2)}</button>
+              <input type="range" bind:value={config.edge.seam.opacity} min="0" max="1" step="0.01" disabled={!config.edge.seam.enabled} />
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('edge.seam.width')} onclick={() => toggleLock('edge.seam.width')} title="Click to lock/unlock for randomize">Width: {config.edge.seam.width.toFixed(3)}</button>
+              <input type="range" bind:value={config.edge.seam.width} min="0" max="0.12" step="0.001" disabled={!config.edge.seam.enabled} />
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('edge.seam.noise')} onclick={() => toggleLock('edge.seam.noise')} title="Click to lock/unlock for randomize">Noise: {config.edge.seam.noise.toFixed(2)}</button>
+              <input type="range" bind:value={config.edge.seam.noise} min="0" max="1" step="0.01" disabled={!config.edge.seam.enabled} />
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('edge.seam.emissiveIntensity')} onclick={() => toggleLock('edge.seam.emissiveIntensity')} title="Click to lock/unlock for randomize">Emissive: {config.edge.seam.emissiveIntensity.toFixed(2)}</button>
+              <input type="range" bind:value={config.edge.seam.emissiveIntensity} min="0" max="20" step="0.05" disabled={!config.edge.seam.enabled} />
+            </label>
+          </details>
+
+          <details class="control-details">
+            <summary class="control-details-summary">Band</summary>
+            <label class="control-row checkbox">
+              <input type="checkbox" bind:checked={config.edge.band.enabled} />
+              <button
+                type="button"
+                class="setting-title"
+                class:locked={isLocked('edge.band.enabled')}
+                onclick={(e) => {
+                  e.preventDefault();
+                  toggleLock('edge.band.enabled');
+                }}
+                title="Click to lock/unlock for randomize"
+              >
+                Enable
+              </button>
+            </label>
+            <label class="control-row">
+              <button type="button" class="setting-title" class:locked={isLocked('edge.band.color')} onclick={() => toggleLock('edge.band.color')} title="Click to lock/unlock for randomize">Color</button>
+              <input type="color" bind:value={config.edge.band.color} disabled={!config.edge.band.enabled} />
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('edge.band.opacity')} onclick={() => toggleLock('edge.band.opacity')} title="Click to lock/unlock for randomize">Opacity: {config.edge.band.opacity.toFixed(2)}</button>
+              <input type="range" bind:value={config.edge.band.opacity} min="0" max="1" step="0.01" disabled={!config.edge.band.enabled} />
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('edge.band.width')} onclick={() => toggleLock('edge.band.width')} title="Click to lock/unlock for randomize">Width: {config.edge.band.width.toFixed(3)}</button>
+              <input type="range" bind:value={config.edge.band.width} min="0" max="0.25" step="0.001" disabled={!config.edge.band.enabled} />
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('edge.band.noise')} onclick={() => toggleLock('edge.band.noise')} title="Click to lock/unlock for randomize">Noise: {config.edge.band.noise.toFixed(2)}</button>
+              <input type="range" bind:value={config.edge.band.noise} min="0" max="1" step="0.01" disabled={!config.edge.band.enabled} />
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('edge.band.emissiveIntensity')} onclick={() => toggleLock('edge.band.emissiveIntensity')} title="Click to lock/unlock for randomize">Emissive: {config.edge.band.emissiveIntensity.toFixed(2)}</button>
+              <input type="range" bind:value={config.edge.band.emissiveIntensity} min="0" max="20" step="0.05" disabled={!config.edge.band.enabled} />
             </label>
           </details>
         </section>

@@ -397,7 +397,7 @@ export function createPopsicleScene(
     ].join(':');
     const existing = materialCache.get(key);
     if (existing) return existing;
-    const m = createStickMeshMaterial(config, paletteIndex, hex, envIntensity, safeStickOpacity);
+    const m = createStickMeshMaterial(config, paletteIndex, hex, envIntensity, safeStickOpacity, stickDimensions);
     materialCache.set(key, m);
     return m;
   };

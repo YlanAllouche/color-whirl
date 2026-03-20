@@ -84,6 +84,32 @@ export interface FacadesConfig {
   outline: OutlineConfig;
 }
 
+export interface EdgeSeamConfig {
+  enabled: boolean;
+  color: string;
+  /** 0..1 */
+  opacity: number;
+  /** 0..0.25 (fraction of min half-size) */
+  width: number;
+  /** 0..1 */
+  noise: number;
+  /** 0..20 (added to color) */
+  emissiveIntensity: number;
+}
+
+export interface EdgeBandConfig {
+  enabled: boolean;
+  color: string;
+  /** 0..1 */
+  opacity: number;
+  /** 0..0.6 (fraction of min half-size) */
+  width: number;
+  /** 0..1 */
+  noise: number;
+  /** 0..20 (added to color) */
+  emissiveIntensity: number;
+}
+
 /**
  * "Edge" settings are reserved for effects at face-contact boundaries.
  * Currently used only for popsicles to optionally hollow the caps.
@@ -93,6 +119,8 @@ export interface EdgeConfig {
   hollow: boolean;
   /** Popsicle-only: render facade walls double-sided when hollow */
   showInnerFacades: boolean;
+  seam: EdgeSeamConfig;
+  band: EdgeBandConfig;
 }
 
 export interface EmissionConfig {
@@ -483,7 +511,23 @@ export const DEFAULT_POPSICLE_CONFIG: PopsicleConfig = {
   },
   edge: {
     hollow: false,
-    showInnerFacades: false
+    showInnerFacades: false,
+    seam: {
+      enabled: false,
+      color: '#0b0b10',
+      opacity: 0.65,
+      width: 0.02,
+      noise: 0,
+      emissiveIntensity: 0
+    },
+    band: {
+      enabled: false,
+      color: '#ffffff',
+      opacity: 0.25,
+      width: 0.06,
+      noise: 0,
+      emissiveIntensity: 0
+    }
   },
   emission: {
     enabled: false,
@@ -782,6 +826,14 @@ export function normalizeWallpaperConfig(input: any): WallpaperConfig {
     };
   }
 
+  const edgeObj: any = (merged as any).edge;
+  if (!edgeObj || typeof edgeObj !== 'object') {
+    (merged as any).edge = cloneJson((base as any).edge);
+  } else {
+    if (!edgeObj.seam || typeof edgeObj.seam !== 'object') edgeObj.seam = cloneJson((base as any).edge.seam);
+    if (!edgeObj.band || typeof edgeObj.band !== 'object') edgeObj.band = cloneJson((base as any).edge.band);
+  }
+
   return merged as WallpaperConfig;
 }
 
@@ -1064,7 +1116,9 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
     })(),
     edge: {
       hollow: false,
-      showInnerFacades: false
+      showInnerFacades: false,
+      seam: { ...DEFAULT_POPSICLE_CONFIG.edge.seam },
+      band: { ...DEFAULT_POPSICLE_CONFIG.edge.band }
     },
     emission: {
       enabled: emissionEnabled,

@@ -272,7 +272,8 @@ export function createStickMeshMaterial(
   paletteIndex: number,
   color: string,
   envIntensity: number,
-  stickOpacity: number
+  stickOpacity: number,
+  stickDimensions?: { width: number; height: number; depth: number }
 ): StickMeshMaterial {
   const emit =
     config.emission.enabled &&
@@ -292,6 +293,98 @@ export function createStickMeshMaterial(
     textureParams: config.textureParams,
     emissive
   });
+
+  const applyEdgeFx = (m: THREE.Material) => {
+    const seam = config.edge?.seam;
+    const band = config.edge?.band;
+    if (!seam?.enabled && !band?.enabled) return;
+    if (!stickDimensions) return;
+
+    const halfW = Math.max(1e-6, stickDimensions.width / 2);
+    const halfH = Math.max(1e-6, stickDimensions.height / 2);
+    const halfD = Math.max(1e-6, stickDimensions.depth / 2);
+    const minHalf = Math.max(1e-6, Math.min(halfW, halfH, halfD));
+
+    const seamWidth = clamp(Number(seam?.width) || 0, 0, 0.25) * minHalf;
+    const seamOpacity = clamp(Number(seam?.opacity) || 0, 0, 1);
+    const seamNoise = clamp(Number(seam?.noise) || 0, 0, 1);
+    const seamEm = clamp(Number(seam?.emissiveIntensity) || 0, 0, 20);
+    const seamColor = new THREE.Color(typeof seam?.color === 'string' ? seam.color : '#0b0b10');
+
+    const bandWidth = clamp(Number(band?.width) || 0, 0, 0.6) * minHalf;
+    const bandOpacity = clamp(Number(band?.opacity) || 0, 0, 1);
+    const bandNoise = clamp(Number(band?.noise) || 0, 0, 1);
+    const bandEm = clamp(Number(band?.emissiveIntensity) || 0, 0, 20);
+    const bandColor = new THREE.Color(typeof band?.color === 'string' ? band.color : '#ffffff');
+
+    const key =
+      `edgefx-v1:${halfW.toFixed(4)}:${halfH.toFixed(4)}:${halfD.toFixed(4)}:` +
+      `${seam?.enabled ? 1 : 0}:${seamColor.getHexString()}:${seamOpacity.toFixed(3)}:${seamWidth.toFixed(4)}:${seamNoise.toFixed(3)}:${seamEm.toFixed(3)}:` +
+      `${band?.enabled ? 1 : 0}:${bandColor.getHexString()}:${bandOpacity.toFixed(3)}:${bandWidth.toFixed(4)}:${bandNoise.toFixed(3)}:${bandEm.toFixed(3)}`;
+
+    chainOnBeforeCompile(
+      m,
+      (shader) => {
+        shader.uniforms.wmEdgeHalfSize = { value: new THREE.Vector3(halfW, halfH, halfD) };
+
+        shader.uniforms.wmEdgeSeamEnabled = { value: seam?.enabled ? 1 : 0 };
+        shader.uniforms.wmEdgeSeamColor = { value: seamColor };
+        shader.uniforms.wmEdgeSeamOpacity = { value: seamOpacity };
+        shader.uniforms.wmEdgeSeamWidth = { value: seamWidth };
+        shader.uniforms.wmEdgeSeamNoise = { value: seamNoise };
+        shader.uniforms.wmEdgeSeamEmissive = { value: seamEm };
+
+        shader.uniforms.wmEdgeBandEnabled = { value: band?.enabled ? 1 : 0 };
+        shader.uniforms.wmEdgeBandColor = { value: bandColor };
+        shader.uniforms.wmEdgeBandOpacity = { value: bandOpacity };
+        shader.uniforms.wmEdgeBandWidth = { value: bandWidth };
+        shader.uniforms.wmEdgeBandNoise = { value: bandNoise };
+        shader.uniforms.wmEdgeBandEmissive = { value: bandEm };
+
+        const vtx = `\nvarying vec3 wmObjPos;\n`;
+        if (shader.vertexShader.includes('#include <common>')) {
+          shader.vertexShader = shader.vertexShader.replace('#include <common>', `#include <common>${vtx}`);
+        } else if (!shader.vertexShader.includes('varying vec3 wmObjPos')) {
+          shader.vertexShader = vtx + shader.vertexShader;
+        }
+
+        if (shader.vertexShader.includes('#include <begin_vertex>')) {
+          shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>\nwmObjPos = position;`);
+        }
+
+        const fragUniforms = `
+uniform vec3 wmEdgeHalfSize;
+uniform int wmEdgeSeamEnabled;
+uniform vec3 wmEdgeSeamColor;
+uniform float wmEdgeSeamOpacity;
+uniform float wmEdgeSeamWidth;
+uniform float wmEdgeSeamNoise;
+uniform float wmEdgeSeamEmissive;
+uniform int wmEdgeBandEnabled;
+uniform vec3 wmEdgeBandColor;
+uniform float wmEdgeBandOpacity;
+uniform float wmEdgeBandWidth;
+uniform float wmEdgeBandNoise;
+uniform float wmEdgeBandEmissive;
+varying vec3 wmObjPos;
+`;
+
+        if (shader.fragmentShader.includes('#include <common>')) {
+          shader.fragmentShader = shader.fragmentShader.replace('#include <common>', `#include <common>\n${fragUniforms}`);
+        } else if (!shader.fragmentShader.includes('uniform vec3 wmEdgeHalfSize')) {
+          shader.fragmentShader = fragUniforms + '\n' + shader.fragmentShader;
+        }
+
+        shader.fragmentShader = shader.fragmentShader.replace(
+          '#include <dithering_fragment>',
+          `#include <dithering_fragment>\n\n// Edge effects (virtual seam + band)\nvec3 aPos = abs(wmObjPos);\nvec3 d = wmEdgeHalfSize - aPos;\nfloat dx = max(0.0, d.x);\nfloat dy = max(0.0, d.y);\nfloat dz = max(0.0, d.z);\nfloat s1 = min(dx, min(dy, dz));\nfloat s3 = max(dx, max(dy, dz));\nfloat s2 = (dx + dy + dz) - s1 - s3;\nfloat n = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);\nif (wmEdgeBandEnabled == 1 && wmEdgeBandWidth > 0.0) {\n  float bm = 1.0 - smoothstep(wmEdgeBandWidth, wmEdgeBandWidth * 2.0, s2);\n  bm *= mix(1.0, n, wmEdgeBandNoise);\n  float bAmt = clamp(bm * wmEdgeBandOpacity, 0.0, 1.0);\n  gl_FragColor.rgb = mix(gl_FragColor.rgb, wmEdgeBandColor, bAmt);\n  gl_FragColor.rgb += wmEdgeBandColor * (bm * wmEdgeBandEmissive);\n}\nif (wmEdgeSeamEnabled == 1 && wmEdgeSeamWidth > 0.0) {\n  float sm = 1.0 - smoothstep(wmEdgeSeamWidth, wmEdgeSeamWidth * 2.0, s2);\n  sm *= mix(1.0, n, wmEdgeSeamNoise);\n  float sAmt = clamp(sm * wmEdgeSeamOpacity, 0.0, 1.0);\n  gl_FragColor.rgb = mix(gl_FragColor.rgb, wmEdgeSeamColor, sAmt);\n  gl_FragColor.rgb += wmEdgeSeamColor * (sm * wmEdgeSeamEmissive);\n}`
+        );
+      },
+      key
+    );
+  };
+
+  applyEdgeFx(face);
 
   const grazing = config.facades?.grazing;
   if (grazing?.enabled && grazing.mode !== 'mix') {
