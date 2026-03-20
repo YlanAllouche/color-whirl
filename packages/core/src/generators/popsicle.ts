@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { PopsicleConfig, EnvironmentStyle } from '../types.js';
 import { createStickMeshMaterial } from '../materials.js';
 import { renderWithOptionalBloom } from './postprocessing.js';
+import { autoFitOrthographicCameraToBox } from './camera-fit.js';
 
 interface StickDimensions {
   width: number;
@@ -502,10 +503,6 @@ export function createPopsicleScene(
     baseMeshesByPalette[paletteIndex % nColors].push(mesh);
   }
 
-  const box = new THREE.Box3().setFromObject(group);
-  const center = box.getCenter(new THREE.Vector3());
-  group.position.sub(center);
-
   let outlineGroup: THREE.Group | null = null;
   if (config.facades.outline.enabled) {
     const oc = config.facades.outline;
@@ -531,6 +528,11 @@ export function createPopsicleScene(
     }
     group.add(outlineGroup);
   }
+
+  // Center AFTER adding outline so framing accounts for thickness.
+  const box = new THREE.Box3().setFromObject(group);
+  const center = box.getCenter(new THREE.Vector3());
+  group.position.sub(center);
   scene.add(group);
   
   const renderer = new THREE.WebGLRenderer({
@@ -875,6 +877,15 @@ void wmApplyCollisionMask(inout vec4 col) {
 
   // No shadow catcher: keep shadows stick-to-stick only.
   void envDisposable;
+
+  // Auto-fit camera to prevent cropped renders.
+  try {
+    scene.updateWorldMatrix(true, true);
+    const bounds = new THREE.Box3().setFromObject(group);
+    autoFitOrthographicCameraToBox(camera, bounds, { padding: 0.92, minNear: 0.01 });
+  } catch {
+    // Ignore auto-fit failures.
+  }
   
   return { scene, camera, renderer };
 }

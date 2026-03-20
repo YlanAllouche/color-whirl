@@ -32,6 +32,60 @@ function cameraZoomFromDistance(distance: number): number {
   return referenceDistance / safeDistance;
 }
 
+function autoFitOrthoCameraToScene(camera: THREE.OrthographicCamera, scene: THREE.Scene, padding: number = 0.92): void {
+  const pad = clamp(Number(padding), 0.5, 0.999);
+  const box = new THREE.Box3().setFromObject(scene);
+  if (box.isEmpty()) return;
+
+  camera.updateMatrixWorld(true);
+
+  const min = box.min;
+  const max = box.max;
+  const corners = [
+    new THREE.Vector3(min.x, min.y, min.z),
+    new THREE.Vector3(min.x, min.y, max.z),
+    new THREE.Vector3(min.x, max.y, min.z),
+    new THREE.Vector3(min.x, max.y, max.z),
+    new THREE.Vector3(max.x, min.y, min.z),
+    new THREE.Vector3(max.x, min.y, max.z),
+    new THREE.Vector3(max.x, max.y, min.z),
+    new THREE.Vector3(max.x, max.y, max.z)
+  ];
+
+  let maxAbsX = 0;
+  let maxAbsY = 0;
+  let minZ = Infinity;
+  let maxZ = -Infinity;
+  for (let i = 0; i < corners.length; i++) {
+    corners[i].applyMatrix4(camera.matrixWorldInverse);
+    maxAbsX = Math.max(maxAbsX, Math.abs(corners[i].x));
+    maxAbsY = Math.max(maxAbsY, Math.abs(corners[i].y));
+    minZ = Math.min(minZ, corners[i].z);
+    maxZ = Math.max(maxZ, corners[i].z);
+  }
+
+  const halfW0 = Math.abs(camera.right - camera.left) * 0.5;
+  const halfH0 = Math.abs(camera.top - camera.bottom) * 0.5;
+  const eps = 1e-6;
+  const zoomMaxX = maxAbsX > eps ? (halfW0 * pad) / maxAbsX : Infinity;
+  const zoomMaxY = maxAbsY > eps ? (halfH0 * pad) / maxAbsY : Infinity;
+  const zoomMax = Math.min(zoomMaxX, zoomMaxY);
+  if (Number.isFinite(zoomMax) && zoomMax > 0) camera.zoom = Math.min(camera.zoom, zoomMax);
+
+  const nearDist = Math.max(0, -maxZ);
+  const farDist = Math.max(0, -minZ);
+  if (Number.isFinite(nearDist) && Number.isFinite(farDist) && farDist > 0) {
+    const depth = Math.max(eps, farDist - nearDist);
+    const zPad = Math.max(0.05, depth * 0.05);
+    const nextNear = Math.max(0.01, nearDist - zPad);
+    const nextFar = Math.max(nextNear + 1.0, farDist + zPad);
+    camera.near = nextNear;
+    camera.far = nextFar;
+  }
+
+  camera.updateProjectionMatrix();
+}
+
 function disposeMaterial(mat: any): void {
   if (!mat) return;
   if (Array.isArray(mat)) {
@@ -189,6 +243,13 @@ export class Basic3DPreview {
     this.camera.zoom = cameraZoomFromDistance(d);
     this.camera.updateProjectionMatrix();
     this.camera.lookAt(0, 0, 0);
+
+    // Auto-fit after applying user camera settings.
+    try {
+      autoFitOrthoCameraToScene(this.camera, this.scene, 0.92);
+    } catch {
+      // Ignore.
+    }
 
     // Bloom wiring is outside the generators; toggle/update without rebuilding.
     if (this.lastBloomEnabled !== bloomEnabled) {

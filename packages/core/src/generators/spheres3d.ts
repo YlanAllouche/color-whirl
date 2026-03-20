@@ -3,6 +3,7 @@ import type { Spheres3DConfig, EnvironmentStyle, PaletteAssignMode } from '../ty
 import { createSurfaceMaterial } from '../materials.js';
 import { createRng } from '../types.js';
 import { renderWithOptionalBloom } from './postprocessing.js';
+import { autoFitOrthographicCameraToBox } from './camera-fit.js';
 
 function clamp(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, n));
@@ -673,6 +674,15 @@ void wmApplyCollisionMask(inout vec4 col) {
   if (!groupBox.isEmpty()) {
     const center = groupBox.getCenter(new THREE.Vector3());
     scene.position.sub(center);
+  }
+
+  // Auto-fit camera to prevent cropped renders.
+  try {
+    scene.updateWorldMatrix(true, true);
+    const bounds = new THREE.Box3().setFromObject(scene);
+    autoFitOrthographicCameraToBox(camera, bounds, { padding: 0.92, minNear: 0.01 });
+  } catch {
+    // Ignore auto-fit failures.
   }
 
   // Avoid unused warning

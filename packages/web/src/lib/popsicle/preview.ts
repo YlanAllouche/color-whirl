@@ -65,6 +65,76 @@ function cameraZoomFromDistance(distance: number): number {
   return referenceDistance / safeDistance;
 }
 
+function autoFitOrthoCameraToBox(camera: THREE.OrthographicCamera, box: THREE.Box3, padding: number = 0.92): void {
+  const pad = clamp(Number(padding), 0.5, 0.999);
+  if (box.isEmpty()) return;
+
+  camera.updateMatrixWorld(true);
+
+  const min = box.min;
+  const max = box.max;
+  const corners = [
+    new THREE.Vector3(min.x, min.y, min.z),
+    new THREE.Vector3(min.x, min.y, max.z),
+    new THREE.Vector3(min.x, max.y, min.z),
+    new THREE.Vector3(min.x, max.y, max.z),
+    new THREE.Vector3(max.x, min.y, min.z),
+    new THREE.Vector3(max.x, min.y, max.z),
+    new THREE.Vector3(max.x, max.y, min.z),
+    new THREE.Vector3(max.x, max.y, max.z)
+  ];
+
+  let maxAbsX = 0;
+  let maxAbsY = 0;
+  let minZ = Infinity;
+  let maxZ = -Infinity;
+  for (let i = 0; i < corners.length; i++) {
+    corners[i].applyMatrix4(camera.matrixWorldInverse);
+    maxAbsX = Math.max(maxAbsX, Math.abs(corners[i].x));
+    maxAbsY = Math.max(maxAbsY, Math.abs(corners[i].y));
+    minZ = Math.min(minZ, corners[i].z);
+    maxZ = Math.max(maxZ, corners[i].z);
+  }
+
+  const halfW0 = Math.abs(camera.right - camera.left) * 0.5;
+  const halfH0 = Math.abs(camera.top - camera.bottom) * 0.5;
+  const eps = 1e-6;
+  const zoomMaxX = maxAbsX > eps ? (halfW0 * pad) / maxAbsX : Infinity;
+  const zoomMaxY = maxAbsY > eps ? (halfH0 * pad) / maxAbsY : Infinity;
+  const zoomMax = Math.min(zoomMaxX, zoomMaxY);
+  if (Number.isFinite(zoomMax) && zoomMax > 0) camera.zoom = Math.min(camera.zoom, zoomMax);
+
+  const nearDist = Math.max(0, -maxZ);
+  const farDist = Math.max(0, -minZ);
+  if (Number.isFinite(nearDist) && Number.isFinite(farDist) && farDist > 0) {
+    const depth = Math.max(eps, farDist - nearDist);
+    const zPad = Math.max(0.05, depth * 0.05);
+    const nextNear = Math.max(0.01, nearDist - zPad);
+    const nextFar = Math.max(nextNear + 1.0, farDist + zPad);
+    camera.near = nextNear;
+    camera.far = nextFar;
+  }
+
+  camera.updateProjectionMatrix();
+}
+
+function symmetricBoxFromSize(size: THREE.Vector3): THREE.Box3 {
+  const half = size.clone().multiplyScalar(0.5);
+  return new THREE.Box3(new THREE.Vector3(-half.x, -half.y, -half.z), new THREE.Vector3(half.x, half.y, half.z));
+}
+
+function minDistanceToFitBoundingSphere(radius: number, aspect: number, vFovDeg: number, padding: number = 0.92): number {
+  const r = Math.max(0, Number(radius) || 0);
+  if (r <= 0) return 0;
+  const pad = clamp(Number(padding), 0.5, 0.999);
+  const vHalf = (clamp(Number(vFovDeg) || 0, 1, 179) * Math.PI) / 360;
+  const hHalf = Math.atan(Math.tan(vHalf) * Math.max(1e-6, aspect));
+  const half = Math.min(vHalf, hHalf);
+  const tanHalf = Math.max(1e-6, Math.tan(half));
+  // Conservative: keep the near side of the sphere within the frustum.
+  return r + r / (tanHalf * pad);
+}
+
 function getStickDimensions(
   canvasWidth: number,
   canvasHeight: number,
@@ -395,17 +465,20 @@ function computeBounds(
   stickOverhang: number,
   rotationCenterOffsetX: number,
   rotationCenterOffsetY: number,
-  stickGap: number
+  stickGap: number,
+  outlineScale: number = 1
 ): Bounds {
   const min = new THREE.Vector3(Infinity, Infinity, Infinity);
   const max = new THREE.Vector3(-Infinity, -Infinity, -Infinity);
+
+  const oScale = Math.max(1, Number(outlineScale) || 1);
 
   // Conservative radius in XY accounting for rotation.
   const halfDiag = Math.sqrt(
     (stickDimensions.width * 0.5) * (stickDimensions.width * 0.5) +
       (stickDimensions.height * 0.5) * (stickDimensions.height * 0.5)
-  );
-  const halfDepth = stickDimensions.depth * 0.5;
+  ) * oScale;
+  const halfDepth = stickDimensions.depth * 0.5 * oScale;
 
   for (let i = 0; i < stickCount; i++) {
     const o = getStackingOffset(i, stickDimensions, stickOverhang, rotationCenterOffsetX, rotationCenterOffsetY, stickGap);
@@ -680,14 +753,26 @@ export class PopsiclePreview {
       effective.stickRatio
     );
 
+    const outlineScaleForBounds = effective.facades.outline.enabled
+      ? 1 + Math.max(0, Math.min(0.2, Number(effective.facades.outline.thickness) || 0))
+      : 1;
+
     const bounds = computeBounds(
       stickDimensions,
       effective.stickCount,
       effective.stickOverhang,
       effective.rotationCenterOffsetX,
       effective.rotationCenterOffsetY,
-      effective.stickGap
+      effective.stickGap,
+      outlineScaleForBounds
     );
+
+    // Auto-fit camera before placing meshes (bounds are centered at origin by construction).
+    try {
+      autoFitOrthoCameraToBox(this.camera, symmetricBoxFromSize(bounds.size), 0.92);
+    } catch {
+      // Ignore.
+    }
 
     const geoKey = [
       stickDimensions.width.toFixed(4),
@@ -1349,18 +1434,36 @@ void wmApplyCollisionMask(inout vec4 col) {
   private buildPathCamera(config: PopsicleConfig): THREE.PerspectiveCamera {
     const aspect = config.width / config.height;
     const frustumSize = 10;
-    const zoom = cameraZoomFromDistance(config.camera.distance);
+    const baseDistance = Math.max(0.01, config.camera.distance);
+    const zoom = cameraZoomFromDistance(baseDistance);
     const effectiveHeight = frustumSize / zoom;
-    const d = Math.max(0.01, config.camera.distance);
-    const fov = (2 * Math.atan((effectiveHeight * 0.5) / d) * 180) / Math.PI;
+    // This ends up constant for the chosen mapping, but we keep the derivation for clarity.
+    const baseFov = (2 * Math.atan((effectiveHeight * 0.5) / baseDistance) * 180) / Math.PI;
 
-    const camera = new THREE.PerspectiveCamera(clamp(fov, 5, 80), aspect, 0.1, 2000);
+    const outlineScaleForBounds = config.facades.outline.enabled
+      ? 1 + Math.max(0, Math.min(0.2, Number(config.facades.outline.thickness) || 0))
+      : 1;
+    const stickDimensions = getStickDimensions(config.width, config.height, config.stickThickness, config.stickSize, config.stickRatio);
+    const bounds = computeBounds(
+      stickDimensions,
+      config.stickCount,
+      config.stickOverhang,
+      config.rotationCenterOffsetX,
+      config.rotationCenterOffsetY,
+      config.stickGap,
+      outlineScaleForBounds
+    );
+    const sphereRadius = 0.5 * bounds.size.length();
+    const minDist = minDistanceToFitBoundingSphere(sphereRadius, aspect, baseFov, 0.92);
+    const d = Math.max(baseDistance, minDist);
+
+    const camera = new THREE.PerspectiveCamera(clamp(baseFov, 5, 80), aspect, 0.1, Math.max(2000, d + sphereRadius * 4 + 50));
     const azimuthRad = degToRad(config.camera.azimuth);
     const elevationRad = degToRad(config.camera.elevation);
     camera.position.set(
-      config.camera.distance * Math.cos(elevationRad) * Math.sin(azimuthRad),
-      config.camera.distance * Math.sin(elevationRad),
-      config.camera.distance * Math.cos(elevationRad) * Math.cos(azimuthRad)
+      d * Math.cos(elevationRad) * Math.sin(azimuthRad),
+      d * Math.sin(elevationRad),
+      d * Math.cos(elevationRad) * Math.cos(azimuthRad)
     );
     camera.lookAt(0, 0, 0);
     camera.updateProjectionMatrix();
