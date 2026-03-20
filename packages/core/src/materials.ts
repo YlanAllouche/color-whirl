@@ -1,5 +1,13 @@
 import * as THREE from 'three';
-import type { FacadeSideConfig, GrazingConfig, TextureParams, TextureType, GlassStyle, WallpaperConfig } from './types.js';
+import type {
+  FacadeSideConfig,
+  GrazingConfig,
+  TextureParams,
+  TextureType,
+  GlassStyle,
+  WallpaperConfig,
+  GruyereConfig
+} from './types.js';
 import { createRng } from './types.js';
 
 type DrywallMaps = { normalMap: THREE.DataTexture; roughnessMap: THREE.DataTexture };
@@ -227,6 +235,172 @@ uniform int wmGrazingMode;
   );
 }
 
+export function applyGruyere(material: THREE.Material, config: WallpaperConfig, objectScale?: THREE.Vector3 | number): void {
+  const g = (config as any)?.gruyere as GruyereConfig | undefined;
+  if (!g?.enabled) return;
+
+  const enabled = !!g.enabled;
+  const frequency = clamp(Number(g.frequency) || 0, 0, 20);
+  const count = Math.max(0, Math.min(16, Math.round(Number(g.count) || 0)));
+  const radiusMin = Math.max(0, Number(g.radiusMin) || 0);
+  const radiusMax = Math.max(radiusMin, Number(g.radiusMax) || radiusMin);
+  const softness = Math.max(0, Number(g.softness) || 0);
+  const strength = clamp(Number(g.strength) || 0, 0, 1);
+  const seedOffset = Number.isFinite(Number(g.seedOffset)) ? Number(g.seedOffset) : 0;
+
+  if (!enabled || !(frequency > 0) || !(strength > 0) || !(count > 0) || !(radiusMax > 0)) return;
+
+  const anyMat: any = material as any;
+  // Soft edges rely on alpha; enable transparency when needed.
+  if (softness > 0) {
+    anyMat.transparent = true;
+    anyMat.depthWrite = false;
+  }
+
+  const scaleVec =
+    typeof objectScale === 'number'
+      ? new THREE.Vector3(objectScale, objectScale, objectScale)
+      : objectScale instanceof THREE.Vector3
+        ? objectScale
+        : new THREE.Vector3(1, 1, 1);
+
+  // Keep the seed stable but small-ish for float precision.
+  const seedBase = ((Number(config.seed) >>> 0) % 100000) * 0.001 + seedOffset;
+
+  const key =
+    `gruyere-v1:${enabled ? 1 : 0}:` +
+    `${frequency.toFixed(4)}:${count}:` +
+    `${radiusMin.toFixed(4)}:${radiusMax.toFixed(4)}:` +
+    `${softness.toFixed(4)}:${strength.toFixed(4)}:` +
+    `${seedBase.toFixed(4)}:` +
+    `${scaleVec.x.toFixed(4)},${scaleVec.y.toFixed(4)},${scaleVec.z.toFixed(4)}`;
+
+  chainOnBeforeCompile(
+    material,
+    (shader) => {
+      shader.uniforms.wmGruyereEnabled = { value: enabled ? 1 : 0 };
+      shader.uniforms.wmGruyereFrequency = { value: frequency };
+      shader.uniforms.wmGruyereCount = { value: count };
+      shader.uniforms.wmGruyereRadiusMin = { value: radiusMin };
+      shader.uniforms.wmGruyereRadiusMax = { value: radiusMax };
+      shader.uniforms.wmGruyereSoftness = { value: softness };
+      shader.uniforms.wmGruyereStrength = { value: strength };
+      shader.uniforms.wmGruyereSeed = { value: seedBase };
+      shader.uniforms.wmGruyereScale = { value: scaleVec };
+
+      const vtxHeader = `\nvarying vec3 wmGruyereWorldPos;\n`;
+      if (shader.vertexShader.includes('#include <common>')) {
+        shader.vertexShader = shader.vertexShader.replace('#include <common>', `#include <common>${vtxHeader}`);
+      } else if (!shader.vertexShader.includes('varying vec3 wmGruyereWorldPos')) {
+        shader.vertexShader = vtxHeader + shader.vertexShader;
+      }
+
+      if (shader.vertexShader.includes('#include <worldpos_vertex>')) {
+        shader.vertexShader = shader.vertexShader.replace(
+          '#include <worldpos_vertex>',
+          `#include <worldpos_vertex>\nwmGruyereWorldPos = worldPosition.xyz;`
+        );
+      } else if (shader.vertexShader.includes('#include <begin_vertex>')) {
+        shader.vertexShader = shader.vertexShader.replace(
+          '#include <begin_vertex>',
+          `#include <begin_vertex>\n#ifdef USE_INSTANCING\nvec4 wmWP = modelMatrix * instanceMatrix * vec4(position, 1.0);\n#else\nvec4 wmWP = modelMatrix * vec4(position, 1.0);\n#endif\nwmGruyereWorldPos = wmWP.xyz;`
+        );
+      }
+
+      const fragHeader = `
+uniform int wmGruyereEnabled;
+uniform float wmGruyereFrequency;
+uniform int wmGruyereCount;
+uniform float wmGruyereRadiusMin;
+uniform float wmGruyereRadiusMax;
+uniform float wmGruyereSoftness;
+uniform float wmGruyereStrength;
+uniform float wmGruyereSeed;
+uniform vec3 wmGruyereScale;
+varying vec3 wmGruyereWorldPos;
+
+float wmHash1(vec3 p) {
+  return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453123);
+}
+
+vec3 wmHash3(vec3 p) {
+  return vec3(
+    wmHash1(p + vec3(0.0, 0.0, 0.0)),
+    wmHash1(p + vec3(17.0, 0.0, 0.0)),
+    wmHash1(p + vec3(0.0, 37.0, 0.0))
+  );
+}
+
+float wmCavitySdf(vec3 cell, vec3 p, float invFreq) {
+  vec3 seed = vec3(wmGruyereSeed);
+  vec3 jitter = wmHash3(cell + seed);
+  vec3 center = (cell + jitter) * invFreq;
+  float rr = mix(wmGruyereRadiusMin, wmGruyereRadiusMax, wmHash1(cell + seed + vec3(13.37, 9.91, 2.17)));
+  return length(p - center) - rr;
+}
+
+float wmGruyereMinSdf(vec3 p) {
+  float f = max(1e-6, wmGruyereFrequency);
+  float invF = 1.0 / f;
+  vec3 gp = p * f;
+  vec3 i = floor(gp);
+  vec3 fracP = fract(gp);
+  vec3 o = step(vec3(0.5), fracP);
+  vec3 base = i + o;
+
+  float dMin = 1e9;
+
+  // 8 nearby cells around a chosen corner. wmGruyereCount limits the sample budget.
+  if (wmGruyereCount > 0) dMin = min(dMin, wmCavitySdf(base + vec3( 0.0,  0.0,  0.0), p, invF));
+  if (wmGruyereCount > 1) dMin = min(dMin, wmCavitySdf(base + vec3(-1.0,  0.0,  0.0), p, invF));
+  if (wmGruyereCount > 2) dMin = min(dMin, wmCavitySdf(base + vec3( 0.0, -1.0,  0.0), p, invF));
+  if (wmGruyereCount > 3) dMin = min(dMin, wmCavitySdf(base + vec3(-1.0, -1.0,  0.0), p, invF));
+  if (wmGruyereCount > 4) dMin = min(dMin, wmCavitySdf(base + vec3( 0.0,  0.0, -1.0), p, invF));
+  if (wmGruyereCount > 5) dMin = min(dMin, wmCavitySdf(base + vec3(-1.0,  0.0, -1.0), p, invF));
+  if (wmGruyereCount > 6) dMin = min(dMin, wmCavitySdf(base + vec3( 0.0, -1.0, -1.0), p, invF));
+  if (wmGruyereCount > 7) dMin = min(dMin, wmCavitySdf(base + vec3(-1.0, -1.0, -1.0), p, invF));
+
+  return dMin;
+}
+
+void wmApplyGruyere(inout vec4 col) {
+  if (wmGruyereEnabled == 0) return;
+
+  // Optional scaling hook (defaults to 1,1,1).
+  vec3 p = wmGruyereWorldPos / max(wmGruyereScale, vec3(1e-6));
+
+  float sdf = wmGruyereMinSdf(p);
+  if (sdf >= 0.0) return;
+
+  float soft = max(0.0, wmGruyereSoftness);
+  float hole = 0.0;
+  if (soft <= 1e-6) {
+    hole = wmGruyereStrength;
+  } else {
+    hole = wmGruyereStrength * smoothstep(0.0, soft, -sdf);
+  }
+
+  if (hole >= 0.999) discard;
+  col.a *= max(0.0, 1.0 - hole);
+  if (col.a <= 0.001) discard;
+}
+`;
+
+      if (shader.fragmentShader.includes('#include <common>')) {
+        shader.fragmentShader = shader.fragmentShader.replace('#include <common>', `#include <common>\n${fragHeader}`);
+      } else if (!shader.fragmentShader.includes('wmApplyGruyere')) {
+        shader.fragmentShader = fragHeader + '\n' + shader.fragmentShader;
+      }
+
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <dithering_fragment>',
+        `wmApplyGruyere(gl_FragColor);\n#include <dithering_fragment>`
+      );
+    },
+    key
+  );
+}
+
 export type StickMeshMaterial = THREE.Material | THREE.Material[];
 
 function canHaveColor(m: THREE.Material): m is THREE.Material & { color: THREE.Color } {
@@ -411,6 +585,7 @@ varying vec3 wmObjPos;
   const needsSplitMaterial = wantsHollow || needsSideOverrides || (grazing?.enabled && grazing.mode === 'mix') || edgeEnabled;
 
   if (!needsSplitMaterial) {
+    applyGruyere(face, config);
     applyEdgeFx(face, 'cap');
     return face;
   }
@@ -447,6 +622,8 @@ varying vec3 wmObjPos;
 
   // Apply edge effects late so they exist on both cap and side materials.
   // (Material.clone() does not reliably preserve onBeforeCompile/customProgramCacheKey across runtimes.)
+  applyGruyere(cap, config);
+  applyGruyere(side, config);
   applyEdgeFx(cap, 'cap');
   applyEdgeFx(side, 'side');
 
@@ -479,6 +656,7 @@ export function createSurfaceMaterial(
     emissive
   });
   if (config.facades?.grazing?.enabled) applyGrazing(m, config.facades.grazing);
+  applyGruyere(m, config);
   return m;
 }
 

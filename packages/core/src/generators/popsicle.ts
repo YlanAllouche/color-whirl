@@ -466,7 +466,7 @@ export function createPopsicleScene(
 
   const group = new THREE.Group();
   const materialCache = new Map<string, THREE.Material | THREE.Material[]>();
-  const materialParamsKey = JSON.stringify({ t: config.textureParams, f: config.facades, ed: config.edge, em: config.emission });
+  const materialParamsKey = JSON.stringify({ t: config.textureParams, f: config.facades, ed: config.edge, g: (config as any).gruyere, em: config.emission });
   const getMat = (paletteIndex: number, hex: string) => {
     const key = [
       texture,

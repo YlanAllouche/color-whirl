@@ -438,32 +438,33 @@
   function cloneDefaultConfig(): WallpaperConfig {
       return {
          ...DEFAULT_CONFIG,
-          colors: [...DEFAULT_CONFIG.colors],
-           textureParams: {
-             drywall: { ...DEFAULT_CONFIG.textureParams.drywall },
-             glass: { ...DEFAULT_CONFIG.textureParams.glass },
-             cel: { ...DEFAULT_CONFIG.textureParams.cel }
-           },
-           facades: {
-             side: { ...DEFAULT_CONFIG.facades.side },
-             grazing: { ...DEFAULT_CONFIG.facades.grazing },
-             outline: { ...DEFAULT_CONFIG.facades.outline }
-           },
-           edge: { ...DEFAULT_CONFIG.edge, seam: { ...DEFAULT_CONFIG.edge.seam }, band: { ...DEFAULT_CONFIG.edge.band } },
-           emission: { ...DEFAULT_CONFIG.emission },
-           bloom: { ...DEFAULT_CONFIG.bloom },
-           collisions: { ...DEFAULT_CONFIG.collisions, carve: { ...DEFAULT_CONFIG.collisions.carve } },
-           lighting: {
-             ...DEFAULT_CONFIG.lighting,
-             position: { ...DEFAULT_CONFIG.lighting.position }
-           },
-          camera: { ...DEFAULT_CONFIG.camera },
-         environment: { ...DEFAULT_CONFIG.environment },
-         shadows: { ...DEFAULT_CONFIG.shadows },
-         rendering: { ...DEFAULT_CONFIG.rendering },
-         geometry: { ...DEFAULT_CONFIG.geometry }
-       };
-    }
+           colors: [...DEFAULT_CONFIG.colors],
+            textureParams: {
+              drywall: { ...DEFAULT_CONFIG.textureParams.drywall },
+              glass: { ...DEFAULT_CONFIG.textureParams.glass },
+              cel: { ...DEFAULT_CONFIG.textureParams.cel }
+            },
+            facades: {
+              side: { ...DEFAULT_CONFIG.facades.side },
+              grazing: { ...DEFAULT_CONFIG.facades.grazing },
+              outline: { ...DEFAULT_CONFIG.facades.outline }
+            },
+            edge: { ...DEFAULT_CONFIG.edge, seam: { ...DEFAULT_CONFIG.edge.seam }, band: { ...DEFAULT_CONFIG.edge.band } },
+            gruyere: { ...(DEFAULT_CONFIG as any).gruyere },
+            emission: { ...DEFAULT_CONFIG.emission },
+            bloom: { ...DEFAULT_CONFIG.bloom },
+            collisions: { ...DEFAULT_CONFIG.collisions, carve: { ...DEFAULT_CONFIG.collisions.carve } },
+            lighting: {
+              ...DEFAULT_CONFIG.lighting,
+              position: { ...DEFAULT_CONFIG.lighting.position }
+            },
+           camera: { ...DEFAULT_CONFIG.camera },
+          environment: { ...DEFAULT_CONFIG.environment },
+          shadows: { ...DEFAULT_CONFIG.shadows },
+          rendering: { ...DEFAULT_CONFIG.rendering },
+          geometry: { ...DEFAULT_CONFIG.geometry }
+        };
+     }
 
   function mergeWithLocks(next: WallpaperConfig): WallpaperConfig {
     const current = config;
@@ -481,6 +482,7 @@
         outline: { ...next.facades.outline }
       },
       edge: { ...next.edge, seam: { ...next.edge.seam }, band: { ...next.edge.band } },
+      gruyere: { ...(next as any).gruyere },
       emission: { ...next.emission },
       bloom: { ...next.bloom },
       collisions: { ...next.collisions, carve: { ...next.collisions.carve } },
@@ -569,6 +571,7 @@
             outline: { ...src.facades.outline }
           },
           edge: { ...src.edge, seam: { ...src.edge.seam }, band: { ...src.edge.band } },
+          gruyere: { ...(src as any).gruyere },
           emission: { ...src.emission },
           bloom: { ...src.bloom },
           collisions: { ...src.collisions, carve: { ...src.collisions.carve } },
@@ -597,6 +600,7 @@
             outline: { ...src.facades.outline }
           },
           edge: { ...src.edge, seam: { ...src.edge.seam }, band: { ...src.edge.band } },
+          gruyere: { ...(src as any).gruyere },
           emission: { ...src.emission },
           bloom: { ...src.bloom },
           collisions: { ...src.collisions, carve: { ...src.collisions.carve } },
@@ -626,6 +630,7 @@
             outline: { ...src.facades.outline }
           },
           edge: { ...src.edge, seam: { ...src.edge.seam }, band: { ...src.edge.band } },
+          gruyere: { ...(src as any).gruyere },
           emission: { ...src.emission },
           bloom: { ...src.bloom },
           collisions: { ...src.collisions, carve: { ...src.collisions.carve } },
@@ -660,6 +665,7 @@
             outline: { ...src.facades.outline }
           },
           edge: { ...src.edge, seam: { ...src.edge.seam }, band: { ...src.edge.band } },
+          gruyere: { ...(src as any).gruyere },
           emission: { ...src.emission },
           bloom: { ...src.bloom },
           collisions: { ...src.collisions, carve: { ...src.collisions.carve } },
@@ -693,6 +699,7 @@
             outline: { ...src.facades.outline }
           },
           edge: { ...src.edge, seam: { ...src.edge.seam }, band: { ...src.edge.band } },
+          gruyere: { ...(src as any).gruyere },
           emission: { ...src.emission },
           bloom: { ...src.bloom },
           collisions: { ...src.collisions, carve: { ...src.collisions.carve } },
@@ -727,6 +734,7 @@
             outline: { ...src.facades.outline }
           },
           edge: { ...src.edge, seam: { ...src.edge.seam }, band: { ...src.edge.band } },
+          gruyere: { ...(src as any).gruyere },
           emission: { ...src.emission },
           bloom: { ...src.bloom },
           collisions: { ...src.collisions, carve: { ...src.collisions.carve } },
@@ -756,6 +764,7 @@
             outline: { ...src.facades.outline }
           },
           edge: { ...src.edge, seam: { ...src.edge.seam }, band: { ...src.edge.band } },
+          gruyere: { ...(src as any).gruyere },
           emission: { ...src.emission },
           bloom: { ...src.bloom },
           collisions: { ...src.collisions, carve: { ...src.collisions.carve } },
@@ -804,6 +813,7 @@
       outline: { ...current.facades.outline }
     };
     next.edge = { ...current.edge, seam: { ...current.edge.seam }, band: { ...current.edge.band } };
+    (next as any).gruyere = { ...(current as any).gruyere };
     next.emission = { ...current.emission };
     next.bloom = { ...current.bloom };
     next.collisions = { ...current.collisions, carve: { ...current.collisions.carve } };
@@ -1066,6 +1076,14 @@
     void c.collisions.carve.marginPx;
     void c.collisions.carve.edge;
     void c.collisions.carve.featherPx;
+    void (c as any).gruyere?.enabled;
+    void (c as any).gruyere?.frequency;
+    void (c as any).gruyere?.count;
+    void (c as any).gruyere?.radiusMin;
+    void (c as any).gruyere?.radiusMax;
+    void (c as any).gruyere?.softness;
+    void (c as any).gruyere?.strength;
+    void (c as any).gruyere?.seedOffset;
     if (c.type === 'popsicle') {
       void c.stickCount;
       void c.stickOverhang;
@@ -1791,7 +1809,64 @@
           </label>
         </section>
       {/if}
-       
+
+      {#if config.type === 'popsicle' || config.type === 'spheres3d'}
+        <section class="control-section">
+          <h3>Gruyere</h3>
+
+          <label class="control-row checkbox">
+            <input type="checkbox" bind:checked={(config as any).gruyere.enabled} />
+            <button
+              type="button"
+              class="setting-title"
+              class:locked={isLocked('gruyere.enabled')}
+              onclick={(e) => {
+                e.preventDefault();
+                toggleLock('gruyere.enabled');
+              }}
+              title="Click to lock/unlock for randomize"
+            >
+              Enable
+            </button>
+          </label>
+
+          <label class="control-row slider">
+            <button type="button" class="setting-title" class:locked={isLocked('gruyere.count')} onclick={() => toggleLock('gruyere.count')} title="Click to lock/unlock for randomize">Samples: {Math.round((config as any).gruyere.count)}</button>
+            <input type="range" bind:value={(config as any).gruyere.count} min="1" max="8" step="1" disabled={!(config as any).gruyere.enabled} />
+          </label>
+
+          <label class="control-row slider">
+            <button type="button" class="setting-title" class:locked={isLocked('gruyere.frequency')} onclick={() => toggleLock('gruyere.frequency')} title="Click to lock/unlock for randomize">Frequency: {(config as any).gruyere.frequency.toFixed(2)}</button>
+            <input type="range" bind:value={(config as any).gruyere.frequency} min="0.2" max="8" step="0.01" disabled={!(config as any).gruyere.enabled} />
+          </label>
+
+          <label class="control-row slider">
+            <button type="button" class="setting-title" class:locked={isLocked('gruyere.radiusMin')} onclick={() => toggleLock('gruyere.radiusMin')} title="Click to lock/unlock for randomize">Radius min: {(config as any).gruyere.radiusMin.toFixed(2)}</button>
+            <input type="range" bind:value={(config as any).gruyere.radiusMin} min="0" max="1.5" step="0.01" disabled={!(config as any).gruyere.enabled} />
+          </label>
+
+          <label class="control-row slider">
+            <button type="button" class="setting-title" class:locked={isLocked('gruyere.radiusMax')} onclick={() => toggleLock('gruyere.radiusMax')} title="Click to lock/unlock for randomize">Radius max: {(config as any).gruyere.radiusMax.toFixed(2)}</button>
+            <input type="range" bind:value={(config as any).gruyere.radiusMax} min="0" max="2.5" step="0.01" disabled={!(config as any).gruyere.enabled} />
+          </label>
+
+          <label class="control-row slider">
+            <button type="button" class="setting-title" class:locked={isLocked('gruyere.softness')} onclick={() => toggleLock('gruyere.softness')} title="Click to lock/unlock for randomize">Softness: {(config as any).gruyere.softness.toFixed(2)}</button>
+            <input type="range" bind:value={(config as any).gruyere.softness} min="0" max="0.5" step="0.01" disabled={!(config as any).gruyere.enabled} />
+          </label>
+
+          <label class="control-row slider">
+            <button type="button" class="setting-title" class:locked={isLocked('gruyere.strength')} onclick={() => toggleLock('gruyere.strength')} title="Click to lock/unlock for randomize">Strength: {(config as any).gruyere.strength.toFixed(2)}</button>
+            <input type="range" bind:value={(config as any).gruyere.strength} min="0" max="1" step="0.01" disabled={!(config as any).gruyere.enabled} />
+          </label>
+
+          <label class="control-row slider">
+            <button type="button" class="setting-title" class:locked={isLocked('gruyere.seedOffset')} onclick={() => toggleLock('gruyere.seedOffset')} title="Click to lock/unlock for randomize">Seed offset: {Math.round((config as any).gruyere.seedOffset)}</button>
+            <input type="range" bind:value={(config as any).gruyere.seedOffset} min="-200" max="200" step="1" disabled={!(config as any).gruyere.enabled} />
+          </label>
+        </section>
+      {/if}
+        
        {#if config.type === 'popsicle'}
          <!-- Stick Settings -->
           <section class="control-section">

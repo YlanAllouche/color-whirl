@@ -121,6 +121,24 @@ export interface EdgeConfig {
   band: EdgeBandConfig;
 }
 
+export interface GruyereConfig {
+  enabled: boolean;
+  /** Cell density in world units. Higher = more cavities. */
+  frequency: number;
+  /** Maximum number of nearby cell samples to test (capped in shader). */
+  count: number;
+  /** Scene units */
+  radiusMin: number;
+  /** Scene units */
+  radiusMax: number;
+  /** Scene units: 0 = hard discard */
+  softness: number;
+  /** 0..1: cavity influence (1 = full hole) */
+  strength: number;
+  /** Additional offset applied to the hash seed */
+  seedOffset: number;
+}
+
 export interface EmissionConfig {
   enabled: boolean;
   /** Palette index (0-based) */
@@ -228,6 +246,7 @@ export interface BaseWallpaperConfig {
   backgroundColor: string;
   facades: FacadesConfig;
   edge: EdgeConfig;
+  gruyere: GruyereConfig;
   emission: EmissionConfig;
   bloom: BloomConfig;
   collisions: CollisionsConfig;
@@ -549,6 +568,16 @@ export const DEFAULT_POPSICLE_CONFIG: PopsicleConfig = {
       emissiveIntensity: 0
     }
   },
+  gruyere: {
+    enabled: false,
+    frequency: 1.8,
+    count: 8,
+    radiusMin: 0.12,
+    radiusMax: 0.38,
+    softness: 0.06,
+    strength: 1.0,
+    seedOffset: 0
+  },
   emission: {
     enabled: false,
     paletteIndex: 0,
@@ -851,6 +880,29 @@ export function normalizeWallpaperConfig(input: any): WallpaperConfig {
     (merged as any).edge = { ...(merged as any).edge, hollow: !!(merged as any).edge?.hollow };
   }
 
+  // Gruyere config validation.
+  const baseGruyere: any = (base as any).gruyere;
+  const gAny: any = (merged as any).gruyere;
+  if (!gAny || typeof gAny !== 'object') {
+    (merged as any).gruyere = cloneJson(baseGruyere);
+  } else {
+    gAny.enabled = typeof gAny.enabled === 'boolean' ? gAny.enabled : !!gAny.enabled;
+    const freq = Number(gAny.frequency);
+    gAny.frequency = Number.isFinite(freq) ? clamp(freq, 0, 20) : Number(baseGruyere.frequency) || 0;
+    const cnt = Number(gAny.count);
+    gAny.count = Number.isFinite(cnt) ? Math.max(0, Math.min(16, Math.round(cnt))) : Math.round(Number(baseGruyere.count) || 0);
+    const rMin = Number(gAny.radiusMin);
+    const rMax = Number(gAny.radiusMax);
+    gAny.radiusMin = Number.isFinite(rMin) ? Math.max(0, rMin) : Math.max(0, Number(baseGruyere.radiusMin) || 0);
+    gAny.radiusMax = Number.isFinite(rMax) ? Math.max(gAny.radiusMin, rMax) : Math.max(gAny.radiusMin, Number(baseGruyere.radiusMax) || gAny.radiusMin);
+    const soft = Number(gAny.softness);
+    gAny.softness = Number.isFinite(soft) ? clamp(soft, 0, 2) : Math.max(0, Number(baseGruyere.softness) || 0);
+    const str = Number(gAny.strength);
+    gAny.strength = Number.isFinite(str) ? clamp(str, 0, 1) : clamp(Number(baseGruyere.strength) || 0, 0, 1);
+    const so = Number(gAny.seedOffset);
+    gAny.seedOffset = Number.isFinite(so) ? so : Number(baseGruyere.seedOffset) || 0;
+  }
+
   const edgeObj: any = (merged as any).edge;
   if (!edgeObj || typeof edgeObj !== 'object') {
     (merged as any).edge = cloneJson((base as any).edge);
@@ -1091,6 +1143,9 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
 
   const is3DType = type === 'popsicle' || type === 'spheres3d' || type === 'triangles3d';
 
+  // Rare: procedural cavity cutouts (raster-only; best-effort for other renderers).
+  const gruyereEnabled = (type === 'popsicle' || type === 'spheres3d') && chance(0.035);
+
   // Collisions are allowed for 2D types but are disabled for 3D random configs.
   // (3D carve collisions are both expensive and historically problematic.)
   const collisionsMode = !is3DType && chance(0.12) ? 'carve' : 'none';
@@ -1169,6 +1224,17 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
       hollow: false,
       seam: { ...DEFAULT_POPSICLE_CONFIG.edge.seam },
       band: { ...DEFAULT_POPSICLE_CONFIG.edge.band }
+    },
+    gruyere: {
+      enabled: gruyereEnabled,
+      // frequency controls density; count is the sample budget in shader.
+      frequency: gruyereEnabled ? clamp(tri(1.1, 1.8, 3.2), 0.1, 20) : DEFAULT_POPSICLE_CONFIG.gruyere.frequency,
+      count: gruyereEnabled ? Math.max(3, Math.min(8, Math.round(tri(4, 6, 8)))) : DEFAULT_POPSICLE_CONFIG.gruyere.count,
+      radiusMin: gruyereEnabled ? clamp(tri(0.06, 0.12, 0.22), 0.0, 10) : DEFAULT_POPSICLE_CONFIG.gruyere.radiusMin,
+      radiusMax: gruyereEnabled ? clamp(tri(0.18, 0.32, 0.55), 0.0, 10) : DEFAULT_POPSICLE_CONFIG.gruyere.radiusMax,
+      softness: gruyereEnabled ? clamp(tri(0.0, 0.05, 0.12), 0.0, 2) : DEFAULT_POPSICLE_CONFIG.gruyere.softness,
+      strength: gruyereEnabled ? clamp(tri(0.75, 1.0, 1.0), 0.0, 1) : DEFAULT_POPSICLE_CONFIG.gruyere.strength,
+      seedOffset: gruyereEnabled ? Math.round(tri(-50, 0, 50)) : DEFAULT_POPSICLE_CONFIG.gruyere.seedOffset
     },
     emission: {
       enabled: emissionEnabled,
