@@ -646,12 +646,14 @@ export class PopsiclePreview {
     }
 
     const envIntensity = effective.environment.enabled ? effective.environment.intensity : 0;
-    const edgesKey = JSON.stringify(effective.edges);
+    const facadesKey = JSON.stringify(effective.facades);
+    const edgeKey = JSON.stringify(effective.edge);
     const emissionKey = JSON.stringify(effective.emission);
     const matBaseKey = [
       effective.texture,
       textureParamsKey(effective),
-      edgesKey,
+      facadesKey,
+      edgeKey,
       emissionKey,
       envIntensity.toFixed(3),
       safeStickOpacity.toFixed(3),
@@ -708,10 +710,10 @@ export class PopsiclePreview {
     }
 
     // Outline (inverted hull)
-    const outlineEnabled = effective.edges.outline.enabled;
+    const outlineEnabled = effective.facades.outline.enabled;
     this.outlineGroup.visible = outlineEnabled;
     if (outlineEnabled) {
-      const oc = effective.edges.outline;
+      const oc = effective.facades.outline;
       const opacity = clamp(Number(oc.opacity) || 1, 0, 1);
       const thickness = Math.max(0, Math.min(0.2, Number(oc.thickness) || 0));
       const colorHex = new THREE.Color(oc.color).getHex();
@@ -1102,13 +1104,12 @@ void wmApplyCollisionMask(inout vec4 col) {
         glass: { ...config.textureParams.glass },
         cel: { ...config.textureParams.cel }
       },
-      edges: {
-        tint: { ...config.edges.tint },
-        material: { ...config.edges.material },
-        wear: { ...config.edges.wear },
-        rimLight: { ...config.edges.rimLight },
-        outline: { ...config.edges.outline }
+      facades: {
+        side: { ...config.facades.side },
+        grazing: { ...config.facades.grazing },
+        outline: { ...config.facades.outline }
       },
+      edge: { ...config.edge },
       emission: { ...config.emission },
       bloom: { ...config.bloom },
       lighting: {
@@ -1346,7 +1347,8 @@ void wmApplyCollisionMask(inout vec4 col) {
       const k = [
         config.texture,
         textureParamsKey(config),
-        JSON.stringify(config.edges),
+        JSON.stringify(config.facades),
+        JSON.stringify(config.edge),
         JSON.stringify(config.emission),
         String(paletteIndex),
         hex,
@@ -1476,8 +1478,8 @@ export async function renderRasterToCanvas(config: PopsicleConfig): Promise<HTML
 
   const envIntensity = config.environment.enabled ? config.environment.intensity : 0;
   const materialCache = new Map<string, THREE.Material | THREE.Material[]>();
-  const outlineEnabled = config.edges.outline.enabled;
-  const outlineCfg = config.edges.outline;
+  const outlineEnabled = config.facades.outline.enabled;
+  const outlineCfg = config.facades.outline;
   const outlineOpacity = clamp(Number(outlineCfg.opacity) || 1, 0, 1);
   const outlineThickness = Math.max(0, Math.min(0.2, Number(outlineCfg.thickness) || 0));
   const outlineMat = outlineEnabled
@@ -1493,7 +1495,8 @@ export async function renderRasterToCanvas(config: PopsicleConfig): Promise<HTML
     const k = [
       config.texture,
       textureParamsKey(config),
-      JSON.stringify(config.edges),
+      JSON.stringify(config.facades),
+      JSON.stringify(config.edge),
       JSON.stringify(config.emission),
       String(paletteIndex),
       hex,

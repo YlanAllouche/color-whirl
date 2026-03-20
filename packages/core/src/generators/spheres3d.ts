@@ -641,15 +641,15 @@ void wmApplyCollisionMask(inout vec4 col) {
   }
 
   // Outline (optional): approximate via additional instanced meshes.
-  if (config.edges.outline.enabled) {
+  if (config.facades.outline.enabled) {
     const outlineMat = new THREE.MeshBasicMaterial({
-      color: new THREE.Color(config.edges.outline.color),
+      color: new THREE.Color(config.facades.outline.color),
       side: THREE.BackSide,
-      transparent: config.edges.outline.opacity < 1,
-      opacity: clamp(Number(config.edges.outline.opacity) || 1, 0, 1),
+      transparent: config.facades.outline.opacity < 1,
+      opacity: clamp(Number(config.facades.outline.opacity) || 1, 0, 1),
       depthWrite: false
     });
-    const thickness = Math.max(0, Math.min(0.2, Number(config.edges.outline.thickness) || 0));
+    const thickness = Math.max(0, Math.min(0.2, Number(config.facades.outline.thickness) || 0));
     for (let pi = 0; pi < nColors; pi++) {
       const baseInst = perColor[pi].inst;
       const outInst = new THREE.InstancedMesh(geometry, outlineMat, baseInst.count);

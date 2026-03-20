@@ -439,25 +439,24 @@
       return {
          ...DEFAULT_CONFIG,
           colors: [...DEFAULT_CONFIG.colors],
-          textureParams: {
-            drywall: { ...DEFAULT_CONFIG.textureParams.drywall },
-            glass: { ...DEFAULT_CONFIG.textureParams.glass },
-            cel: { ...DEFAULT_CONFIG.textureParams.cel }
-          },
-          edges: {
-            tint: { ...DEFAULT_CONFIG.edges.tint },
-            material: { ...DEFAULT_CONFIG.edges.material },
-            wear: { ...DEFAULT_CONFIG.edges.wear },
-            rimLight: { ...DEFAULT_CONFIG.edges.rimLight },
-            outline: { ...DEFAULT_CONFIG.edges.outline }
-          },
-          emission: { ...DEFAULT_CONFIG.emission },
-          bloom: { ...DEFAULT_CONFIG.bloom },
-          collisions: { ...DEFAULT_CONFIG.collisions, carve: { ...DEFAULT_CONFIG.collisions.carve } },
-          lighting: {
-            ...DEFAULT_CONFIG.lighting,
-            position: { ...DEFAULT_CONFIG.lighting.position }
-          },
+           textureParams: {
+             drywall: { ...DEFAULT_CONFIG.textureParams.drywall },
+             glass: { ...DEFAULT_CONFIG.textureParams.glass },
+             cel: { ...DEFAULT_CONFIG.textureParams.cel }
+           },
+           facades: {
+             side: { ...DEFAULT_CONFIG.facades.side },
+             grazing: { ...DEFAULT_CONFIG.facades.grazing },
+             outline: { ...DEFAULT_CONFIG.facades.outline }
+           },
+           edge: { ...DEFAULT_CONFIG.edge },
+           emission: { ...DEFAULT_CONFIG.emission },
+           bloom: { ...DEFAULT_CONFIG.bloom },
+           collisions: { ...DEFAULT_CONFIG.collisions, carve: { ...DEFAULT_CONFIG.collisions.carve } },
+           lighting: {
+             ...DEFAULT_CONFIG.lighting,
+             position: { ...DEFAULT_CONFIG.lighting.position }
+           },
           camera: { ...DEFAULT_CONFIG.camera },
          environment: { ...DEFAULT_CONFIG.environment },
          shadows: { ...DEFAULT_CONFIG.shadows },
@@ -476,13 +475,12 @@
         glass: { ...next.textureParams.glass },
         cel: { ...next.textureParams.cel }
       },
-      edges: {
-        tint: { ...next.edges.tint },
-        material: { ...next.edges.material },
-        wear: { ...next.edges.wear },
-        rimLight: { ...next.edges.rimLight },
-        outline: { ...next.edges.outline }
+      facades: {
+        side: { ...next.facades.side },
+        grazing: { ...next.facades.grazing },
+        outline: { ...next.facades.outline }
       },
+      edge: { ...next.edge },
       emission: { ...next.emission },
       bloom: { ...next.bloom },
       collisions: { ...next.collisions, carve: { ...next.collisions.carve } },
@@ -565,13 +563,12 @@
             glass: { ...src.textureParams.glass },
             cel: { ...src.textureParams.cel }
           },
-          edges: {
-            tint: { ...src.edges.tint },
-            material: { ...src.edges.material },
-            wear: { ...src.edges.wear },
-            rimLight: { ...src.edges.rimLight },
-            outline: { ...src.edges.outline }
+          facades: {
+            side: { ...src.facades.side },
+            grazing: { ...src.facades.grazing },
+            outline: { ...src.facades.outline }
           },
+          edge: { ...src.edge },
           emission: { ...src.emission },
           bloom: { ...src.bloom },
           collisions: { ...src.collisions, carve: { ...src.collisions.carve } },
@@ -594,13 +591,12 @@
             glass: { ...src.textureParams.glass },
             cel: { ...src.textureParams.cel }
           },
-          edges: {
-            tint: { ...src.edges.tint },
-            material: { ...src.edges.material },
-            wear: { ...src.edges.wear },
-            rimLight: { ...src.edges.rimLight },
-            outline: { ...src.edges.outline }
+          facades: {
+            side: { ...src.facades.side },
+            grazing: { ...src.facades.grazing },
+            outline: { ...src.facades.outline }
           },
+          edge: { ...src.edge },
           emission: { ...src.emission },
           bloom: { ...src.bloom },
           collisions: { ...src.collisions, carve: { ...src.collisions.carve } },
@@ -624,13 +620,12 @@
             glass: { ...src.textureParams.glass },
             cel: { ...src.textureParams.cel }
           },
-          edges: {
-            tint: { ...src.edges.tint },
-            material: { ...src.edges.material },
-            wear: { ...src.edges.wear },
-            rimLight: { ...src.edges.rimLight },
-            outline: { ...src.edges.outline }
+          facades: {
+            side: { ...src.facades.side },
+            grazing: { ...src.facades.grazing },
+            outline: { ...src.facades.outline }
           },
+          edge: { ...src.edge },
           emission: { ...src.emission },
           bloom: { ...src.bloom },
           collisions: { ...src.collisions, carve: { ...src.collisions.carve } },
@@ -659,13 +654,12 @@
             glass: { ...src.textureParams.glass },
             cel: { ...src.textureParams.cel }
           },
-          edges: {
-            tint: { ...src.edges.tint },
-            material: { ...src.edges.material },
-            wear: { ...src.edges.wear },
-            rimLight: { ...src.edges.rimLight },
-            outline: { ...src.edges.outline }
+          facades: {
+            side: { ...src.facades.side },
+            grazing: { ...src.facades.grazing },
+            outline: { ...src.facades.outline }
           },
+          edge: { ...src.edge },
           emission: { ...src.emission },
           bloom: { ...src.bloom },
           collisions: { ...src.collisions, carve: { ...src.collisions.carve } },
@@ -693,13 +687,12 @@
             glass: { ...src.textureParams.glass },
             cel: { ...src.textureParams.cel }
           },
-          edges: {
-            tint: { ...src.edges.tint },
-            material: { ...src.edges.material },
-            wear: { ...src.edges.wear },
-            rimLight: { ...src.edges.rimLight },
-            outline: { ...src.edges.outline }
+          facades: {
+            side: { ...src.facades.side },
+            grazing: { ...src.facades.grazing },
+            outline: { ...src.facades.outline }
           },
+          edge: { ...src.edge },
           emission: { ...src.emission },
           bloom: { ...src.bloom },
           collisions: { ...src.collisions, carve: { ...src.collisions.carve } },
@@ -728,13 +721,12 @@
             glass: { ...src.textureParams.glass },
             cel: { ...src.textureParams.cel }
           },
-          edges: {
-            tint: { ...src.edges.tint },
-            material: { ...src.edges.material },
-            wear: { ...src.edges.wear },
-            rimLight: { ...src.edges.rimLight },
-            outline: { ...src.edges.outline }
+          facades: {
+            side: { ...src.facades.side },
+            grazing: { ...src.facades.grazing },
+            outline: { ...src.facades.outline }
           },
+          edge: { ...src.edge },
           emission: { ...src.emission },
           bloom: { ...src.bloom },
           collisions: { ...src.collisions, carve: { ...src.collisions.carve } },
@@ -758,13 +750,12 @@
             glass: { ...src.textureParams.glass },
             cel: { ...src.textureParams.cel }
           },
-          edges: {
-            tint: { ...src.edges.tint },
-            material: { ...src.edges.material },
-            wear: { ...src.edges.wear },
-            rimLight: { ...src.edges.rimLight },
-            outline: { ...src.edges.outline }
+          facades: {
+            side: { ...src.facades.side },
+            grazing: { ...src.facades.grazing },
+            outline: { ...src.facades.outline }
           },
+          edge: { ...src.edge },
           emission: { ...src.emission },
           bloom: { ...src.bloom },
           collisions: { ...src.collisions, carve: { ...src.collisions.carve } },
@@ -807,13 +798,12 @@
       glass: { ...current.textureParams.glass },
       cel: { ...current.textureParams.cel }
     };
-    next.edges = {
-      tint: { ...current.edges.tint },
-      material: { ...current.edges.material },
-      wear: { ...current.edges.wear },
-      rimLight: { ...current.edges.rimLight },
-      outline: { ...current.edges.outline }
+    next.facades = {
+      side: { ...current.facades.side },
+      grazing: { ...current.facades.grazing },
+      outline: { ...current.facades.outline }
     };
+    next.edge = { ...current.edge };
     next.emission = { ...current.emission };
     next.bloom = { ...current.bloom };
     next.collisions = { ...current.collisions, carve: { ...current.collisions.carve } };
@@ -1032,27 +1022,26 @@
     void c.textureParams.cel.bands;
     void c.textureParams.cel.halftone;
     void c.backgroundColor;
-    void c.edges.tint.enabled;
-    void c.edges.tint.color;
-    void c.edges.tint.amount;
-    void c.edges.material.enabled;
-    void c.edges.material.roughness;
-    void c.edges.material.metalness;
-    void c.edges.material.clearcoat;
-    void c.edges.material.envIntensityMult;
-    void c.edges.wear.enabled;
-    void c.edges.wear.intensity;
-    void c.edges.wear.width;
-    void c.edges.wear.noise;
-    void c.edges.wear.colorShift;
-    void c.edges.rimLight.enabled;
-    void c.edges.rimLight.color;
-    void c.edges.rimLight.intensity;
-    void c.edges.rimLight.power;
-    void c.edges.outline.enabled;
-    void c.edges.outline.color;
-    void c.edges.outline.thickness;
-    void c.edges.outline.opacity;
+    void c.facades.side.enabled;
+    void c.facades.side.tintColor;
+    void c.facades.side.tintAmount;
+    void c.facades.side.materialAmount;
+    void c.facades.side.roughness;
+    void c.facades.side.metalness;
+    void c.facades.side.clearcoat;
+    void c.facades.side.envIntensityMult;
+    void c.facades.grazing.enabled;
+    void c.facades.grazing.mode;
+    void c.facades.grazing.color;
+    void c.facades.grazing.strength;
+    void c.facades.grazing.power;
+    void c.facades.grazing.width;
+    void c.facades.grazing.noise;
+    void c.facades.outline.enabled;
+    void c.facades.outline.color;
+    void c.facades.outline.thickness;
+    void c.facades.outline.opacity;
+    void c.edge.hollow;
     void c.emission.enabled;
     void c.emission.paletteIndex;
     void c.emission.intensity;
@@ -1208,7 +1197,7 @@
       return;
     }
 
-    if ((config.texture === 'cel' || config.edges.outline.enabled || config.bloom.enabled) && renderMode === 'path') {
+    if ((config.texture === 'cel' || config.facades.outline.enabled || config.bloom.enabled) && renderMode === 'path') {
       renderMode = 'raster';
     }
   });
@@ -1530,182 +1519,173 @@
         </section>
       {/if}
 
-      <!-- Edges -->
+      <!-- Facades / Edge -->
       {#if config.type === 'popsicle'}
-      <section class="control-section">
-        <h3>Edges</h3>
+        <section class="control-section">
+          <h3>Facades</h3>
 
-        <details class="control-details">
-          <summary class="control-details-summary">Rim light</summary>
+          <details class="control-details">
+            <summary class="control-details-summary">Grazing</summary>
+            <label class="control-row checkbox">
+              <input type="checkbox" bind:checked={config.facades.grazing.enabled} />
+              <button
+                type="button"
+                class="setting-title"
+                class:locked={isLocked('facades.grazing.enabled')}
+                onclick={(e) => {
+                  e.preventDefault();
+                  toggleLock('facades.grazing.enabled');
+                }}
+                title="Click to lock/unlock for randomize"
+              >
+                Enable
+              </button>
+            </label>
+            <label class="control-row">
+              <button type="button" class="setting-title" class:locked={isLocked('facades.grazing.mode')} onclick={() => toggleLock('facades.grazing.mode')} title="Click to lock/unlock for randomize">Mode</button>
+              <select bind:value={config.facades.grazing.mode} disabled={!config.facades.grazing.enabled}>
+                <option value="add">Add</option>
+                <option value="mix">Mix</option>
+              </select>
+            </label>
+            <label class="control-row">
+              <button type="button" class="setting-title" class:locked={isLocked('facades.grazing.color')} onclick={() => toggleLock('facades.grazing.color')} title="Click to lock/unlock for randomize">Color</button>
+              <input type="color" bind:value={config.facades.grazing.color} disabled={!config.facades.grazing.enabled} />
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('facades.grazing.strength')} onclick={() => toggleLock('facades.grazing.strength')} title="Click to lock/unlock for randomize">Strength: {config.facades.grazing.strength.toFixed(2)}</button>
+              <input
+                type="range"
+                bind:value={config.facades.grazing.strength}
+                min="0"
+                max={config.facades.grazing.mode === 'add' ? 5 : 1}
+                step="0.01"
+                disabled={!config.facades.grazing.enabled}
+              />
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('facades.grazing.power')} onclick={() => toggleLock('facades.grazing.power')} title="Click to lock/unlock for randomize">Power: {config.facades.grazing.power.toFixed(2)}</button>
+              <input type="range" bind:value={config.facades.grazing.power} min="0.5" max="8" step="0.05" disabled={!config.facades.grazing.enabled} />
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('facades.grazing.width')} onclick={() => toggleLock('facades.grazing.width')} title="Click to lock/unlock for randomize">Width: {config.facades.grazing.width.toFixed(2)}</button>
+              <input type="range" bind:value={config.facades.grazing.width} min="0" max="1" step="0.01" disabled={!config.facades.grazing.enabled || config.facades.grazing.mode === 'add'} />
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('facades.grazing.noise')} onclick={() => toggleLock('facades.grazing.noise')} title="Click to lock/unlock for randomize">Noise: {config.facades.grazing.noise.toFixed(2)}</button>
+              <input type="range" bind:value={config.facades.grazing.noise} min="0" max="1" step="0.01" disabled={!config.facades.grazing.enabled} />
+            </label>
+          </details>
+
+          <details class="control-details">
+            <summary class="control-details-summary">Side</summary>
+            <label class="control-row checkbox">
+              <input type="checkbox" bind:checked={config.facades.side.enabled} />
+              <button
+                type="button"
+                class="setting-title"
+                class:locked={isLocked('facades.side.enabled')}
+                onclick={(e) => {
+                  e.preventDefault();
+                  toggleLock('facades.side.enabled');
+                }}
+                title="Click to lock/unlock for randomize"
+              >
+                Enable
+              </button>
+            </label>
+            <label class="control-row">
+              <button type="button" class="setting-title" class:locked={isLocked('facades.side.tintColor')} onclick={() => toggleLock('facades.side.tintColor')} title="Click to lock/unlock for randomize">Tint</button>
+              <input type="color" bind:value={config.facades.side.tintColor} disabled={!config.facades.side.enabled} />
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('facades.side.tintAmount')} onclick={() => toggleLock('facades.side.tintAmount')} title="Click to lock/unlock for randomize">Tint amount: {config.facades.side.tintAmount.toFixed(2)}</button>
+              <input type="range" bind:value={config.facades.side.tintAmount} min="0" max="1" step="0.01" disabled={!config.facades.side.enabled} />
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('facades.side.materialAmount')} onclick={() => toggleLock('facades.side.materialAmount')} title="Click to lock/unlock for randomize">Material amount: {config.facades.side.materialAmount.toFixed(2)}</button>
+              <input type="range" bind:value={config.facades.side.materialAmount} min="0" max="1" step="0.01" disabled={!config.facades.side.enabled} />
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('facades.side.roughness')} onclick={() => toggleLock('facades.side.roughness')} title="Click to lock/unlock for randomize">Roughness: {config.facades.side.roughness.toFixed(2)}</button>
+              <input type="range" bind:value={config.facades.side.roughness} min="0" max="1" step="0.01" disabled={!config.facades.side.enabled || config.facades.side.materialAmount <= 0} />
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('facades.side.metalness')} onclick={() => toggleLock('facades.side.metalness')} title="Click to lock/unlock for randomize">Metalness: {config.facades.side.metalness.toFixed(2)}</button>
+              <input type="range" bind:value={config.facades.side.metalness} min="0" max="1" step="0.01" disabled={!config.facades.side.enabled || config.facades.side.materialAmount <= 0} />
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('facades.side.clearcoat')} onclick={() => toggleLock('facades.side.clearcoat')} title="Click to lock/unlock for randomize">Clearcoat: {config.facades.side.clearcoat.toFixed(2)}</button>
+              <input type="range" bind:value={config.facades.side.clearcoat} min="0" max="1" step="0.01" disabled={!config.facades.side.enabled || config.facades.side.materialAmount <= 0} />
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('facades.side.envIntensityMult')} onclick={() => toggleLock('facades.side.envIntensityMult')} title="Click to lock/unlock for randomize">Env mult: {config.facades.side.envIntensityMult.toFixed(2)}</button>
+              <input type="range" bind:value={config.facades.side.envIntensityMult} min="0" max="3" step="0.01" disabled={!config.facades.side.enabled || config.facades.side.materialAmount <= 0} />
+            </label>
+          </details>
+
+          <details class="control-details">
+            <summary class="control-details-summary">Outline</summary>
+            <label class="control-row checkbox">
+              <input type="checkbox" bind:checked={config.facades.outline.enabled} />
+              <button
+                type="button"
+                class="setting-title"
+                class:locked={isLocked('facades.outline.enabled')}
+                onclick={(e) => {
+                  e.preventDefault();
+                  toggleLock('facades.outline.enabled');
+                }}
+                title="Click to lock/unlock for randomize"
+              >
+                Enable
+              </button>
+            </label>
+            <label class="control-row">
+              <button type="button" class="setting-title" class:locked={isLocked('facades.outline.color')} onclick={() => toggleLock('facades.outline.color')} title="Click to lock/unlock for randomize">Color</button>
+              <input type="color" bind:value={config.facades.outline.color} disabled={!config.facades.outline.enabled} />
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('facades.outline.thickness')} onclick={() => toggleLock('facades.outline.thickness')} title="Click to lock/unlock for randomize">Thickness: {config.facades.outline.thickness.toFixed(3)}</button>
+              <input type="range" bind:value={config.facades.outline.thickness} min="0" max="0.12" step="0.001" disabled={!config.facades.outline.enabled} />
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('facades.outline.opacity')} onclick={() => toggleLock('facades.outline.opacity')} title="Click to lock/unlock for randomize">Opacity: {config.facades.outline.opacity.toFixed(2)}</button>
+              <input type="range" bind:value={config.facades.outline.opacity} min="0" max="1" step="0.01" disabled={!config.facades.outline.enabled} />
+            </label>
+          </details>
+        </section>
+
+        <section class="control-section">
+          <h3>Edge</h3>
           <label class="control-row checkbox">
-            <input type="checkbox" bind:checked={config.edges.rimLight.enabled} />
+            <input type="checkbox" bind:checked={config.edge.hollow} />
             <button
               type="button"
               class="setting-title"
-              class:locked={isLocked('edges.rimLight.enabled')}
+              class:locked={isLocked('edge.hollow')}
               onclick={(e) => {
                 e.preventDefault();
-                toggleLock('edges.rimLight.enabled');
+                toggleLock('edge.hollow');
               }}
               title="Click to lock/unlock for randomize"
             >
-              Enable
+              Hollow caps
             </button>
           </label>
-          <label class="control-row">
-            <button type="button" class="setting-title" class:locked={isLocked('edges.rimLight.color')} onclick={() => toggleLock('edges.rimLight.color')} title="Click to lock/unlock for randomize">Color</button>
-            <input type="color" bind:value={config.edges.rimLight.color} disabled={!config.edges.rimLight.enabled} />
-          </label>
-          <label class="control-row slider">
-            <button type="button" class="setting-title" class:locked={isLocked('edges.rimLight.intensity')} onclick={() => toggleLock('edges.rimLight.intensity')} title="Click to lock/unlock for randomize">Intensity: {config.edges.rimLight.intensity.toFixed(2)}</button>
-            <input type="range" bind:value={config.edges.rimLight.intensity} min="0" max="5" step="0.01" disabled={!config.edges.rimLight.enabled} />
-          </label>
-          <label class="control-row slider">
-            <button type="button" class="setting-title" class:locked={isLocked('edges.rimLight.power')} onclick={() => toggleLock('edges.rimLight.power')} title="Click to lock/unlock for randomize">Power: {config.edges.rimLight.power.toFixed(2)}</button>
-            <input type="range" bind:value={config.edges.rimLight.power} min="0.5" max="8" step="0.05" disabled={!config.edges.rimLight.enabled} />
-          </label>
-        </details>
-
-        <details class="control-details">
-          <summary class="control-details-summary">Edge tint</summary>
-          <label class="control-row checkbox">
-            <input type="checkbox" bind:checked={config.edges.tint.enabled} />
-            <button
-              type="button"
-              class="setting-title"
-              class:locked={isLocked('edges.tint.enabled')}
-              onclick={(e) => {
-                e.preventDefault();
-                toggleLock('edges.tint.enabled');
-              }}
-              title="Click to lock/unlock for randomize"
-            >
-              Enable
-            </button>
-          </label>
-          <label class="control-row">
-            <button type="button" class="setting-title" class:locked={isLocked('edges.tint.color')} onclick={() => toggleLock('edges.tint.color')} title="Click to lock/unlock for randomize">Tint</button>
-            <input type="color" bind:value={config.edges.tint.color} disabled={!config.edges.tint.enabled} />
-          </label>
-          <label class="control-row slider">
-            <button type="button" class="setting-title" class:locked={isLocked('edges.tint.amount')} onclick={() => toggleLock('edges.tint.amount')} title="Click to lock/unlock for randomize">Amount: {config.edges.tint.amount.toFixed(2)}</button>
-            <input type="range" bind:value={config.edges.tint.amount} min="0" max="1" step="0.01" disabled={!config.edges.tint.enabled} />
-          </label>
-        </details>
-
-        <details class="control-details">
-          <summary class="control-details-summary">Edge material</summary>
-          <label class="control-row checkbox">
-            <input type="checkbox" bind:checked={config.edges.material.enabled} />
-            <button
-              type="button"
-              class="setting-title"
-              class:locked={isLocked('edges.material.enabled')}
-              onclick={(e) => {
-                e.preventDefault();
-                toggleLock('edges.material.enabled');
-              }}
-              title="Click to lock/unlock for randomize"
-            >
-              Enable
-            </button>
-          </label>
-          <label class="control-row slider">
-            <button type="button" class="setting-title" class:locked={isLocked('edges.material.roughness')} onclick={() => toggleLock('edges.material.roughness')} title="Click to lock/unlock for randomize">Roughness: {config.edges.material.roughness.toFixed(2)}</button>
-            <input type="range" bind:value={config.edges.material.roughness} min="0" max="1" step="0.01" disabled={!config.edges.material.enabled} />
-          </label>
-          <label class="control-row slider">
-            <button type="button" class="setting-title" class:locked={isLocked('edges.material.metalness')} onclick={() => toggleLock('edges.material.metalness')} title="Click to lock/unlock for randomize">Metalness: {config.edges.material.metalness.toFixed(2)}</button>
-            <input type="range" bind:value={config.edges.material.metalness} min="0" max="1" step="0.01" disabled={!config.edges.material.enabled} />
-          </label>
-          <label class="control-row slider">
-            <button type="button" class="setting-title" class:locked={isLocked('edges.material.clearcoat')} onclick={() => toggleLock('edges.material.clearcoat')} title="Click to lock/unlock for randomize">Clearcoat: {config.edges.material.clearcoat.toFixed(2)}</button>
-            <input type="range" bind:value={config.edges.material.clearcoat} min="0" max="1" step="0.01" disabled={!config.edges.material.enabled} />
-          </label>
-          <label class="control-row slider">
-            <button type="button" class="setting-title" class:locked={isLocked('edges.material.envIntensityMult')} onclick={() => toggleLock('edges.material.envIntensityMult')} title="Click to lock/unlock for randomize">Env mult: {config.edges.material.envIntensityMult.toFixed(2)}</button>
-            <input type="range" bind:value={config.edges.material.envIntensityMult} min="0" max="3" step="0.01" disabled={!config.edges.material.enabled} />
-          </label>
-        </details>
-
-        <details class="control-details">
-          <summary class="control-details-summary">Edge wear</summary>
-          <label class="control-row checkbox">
-            <input type="checkbox" bind:checked={config.edges.wear.enabled} />
-            <button
-              type="button"
-              class="setting-title"
-              class:locked={isLocked('edges.wear.enabled')}
-              onclick={(e) => {
-                e.preventDefault();
-                toggleLock('edges.wear.enabled');
-              }}
-              title="Click to lock/unlock for randomize"
-            >
-              Enable
-            </button>
-          </label>
-          <label class="control-row">
-            <button type="button" class="setting-title" class:locked={isLocked('edges.wear.colorShift')} onclick={() => toggleLock('edges.wear.colorShift')} title="Click to lock/unlock for randomize">Shift</button>
-            <input type="color" bind:value={config.edges.wear.colorShift} disabled={!config.edges.wear.enabled} />
-          </label>
-          <label class="control-row slider">
-            <button type="button" class="setting-title" class:locked={isLocked('edges.wear.intensity')} onclick={() => toggleLock('edges.wear.intensity')} title="Click to lock/unlock for randomize">Intensity: {config.edges.wear.intensity.toFixed(2)}</button>
-            <input type="range" bind:value={config.edges.wear.intensity} min="0" max="1" step="0.01" disabled={!config.edges.wear.enabled} />
-          </label>
-          <label class="control-row slider">
-            <button type="button" class="setting-title" class:locked={isLocked('edges.wear.width')} onclick={() => toggleLock('edges.wear.width')} title="Click to lock/unlock for randomize">Width: {config.edges.wear.width.toFixed(2)}</button>
-            <input type="range" bind:value={config.edges.wear.width} min="0" max="1" step="0.01" disabled={!config.edges.wear.enabled} />
-          </label>
-          <label class="control-row slider">
-            <button type="button" class="setting-title" class:locked={isLocked('edges.wear.noise')} onclick={() => toggleLock('edges.wear.noise')} title="Click to lock/unlock for randomize">Noise: {config.edges.wear.noise.toFixed(2)}</button>
-            <input type="range" bind:value={config.edges.wear.noise} min="0" max="1" step="0.01" disabled={!config.edges.wear.enabled} />
-          </label>
-        </details>
-
-        <details class="control-details">
-          <summary class="control-details-summary">Outline</summary>
-          <label class="control-row checkbox">
-            <input type="checkbox" bind:checked={config.edges.outline.enabled} />
-            <button
-              type="button"
-              class="setting-title"
-              class:locked={isLocked('edges.outline.enabled')}
-              onclick={(e) => {
-                e.preventDefault();
-                toggleLock('edges.outline.enabled');
-              }}
-              title="Click to lock/unlock for randomize"
-            >
-              Enable
-            </button>
-          </label>
-          <label class="control-row">
-            <button type="button" class="setting-title" class:locked={isLocked('edges.outline.color')} onclick={() => toggleLock('edges.outline.color')} title="Click to lock/unlock for randomize">Color</button>
-            <input type="color" bind:value={config.edges.outline.color} disabled={!config.edges.outline.enabled} />
-          </label>
-          <label class="control-row slider">
-            <button type="button" class="setting-title" class:locked={isLocked('edges.outline.thickness')} onclick={() => toggleLock('edges.outline.thickness')} title="Click to lock/unlock for randomize">Thickness: {config.edges.outline.thickness.toFixed(3)}</button>
-            <input type="range" bind:value={config.edges.outline.thickness} min="0" max="0.12" step="0.001" disabled={!config.edges.outline.enabled} />
-          </label>
-          <label class="control-row slider">
-            <button type="button" class="setting-title" class:locked={isLocked('edges.outline.opacity')} onclick={() => toggleLock('edges.outline.opacity')} title="Click to lock/unlock for randomize">Opacity: {config.edges.outline.opacity.toFixed(2)}</button>
-            <input type="range" bind:value={config.edges.outline.opacity} min="0" max="1" step="0.01" disabled={!config.edges.outline.enabled} />
-          </label>
-        </details>
-      </section>
+        </section>
       {:else if supportsOutlineOnly}
         <section class="control-section">
           <h3>Outline</h3>
           <label class="control-row checkbox">
-            <input type="checkbox" bind:checked={config.edges.outline.enabled} />
+            <input type="checkbox" bind:checked={config.facades.outline.enabled} />
             <button
               type="button"
               class="setting-title"
-              class:locked={isLocked('edges.outline.enabled')}
+              class:locked={isLocked('facades.outline.enabled')}
               onclick={(e) => {
                 e.preventDefault();
-                toggleLock('edges.outline.enabled');
+                toggleLock('facades.outline.enabled');
               }}
               title="Click to lock/unlock for randomize"
             >
@@ -1713,16 +1693,16 @@
             </button>
           </label>
           <label class="control-row">
-            <button type="button" class="setting-title" class:locked={isLocked('edges.outline.color')} onclick={() => toggleLock('edges.outline.color')} title="Click to lock/unlock for randomize">Color</button>
-            <input type="color" bind:value={config.edges.outline.color} disabled={!config.edges.outline.enabled} />
+            <button type="button" class="setting-title" class:locked={isLocked('facades.outline.color')} onclick={() => toggleLock('facades.outline.color')} title="Click to lock/unlock for randomize">Color</button>
+            <input type="color" bind:value={config.facades.outline.color} disabled={!config.facades.outline.enabled} />
           </label>
           <label class="control-row slider">
-            <button type="button" class="setting-title" class:locked={isLocked('edges.outline.thickness')} onclick={() => toggleLock('edges.outline.thickness')} title="Click to lock/unlock for randomize">Thickness: {config.edges.outline.thickness.toFixed(3)}</button>
-            <input type="range" bind:value={config.edges.outline.thickness} min="0" max="0.12" step="0.001" disabled={!config.edges.outline.enabled} />
+            <button type="button" class="setting-title" class:locked={isLocked('facades.outline.thickness')} onclick={() => toggleLock('facades.outline.thickness')} title="Click to lock/unlock for randomize">Thickness: {config.facades.outline.thickness.toFixed(3)}</button>
+            <input type="range" bind:value={config.facades.outline.thickness} min="0" max="0.12" step="0.001" disabled={!config.facades.outline.enabled} />
           </label>
           <label class="control-row slider">
-            <button type="button" class="setting-title" class:locked={isLocked('edges.outline.opacity')} onclick={() => toggleLock('edges.outline.opacity')} title="Click to lock/unlock for randomize">Opacity: {config.edges.outline.opacity.toFixed(2)}</button>
-            <input type="range" bind:value={config.edges.outline.opacity} min="0" max="1" step="0.01" disabled={!config.edges.outline.enabled} />
+            <button type="button" class="setting-title" class:locked={isLocked('facades.outline.opacity')} onclick={() => toggleLock('facades.outline.opacity')} title="Click to lock/unlock for randomize">Opacity: {config.facades.outline.opacity.toFixed(2)}</button>
+            <input type="range" bind:value={config.facades.outline.opacity} min="0" max="1" step="0.01" disabled={!config.facades.outline.enabled} />
           </label>
         </section>
       {/if}
@@ -2589,7 +2569,7 @@
             <span class="setting-title">Mode</span>
             <select bind:value={renderMode} title="Raster is instant; Path traced refines progressively">
               <option value="raster">Raster</option>
-              <option value="path" disabled={config.type !== 'popsicle' || config.texture === 'cel' || config.edges.outline.enabled || config.bloom.enabled}>Path traced</option>
+              <option value="path" disabled={config.type !== 'popsicle' || config.texture === 'cel' || config.facades.outline.enabled || config.bloom.enabled}>Path traced</option>
             </select>
           </label>
         {/if}

@@ -28,6 +28,26 @@ export interface RimLightConfig {
   power: number;
 }
 
+export type GrazingMode = 'add' | 'mix';
+
+/**
+ * View-dependent highlight along grazing angles.
+ * This unifies the historical rim-light (add) and edge-wear (mix) looks.
+ */
+export interface GrazingConfig {
+  enabled: boolean;
+  mode: GrazingMode;
+  color: string;
+  /** 0..5 (add) or 0..1 (mix) recommended */
+  strength: number;
+  /** 0.5..8 */
+  power: number;
+  /** 0..1: only used for mix mode (band width) */
+  width: number;
+  /** 0..1 */
+  noise: number;
+}
+
 export interface OutlineConfig {
   enabled: boolean;
   color: string;
@@ -37,15 +57,17 @@ export interface OutlineConfig {
   opacity: number;
 }
 
-export interface EdgeTintConfig {
+/**
+ * Surface overrides for the "facades" (historically: edges).
+ * For popsicles this mainly targets the side walls.
+ */
+export interface FacadeSideConfig {
   enabled: boolean;
-  color: string;
+  tintColor: string;
   /** 0..1 */
-  amount: number;
-}
-
-export interface EdgeMaterialConfig {
-  enabled: boolean;
+  tintAmount: number;
+  /** 0..1: lerp from base -> overrides */
+  materialAmount: number;
   /** 0..1 */
   roughness: number;
   /** 0..1 */
@@ -56,23 +78,19 @@ export interface EdgeMaterialConfig {
   envIntensityMult: number;
 }
 
-export interface EdgeWearConfig {
-  enabled: boolean;
-  /** 0..1 */
-  intensity: number;
-  /** 0..1 */
-  width: number;
-  /** 0..1 */
-  noise: number;
-  colorShift: string;
+export interface FacadesConfig {
+  side: FacadeSideConfig;
+  grazing: GrazingConfig;
+  outline: OutlineConfig;
 }
 
-export interface EdgesConfig {
-  tint: EdgeTintConfig;
-  material: EdgeMaterialConfig;
-  wear: EdgeWearConfig;
-  rimLight: RimLightConfig;
-  outline: OutlineConfig;
+/**
+ * "Edge" settings are reserved for effects at face-contact boundaries.
+ * Currently used only for popsicles to optionally hollow the caps.
+ */
+export interface EdgeConfig {
+  /** Popsicle-only: make front/back caps transparent */
+  hollow: boolean;
 }
 
 export interface EmissionConfig {
@@ -180,7 +198,8 @@ export interface BaseWallpaperConfig {
   texture: TextureType;
   textureParams: TextureParams;
   backgroundColor: string;
-  edges: EdgesConfig;
+  facades: FacadesConfig;
+  edge: EdgeConfig;
   emission: EmissionConfig;
   bloom: BloomConfig;
   collisions: CollisionsConfig;
@@ -438,12 +457,30 @@ export const DEFAULT_POPSICLE_CONFIG: PopsicleConfig = {
     cel: { bands: 4, halftone: false }
   },
   backgroundColor: '#1a1a2e',
-  edges: {
-    tint: { enabled: false, color: '#ffffff', amount: 0.25 },
-    material: { enabled: false, roughness: 0.35, metalness: 0.0, clearcoat: 0.0, envIntensityMult: 1.0 },
-    wear: { enabled: false, intensity: 0.35, width: 0.5, noise: 0.6, colorShift: '#ffffff' },
-    rimLight: { enabled: false, color: '#ffffff', intensity: 0.6, power: 2.5 },
+  facades: {
+    side: {
+      enabled: false,
+      tintColor: '#ffffff',
+      tintAmount: 0.25,
+      materialAmount: 1.0,
+      roughness: 0.35,
+      metalness: 0.0,
+      clearcoat: 0.0,
+      envIntensityMult: 1.0
+    },
+    grazing: {
+      enabled: false,
+      mode: 'add',
+      color: '#ffffff',
+      strength: 0.6,
+      power: 2.5,
+      width: 0.5,
+      noise: 0
+    },
     outline: { enabled: false, color: '#0b0b10', thickness: 0.03, opacity: 1.0 }
+  },
+  edge: {
+    hollow: false
   },
   emission: {
     enabled: false,
@@ -662,6 +699,62 @@ export function normalizeWallpaperConfig(input: any): WallpaperConfig {
   const merged = deepMerge(base, input ?? {});
   merged.type = type;
 
+  // Back-compat: migrate historical `edges` -> `facades`.
+  const legacyEdges = (merged as any).edges;
+  if (legacyEdges && typeof legacyEdges === 'object') {
+    const e: any = legacyEdges;
+    const cur: any = (merged as any).facades ?? cloneJson((base as any).facades);
+
+    const tintEnabled = !!e?.tint?.enabled;
+    const matEnabled = !!e?.material?.enabled;
+    const wearEnabled = !!e?.wear?.enabled;
+    const rimEnabled = !!e?.rimLight?.enabled;
+
+    const sideEnabled = tintEnabled || matEnabled;
+    const grazingEnabled = wearEnabled || rimEnabled;
+
+    const grazingMode: GrazingMode = rimEnabled && !wearEnabled ? 'add' : wearEnabled && !rimEnabled ? 'mix' : 'add';
+
+    (merged as any).facades = {
+      ...cur,
+      side: {
+        ...cur.side,
+        enabled: sideEnabled,
+        tintColor: typeof e?.tint?.color === 'string' ? e.tint.color : cur.side.tintColor,
+        tintAmount: tintEnabled ? Number(e?.tint?.amount ?? cur.side.tintAmount) : 0,
+        materialAmount: matEnabled ? 1.0 : 0.0,
+        roughness: Number(e?.material?.roughness ?? cur.side.roughness),
+        metalness: Number(e?.material?.metalness ?? cur.side.metalness),
+        clearcoat: Number(e?.material?.clearcoat ?? cur.side.clearcoat),
+        envIntensityMult: Number(e?.material?.envIntensityMult ?? cur.side.envIntensityMult)
+      },
+      grazing: {
+        ...cur.grazing,
+        enabled: grazingEnabled,
+        mode: grazingMode,
+        color:
+          typeof e?.rimLight?.color === 'string'
+            ? e.rimLight.color
+            : typeof e?.wear?.colorShift === 'string'
+              ? e.wear.colorShift
+              : cur.grazing.color,
+        strength: rimEnabled ? Number(e?.rimLight?.intensity ?? cur.grazing.strength) : Number(e?.wear?.intensity ?? cur.grazing.strength),
+        power: rimEnabled ? Number(e?.rimLight?.power ?? cur.grazing.power) : 2.0,
+        width: Number(e?.wear?.width ?? cur.grazing.width),
+        noise: Number(e?.wear?.noise ?? cur.grazing.noise)
+      },
+      outline: {
+        ...cur.outline,
+        enabled: !!e?.outline?.enabled,
+        color: typeof e?.outline?.color === 'string' ? e.outline.color : cur.outline.color,
+        thickness: Number(e?.outline?.thickness ?? cur.outline.thickness),
+        opacity: Number(e?.outline?.opacity ?? cur.outline.opacity)
+      }
+    };
+
+    delete (merged as any).edges;
+  }
+
   // Light validation for new fields (keep back-compat with missing/invalid values).
   const cm = merged.collisions?.mode;
   if (cm !== 'none' && cm !== 'carve') merged.collisions.mode = 'none';
@@ -674,6 +767,11 @@ export function normalizeWallpaperConfig(input: any): WallpaperConfig {
 
   if (!Number.isFinite(Number(merged.collisions?.carve?.marginPx))) merged.collisions.carve.marginPx = 0;
   if (!Number.isFinite(Number(merged.collisions?.carve?.featherPx))) merged.collisions.carve.featherPx = 0;
+
+  // Edge config validation.
+  if (typeof (merged as any).edge?.hollow !== 'boolean') {
+    (merged as any).edge = { ...(merged as any).edge, hollow: !!(merged as any).edge?.hollow };
+  }
 
   return merged as WallpaperConfig;
 }
@@ -911,38 +1009,52 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
       }
     },
     backgroundColor: theme.backgroundColor,
-    edges: {
-      tint: {
-        enabled: chance(0.18),
-        color: DEFAULT_POPSICLE_CONFIG.edges.tint.color,
-        amount: clamp(tri(0, DEFAULT_POPSICLE_CONFIG.edges.tint.amount, 0.9), 0, 1)
-      },
-      material: {
-        enabled: chance(0.18),
-        roughness: clamp(tri(0, DEFAULT_POPSICLE_CONFIG.edges.material.roughness, 1), 0, 1),
-        metalness: clamp(tri(0, DEFAULT_POPSICLE_CONFIG.edges.material.metalness, 1), 0, 1),
-        clearcoat: clamp(tri(0, DEFAULT_POPSICLE_CONFIG.edges.material.clearcoat, 1), 0, 1),
-        envIntensityMult: clamp(tri(0, DEFAULT_POPSICLE_CONFIG.edges.material.envIntensityMult, 3), 0, 3)
-      },
-      wear: {
-        enabled: chance(0.12),
-        intensity: clamp(tri(0, DEFAULT_POPSICLE_CONFIG.edges.wear.intensity, 1), 0, 1),
-        width: clamp(tri(0, DEFAULT_POPSICLE_CONFIG.edges.wear.width, 1), 0, 1),
-        noise: clamp(tri(0, DEFAULT_POPSICLE_CONFIG.edges.wear.noise, 1), 0, 1),
-        colorShift: DEFAULT_POPSICLE_CONFIG.edges.wear.colorShift
-      },
-      rimLight: {
-        enabled: chance(0.25),
-        color: DEFAULT_POPSICLE_CONFIG.edges.rimLight.color,
-        intensity: clamp(tri(0, DEFAULT_POPSICLE_CONFIG.edges.rimLight.intensity, 2.5), 0, 5),
-        power: clamp(tri(0.5, DEFAULT_POPSICLE_CONFIG.edges.rimLight.power, 8), 0.5, 8)
-      },
-      outline: {
-        enabled: chance(0.10),
-        color: DEFAULT_POPSICLE_CONFIG.edges.outline.color,
-        thickness: clamp(tri(0, DEFAULT_POPSICLE_CONFIG.edges.outline.thickness, 0.12), 0, 0.2),
-        opacity: clamp(tri(0.2, DEFAULT_POPSICLE_CONFIG.edges.outline.opacity, 1.0), 0, 1)
-      }
+    facades: (() => {
+      const tintEnabled = chance(0.18);
+      const materialEnabled = chance(0.18);
+      const wearEnabled = chance(0.12);
+      const rimEnabled = chance(0.25);
+
+      const sideEnabled = tintEnabled || materialEnabled;
+      const grazingEnabled = wearEnabled || rimEnabled;
+      const grazingMode: GrazingMode = rimEnabled && !wearEnabled ? 'add' : wearEnabled && !rimEnabled ? 'mix' : chance(0.5) ? 'add' : 'mix';
+
+      return {
+        side: {
+          enabled: sideEnabled,
+          tintColor: DEFAULT_POPSICLE_CONFIG.facades.side.tintColor,
+          tintAmount: tintEnabled ? clamp(tri(0, DEFAULT_POPSICLE_CONFIG.facades.side.tintAmount, 0.9), 0, 1) : 0,
+          materialAmount: materialEnabled ? 1.0 : 0.0,
+          roughness: clamp(tri(0, DEFAULT_POPSICLE_CONFIG.facades.side.roughness, 1), 0, 1),
+          metalness: clamp(tri(0, DEFAULT_POPSICLE_CONFIG.facades.side.metalness, 1), 0, 1),
+          clearcoat: clamp(tri(0, DEFAULT_POPSICLE_CONFIG.facades.side.clearcoat, 1), 0, 1),
+          envIntensityMult: clamp(tri(0, DEFAULT_POPSICLE_CONFIG.facades.side.envIntensityMult, 3), 0, 3)
+        },
+        grazing: {
+          enabled: grazingEnabled,
+          mode: grazingMode,
+          color: DEFAULT_POPSICLE_CONFIG.facades.grazing.color,
+          strength:
+            grazingMode === 'add'
+              ? clamp(tri(0, DEFAULT_POPSICLE_CONFIG.facades.grazing.strength, 2.5), 0, 5)
+              : clamp(tri(0, 0.35, 1), 0, 1),
+          power:
+            grazingMode === 'add'
+              ? clamp(tri(0.5, DEFAULT_POPSICLE_CONFIG.facades.grazing.power, 8), 0.5, 8)
+              : clamp(tri(0.5, 2.0, 8), 0.5, 8),
+          width: clamp(tri(0, 0.5, 1), 0, 1),
+          noise: wearEnabled ? clamp(tri(0, 0.6, 1), 0, 1) : 0
+        },
+        outline: {
+          enabled: chance(0.10),
+          color: DEFAULT_POPSICLE_CONFIG.facades.outline.color,
+          thickness: clamp(tri(0, DEFAULT_POPSICLE_CONFIG.facades.outline.thickness, 0.12), 0, 0.2),
+          opacity: clamp(tri(0.2, DEFAULT_POPSICLE_CONFIG.facades.outline.opacity, 1.0), 0, 1)
+        }
+      };
+    })(),
+    edge: {
+      hollow: false
     },
     emission: {
       enabled: emissionEnabled,

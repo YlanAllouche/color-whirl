@@ -384,7 +384,7 @@ export function createPopsicleScene(
 
   const group = new THREE.Group();
   const materialCache = new Map<string, THREE.Material | THREE.Material[]>();
-  const materialParamsKey = JSON.stringify({ t: config.textureParams, e: config.edges, em: config.emission });
+  const materialParamsKey = JSON.stringify({ t: config.textureParams, f: config.facades, ed: config.edge, em: config.emission });
   const getMat = (paletteIndex: number, hex: string) => {
     const key = [
       texture,
@@ -426,8 +426,8 @@ export function createPopsicleScene(
   group.position.sub(center);
 
   let outlineGroup: THREE.Group | null = null;
-  if (config.edges.outline.enabled) {
-    const oc = config.edges.outline;
+  if (config.facades.outline.enabled) {
+    const oc = config.facades.outline;
     const outlineMat = new THREE.MeshBasicMaterial({
       color: new THREE.Color(oc.color),
       side: THREE.BackSide,

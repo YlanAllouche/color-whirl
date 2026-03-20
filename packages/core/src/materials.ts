@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { EdgesConfig, RimLightConfig, EdgeWearConfig, TextureParams, TextureType, GlassStyle, WallpaperConfig } from './types.js';
+import type { FacadeSideConfig, GrazingConfig, TextureParams, TextureType, GlassStyle, WallpaperConfig } from './types.js';
 import { createRng } from './types.js';
 
 type DrywallMaps = { normalMap: THREE.DataTexture; roughnessMap: THREE.DataTexture };
@@ -183,76 +183,47 @@ function chainOnBeforeCompile(
   material.needsUpdate = true;
 }
 
-function applyRimLight(material: THREE.Material, cfg: RimLightConfig): void {
+function applyGrazing(material: THREE.Material, cfg: GrazingConfig): void {
   if (!cfg.enabled) return;
-  const rimColor = new THREE.Color(cfg.color);
-  const intensity = clamp(cfg.intensity, 0, 5);
+
+  const mode = cfg.mode === 'mix' ? 'mix' : 'add';
+  const color = new THREE.Color(cfg.color);
+  const strength = clamp(cfg.strength, 0, mode === 'add' ? 5 : 1);
   const power = clamp(cfg.power, 0.5, 8);
-
-  chainOnBeforeCompile(
-    material,
-    (shader) => {
-      shader.uniforms.rimColor = { value: rimColor };
-      shader.uniforms.rimIntensity = { value: intensity };
-      shader.uniforms.rimPower = { value: power };
-
-      const rimUniforms = `
-uniform vec3 rimColor;
-uniform float rimIntensity;
-uniform float rimPower;
-`;
-
-      if (shader.fragmentShader.includes('#include <common>')) {
-        shader.fragmentShader = shader.fragmentShader.replace('#include <common>', `#include <common>\n${rimUniforms}`);
-      } else if (!shader.fragmentShader.includes('uniform vec3 rimColor')) {
-        shader.fragmentShader = rimUniforms + '\n' + shader.fragmentShader;
-      }
-
-      shader.fragmentShader = shader.fragmentShader.replace(
-        '#include <dithering_fragment>',
-        `#include <dithering_fragment>\n\n// Rim light\nvec3 rimN = normalize(normal);\nvec3 rimV = normalize(vViewPosition);\n#ifdef ORTHOGRAPHIC_CAMERA\nrimV = vec3(0.0, 0.0, 1.0);\n#endif\nfloat rimDot = clamp(dot(rimN, rimV), 0.0, 1.0);\nfloat rim = pow(1.0 - rimDot, rimPower) * rimIntensity;\ngl_FragColor.rgb += rimColor * rim;`
-      );
-    },
-    `rim-v1:${rimColor.getHexString()}:${intensity.toFixed(3)}:${power.toFixed(3)}`
-  );
-}
-
-function applyEdgeWear(material: THREE.Material, cfg: EdgeWearConfig): void {
-  if (!cfg.enabled) return;
-  const intensity = clamp(cfg.intensity, 0, 1);
   const width = clamp(cfg.width, 0, 1);
   const noise = clamp(cfg.noise, 0, 1);
-  const wearColor = new THREE.Color(cfg.colorShift);
 
   chainOnBeforeCompile(
     material,
     (shader) => {
-      shader.uniforms.wearColor = { value: wearColor };
-      shader.uniforms.wearIntensity = { value: intensity };
-      shader.uniforms.wearWidth = { value: width };
-      shader.uniforms.wearNoise = { value: noise };
-      shader.uniforms.wearSeed = { value: 0 };
+      shader.uniforms.wmGrazingColor = { value: color };
+      shader.uniforms.wmGrazingStrength = { value: strength };
+      shader.uniforms.wmGrazingPower = { value: power };
+      shader.uniforms.wmGrazingWidth = { value: width };
+      shader.uniforms.wmGrazingNoise = { value: noise };
+      shader.uniforms.wmGrazingMode = { value: mode === 'add' ? 0 : 1 };
 
-      const wearUniforms = `
-uniform vec3 wearColor;
-uniform float wearIntensity;
-uniform float wearWidth;
-uniform float wearNoise;
-uniform float wearSeed;
+      const uniforms = `
+uniform vec3 wmGrazingColor;
+uniform float wmGrazingStrength;
+uniform float wmGrazingPower;
+uniform float wmGrazingWidth;
+uniform float wmGrazingNoise;
+uniform int wmGrazingMode;
 `;
 
       if (shader.fragmentShader.includes('#include <common>')) {
-        shader.fragmentShader = shader.fragmentShader.replace('#include <common>', `#include <common>\n${wearUniforms}`);
-      } else if (!shader.fragmentShader.includes('uniform vec3 wearColor')) {
-        shader.fragmentShader = wearUniforms + '\n' + shader.fragmentShader;
+        shader.fragmentShader = shader.fragmentShader.replace('#include <common>', `#include <common>\n${uniforms}`);
+      } else if (!shader.fragmentShader.includes('uniform vec3 wmGrazingColor')) {
+        shader.fragmentShader = uniforms + '\n' + shader.fragmentShader;
       }
 
       shader.fragmentShader = shader.fragmentShader.replace(
         '#include <dithering_fragment>',
-        `#include <dithering_fragment>\n\n// Edge wear (view-dependent)\nvec3 wearN = normalize(normal);\nvec3 wearV = normalize(vViewPosition);\n#ifdef ORTHOGRAPHIC_CAMERA\nwearV = vec3(0.0, 0.0, 1.0);\n#endif\nfloat wearDot = clamp(dot(wearN, wearV), 0.0, 1.0);\nfloat wearEdge = pow(1.0 - wearDot, 2.0);\nfloat wearMask = smoothstep(1.0 - wearWidth, 1.0, wearEdge) * wearIntensity;\nfloat wearRand = fract(sin(dot(gl_FragCoord.xy + vec2(wearSeed, wearSeed * 0.37), vec2(12.9898, 78.233))) * 43758.5453);\nwearMask *= mix(1.0, wearRand, wearNoise);\ngl_FragColor.rgb = mix(gl_FragColor.rgb, wearColor, clamp(wearMask, 0.0, 1.0));`
+        `#include <dithering_fragment>\n\n// Grazing highlight\nvec3 gN = normalize(normal);\nvec3 gV = normalize(vViewPosition);\n#ifdef ORTHOGRAPHIC_CAMERA\ngV = vec3(0.0, 0.0, 1.0);\n#endif\nfloat gDot = clamp(dot(gN, gV), 0.0, 1.0);\nfloat gEdge = pow(1.0 - gDot, wmGrazingPower);\nfloat gMask = wmGrazingMode == 0 ? gEdge : smoothstep(1.0 - wmGrazingWidth, 1.0, gEdge);\nfloat gRand = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);\ngMask *= mix(1.0, gRand, wmGrazingNoise);\nif (wmGrazingMode == 0) {\n  gl_FragColor.rgb += wmGrazingColor * (gMask * wmGrazingStrength);\n} else {\n  gl_FragColor.rgb = mix(gl_FragColor.rgb, wmGrazingColor, clamp(gMask * wmGrazingStrength, 0.0, 1.0));\n}`
       );
     },
-    `wear-v1:${wearColor.getHexString()}:${intensity.toFixed(3)}:${width.toFixed(3)}:${noise.toFixed(3)}`
+    `grazing-v1:${mode}:${color.getHexString()}:${strength.toFixed(3)}:${power.toFixed(3)}:${width.toFixed(3)}:${noise.toFixed(3)}`
   );
 }
 
@@ -262,7 +233,7 @@ function canHaveColor(m: THREE.Material): m is THREE.Material & { color: THREE.C
   return (m as any).color instanceof THREE.Color;
 }
 
-function applyEdgeTint(m: THREE.Material, tintColor: string, amount: number): void {
+function applySideTint(m: THREE.Material, tintColor: string, amount: number): void {
   if (!canHaveColor(m)) return;
   const a = clamp(amount, 0, 1);
   const base = (m as any).color as THREE.Color;
@@ -270,15 +241,29 @@ function applyEdgeTint(m: THREE.Material, tintColor: string, amount: number): vo
   base.copy(next);
 }
 
-function applyEdgeMaterialOverrides(m: THREE.Material, cfg: EdgesConfig, envIntensity: number): void {
-  if (!cfg.material.enabled) return;
+function applySideMaterialOverrides(m: THREE.Material, cfg: FacadeSideConfig, envIntensity: number): void {
+  if (!cfg.enabled) return;
   const anyMat: any = m as any;
-  if (typeof anyMat.roughness === 'number') anyMat.roughness = clamp(cfg.material.roughness, 0, 1);
-  if (typeof anyMat.metalness === 'number') anyMat.metalness = clamp(cfg.material.metalness, 0, 1);
-  if (typeof anyMat.clearcoat === 'number') anyMat.clearcoat = clamp(cfg.material.clearcoat, 0, 1);
+  const t = clamp(cfg.materialAmount, 0, 1);
+  if (!(t > 0)) return;
+
+  const lerp = (a: number, b: number, tt: number) => a + (b - a) * tt;
+  if (typeof anyMat.roughness === 'number') {
+    const target = clamp(cfg.roughness, 0, 1);
+    anyMat.roughness = lerp(anyMat.roughness, target, t);
+  }
+  if (typeof anyMat.metalness === 'number') {
+    const target = clamp(cfg.metalness, 0, 1);
+    anyMat.metalness = lerp(anyMat.metalness, target, t);
+  }
+  if (typeof anyMat.clearcoat === 'number') {
+    const target = clamp(cfg.clearcoat, 0, 1);
+    anyMat.clearcoat = lerp(anyMat.clearcoat, target, t);
+  }
   if (typeof anyMat.envMapIntensity === 'number') {
-    const mult = clamp(cfg.material.envIntensityMult, 0, 3);
-    anyMat.envMapIntensity = envIntensity * mult;
+    const mult = clamp(cfg.envIntensityMult, 0, 3);
+    const target = envIntensity * mult;
+    anyMat.envMapIntensity = lerp(anyMat.envMapIntensity, target, t);
   }
 }
 
@@ -308,20 +293,43 @@ export function createStickMeshMaterial(
     emissive
   });
 
-  applyRimLight(face, config.edges.rimLight);
-
-  const needsEdgeMat = config.edges.tint.enabled || config.edges.material.enabled || config.edges.wear.enabled;
-  if (!needsEdgeMat) return face;
-
-  const edge = face.clone();
-  // Rim already cloned from face.
-  if (config.edges.tint.enabled) {
-    applyEdgeTint(edge, config.edges.tint.color, config.edges.tint.amount);
+  const grazing = config.facades?.grazing;
+  if (grazing?.enabled && grazing.mode !== 'mix') {
+    applyGrazing(face, grazing);
   }
-  applyEdgeMaterialOverrides(edge, config.edges, envIntensity);
-  applyEdgeWear(edge, config.edges.wear);
 
-  return [face, edge];
+  const sideCfg = config.facades?.side;
+  const needsSideOverrides =
+    !!sideCfg?.enabled && (clamp(Number(sideCfg.tintAmount) || 0, 0, 1) > 0 || clamp(Number(sideCfg.materialAmount) || 0, 0, 1) > 0);
+
+  const wantsHollow = !!config.edge?.hollow;
+  const needsSplitMaterial = wantsHollow || needsSideOverrides || (grazing?.enabled && grazing.mode === 'mix');
+
+  if (!needsSplitMaterial) return face;
+
+  const side = face.clone();
+  if (grazing?.enabled && grazing.mode === 'mix') {
+    applyGrazing(side, grazing);
+  }
+
+  if (sideCfg?.enabled) {
+    applySideTint(side, sideCfg.tintColor, sideCfg.tintAmount);
+    applySideMaterialOverrides(side, sideCfg, envIntensity);
+  }
+
+  const cap = wantsHollow
+    ? (() => {
+        const m = face.clone();
+        const anyMat: any = m as any;
+        anyMat.transparent = true;
+        anyMat.opacity = 0;
+        anyMat.depthWrite = false;
+        if (typeof anyMat.colorWrite === 'boolean') anyMat.colorWrite = false;
+        return m;
+      })()
+    : face;
+
+  return [cap, side];
 }
 
 export function createSurfaceMaterial(
@@ -349,7 +357,7 @@ export function createSurfaceMaterial(
     textureParams: config.textureParams,
     emissive
   });
-  applyRimLight(m, config.edges.rimLight);
+  if (config.facades?.grazing?.enabled) applyGrazing(m, config.facades.grazing);
   return m;
 }
 
