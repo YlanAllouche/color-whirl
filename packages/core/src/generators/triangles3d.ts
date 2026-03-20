@@ -17,23 +17,40 @@ function degToRad(deg: number): number {
   return (deg * Math.PI) / 180;
 }
 
-function createBulgedTrianglePrismGeometry(options: { wallBulge: number; curveSegments: number }): THREE.BufferGeometry {
-  const bulge = clamp(Number(options.wallBulge) || 0, -1, 1);
+function createBulgedPrismGeometry(options: {
+  base: 'triangle' | 'square';
+  wallBulgeX: number;
+  wallBulgeY: number;
+  taper: number;
+  curveSegments: number;
+}): THREE.BufferGeometry {
+  const base = options.base === 'square' ? 'square' : 'triangle';
+  const bulgeX = clamp(Number(options.wallBulgeX) || 0, -1, 1);
+  const bulgeY = clamp(Number(options.wallBulgeY) || 0, -1, 1);
+  const taper = clamp(Number(options.taper) || 1, 0, 1);
   const curveSegments = Math.max(2, Math.round(Number(options.curveSegments) || 2));
 
   const r = 1;
-  // Match the historical CylinderGeometry(3) orientation (rotated by pi/6).
-  const a0 = Math.PI / 6;
-  const angles = [a0, a0 + (2 * Math.PI) / 3, a0 + (4 * Math.PI) / 3];
-  const v = angles.map((a) => new THREE.Vector2(Math.cos(a) * r, Math.sin(a) * r));
+  const v: THREE.Vector2[] = [];
+  if (base === 'square') {
+    // Axis-aligned square (so normals map cleanly to bulgeX/bulgeY).
+    const a = r / Math.SQRT2;
+    v.push(new THREE.Vector2(a, a), new THREE.Vector2(-a, a), new THREE.Vector2(-a, -a), new THREE.Vector2(a, -a));
+  } else {
+    // Match the historical CylinderGeometry(3) orientation (rotated by pi/6).
+    const a0 = Math.PI / 6;
+    const angles = [a0, a0 + (2 * Math.PI) / 3, a0 + (4 * Math.PI) / 3];
+    for (const a of angles) v.push(new THREE.Vector2(Math.cos(a) * r, Math.sin(a) * r));
+  }
 
   const shape = new THREE.Shape();
   shape.moveTo(v[0].x, v[0].y);
 
   const ctrlScale = 0.35; // tuned for a subtle but visible bulge
-  for (let i = 0; i < 3; i++) {
+  const sides = v.length;
+  for (let i = 0; i < sides; i++) {
     const a = v[i];
-    const b = v[(i + 1) % 3];
+    const b = v[(i + 1) % sides];
     const mid = new THREE.Vector2().addVectors(a, b).multiplyScalar(0.5);
     const edge = new THREE.Vector2().subVectors(b, a);
     let n = new THREE.Vector2(-edge.y, edge.x);
@@ -43,10 +60,11 @@ function createBulgedTrianglePrismGeometry(options: { wallBulge: number; curveSe
     // Ensure "outward" points away from center.
     if (n.dot(mid) < 0) n.multiplyScalar(-1);
 
-    if (Math.abs(bulge) < 1e-6) {
+    const axisBulge = bulgeX * Math.abs(n.x) + bulgeY * Math.abs(n.y);
+    if (Math.abs(axisBulge) < 1e-6) {
       shape.lineTo(b.x, b.y);
     } else {
-      const ctrl = mid.clone().addScaledVector(n, bulge * ctrlScale);
+      const ctrl = mid.clone().addScaledVector(n, axisBulge * ctrlScale);
       shape.quadraticCurveTo(ctrl.x, ctrl.y, b.x, b.y);
     }
   }
@@ -63,6 +81,20 @@ function createBulgedTrianglePrismGeometry(options: { wallBulge: number; curveSe
   geom.rotateX(-Math.PI / 2);
   // Center like CylinderGeometry (y in [-0.5, +0.5]).
   geom.translate(0, -0.5, 0);
+
+  // Apply taper (1 = prism, 0 = pyramid apex) by scaling X/Z as a function of Y.
+  if (taper < 0.999999) {
+    const pos = geom.getAttribute('position') as THREE.BufferAttribute;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i);
+      const y = pos.getY(i);
+      const z = pos.getZ(i);
+      const t = clamp(y + 0.5, 0, 1);
+      const s = 1 - (1 - taper) * t;
+      pos.setXYZ(i, x * s, y, z * s);
+    }
+    pos.needsUpdate = true;
+  }
 
   geom.computeBoundingBox();
   geom.computeBoundingSphere();
@@ -332,7 +364,13 @@ export function createTriangles3DScene(
   const height = Math.max(0.0001, Number(config.prisms.height) || 0.5);
 
   const curveSegments = Math.round(2 + clamp(config.geometry.quality, 0, 1) * 14);
-  const geometry = createBulgedTrianglePrismGeometry({ wallBulge: config.prisms.wallBulge, curveSegments });
+  const geometry = createBulgedPrismGeometry({
+    base: config.prisms.base,
+    taper: config.prisms.taper,
+    wallBulgeX: config.prisms.wallBulgeX,
+    wallBulgeY: config.prisms.wallBulgeY,
+    curveSegments
+  });
   const tmpMat = new THREE.Matrix4();
   const tmpPos = new THREE.Vector3();
   const tmpQuat = new THREE.Quaternion();

@@ -391,12 +391,18 @@ export interface Triangles3DConfig extends BaseWallpaperConfig {
   prisms: {
     mode: Triangles3DMode;
     count: number;
+    /** Base polygon for each prism/pyramid */
+    base: 'triangle' | 'square';
     /** Scene units */
     radius: number;
     /** Scene units */
     height: number;
-    /** -1..1: concave (<0) to convex (>0) prism walls */
-    wallBulge: number;
+    /** 0..1: 1 = prism, 0 = pyramid apex */
+    taper: number;
+    /** -1..1: concave (<0) to convex (>0) walls (X axis influence) */
+    wallBulgeX: number;
+    /** -1..1: concave (<0) to convex (>0) walls (Y axis influence) */
+    wallBulgeY: number;
     /** Scene units */
     spread: number;
     /** 0..1 */
@@ -679,9 +685,12 @@ export const DEFAULT_TRIANGLES3D_CONFIG: Triangles3DConfig = {
   prisms: {
     mode: 'stackedPrisms',
     count: 160,
+    base: 'triangle',
     radius: 0.22,
     height: 0.5,
-    wallBulge: 0,
+    taper: 1,
+    wallBulgeX: 0,
+    wallBulgeY: 0,
     spread: 4.4,
     jitter: 0.65,
     paletteMode: 'weighted',
@@ -831,6 +840,32 @@ export function normalizeWallpaperConfig(input: any): WallpaperConfig {
   } else {
     if (!edgeObj.seam || typeof edgeObj.seam !== 'object') edgeObj.seam = cloneJson((base as any).edge.seam);
     if (!edgeObj.band || typeof edgeObj.band !== 'object') edgeObj.band = cloneJson((base as any).edge.band);
+  }
+
+  // Back-compat: triangles3d prisms.wallBulge -> wallBulgeX/wallBulgeY.
+  if ((merged as any).type === 'triangles3d') {
+    const prisms: any = (merged as any).prisms;
+    if (prisms && typeof prisms === 'object') {
+      const legacy = prisms.wallBulge;
+      const hasLegacy = typeof legacy === 'number' && Number.isFinite(legacy);
+      const hasX = typeof prisms.wallBulgeX === 'number' && Number.isFinite(prisms.wallBulgeX);
+      const hasY = typeof prisms.wallBulgeY === 'number' && Number.isFinite(prisms.wallBulgeY);
+
+      if (hasLegacy && (!hasX || !hasY)) {
+        prisms.wallBulgeX = hasX ? prisms.wallBulgeX : legacy;
+        prisms.wallBulgeY = hasY ? prisms.wallBulgeY : legacy;
+      }
+      if ('wallBulge' in prisms) delete prisms.wallBulge;
+
+      // Light validation for new triangles3d fields.
+      if (prisms.base !== 'triangle' && prisms.base !== 'square') prisms.base = 'triangle';
+      const t = Number(prisms.taper);
+      prisms.taper = Number.isFinite(t) ? clamp(t, 0, 1) : 1;
+      const bx = Number(prisms.wallBulgeX);
+      const by = Number(prisms.wallBulgeY);
+      prisms.wallBulgeX = Number.isFinite(bx) ? clamp(bx, -1, 1) : 0;
+      prisms.wallBulgeY = Number.isFinite(by) ? clamp(by, -1, 1) : 0;
+    }
   }
 
   return merged as WallpaperConfig;
@@ -1256,22 +1291,36 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
         }
       };
     case 'triangles3d':
-      return {
+      {
+        const bulgeX = clamp(tri(-1, 0, 1), -1, 1);
+        const bulgeY = chance(0.65) ? bulgeX : clamp(tri(-1, 0, 1), -1, 1);
+
+        return {
         ...base,
         type: 'triangles3d',
         prisms: {
           mode: 'stackedPrisms',
           count: skewCountLow(10, DEFAULT_TRIANGLES3D_CONFIG.prisms.count, 360, 1500, 0.03),
+          base: rng() < 0.72 ? 'triangle' : 'square',
           radius: randomWeighted(rng, 0.06, 0.6, 0.22),
           height: randomWeighted(rng, 0.06, 1.2, 0.5),
-          wallBulge: clamp(tri(-1, 0, 1), -1, 1),
+          taper: (() => {
+            // Strongly bias toward prisms; occasional frustums/pyramids.
+            const r = rng();
+            if (r < 0.72) return clamp(tri(0.85, 1.0, 1.0), 0, 1);
+            if (r < 0.95) return clamp(tri(0.35, 0.85, 1.0), 0, 1);
+            return clamp(tri(0.0, 0.15, 0.5), 0, 1);
+          })(),
+          wallBulgeX: bulgeX,
+          wallBulgeY: bulgeY,
           spread: randomWeighted(rng, 0.8, 6.5, 4.4),
           jitter: clamp(randomWeighted(rng, 0, 1, 0.65), 0, 1),
           paletteMode: rng() < 0.55 ? 'weighted' : 'cycle',
           colorWeights: [0.34, 0.28, 0.18, 0.12, 0.08],
           opacity: randomStickOpacity()
         }
-      };
+        };
+      }
     case 'hexgrid2d':
       return {
         ...base,

@@ -1148,9 +1148,12 @@
     if (c.type === 'triangles3d') {
       void c.prisms.mode;
       void c.prisms.count;
+      void c.prisms.base;
       void c.prisms.radius;
       void c.prisms.height;
-      void c.prisms.wallBulge;
+      void c.prisms.taper;
+      void c.prisms.wallBulgeX;
+      void c.prisms.wallBulgeY;
       void c.prisms.spread;
       void c.prisms.jitter;
       void c.prisms.paletteMode;
@@ -2351,6 +2354,14 @@
             </select>
           </label>
 
+          <label class="control-row">
+            <button type="button" class="setting-title" class:locked={isLocked('prisms.base')} onclick={() => toggleLock('prisms.base')} title="Click to lock/unlock for randomize">Base</button>
+            <select bind:value={config.prisms.base}>
+              <option value="triangle">Triangle</option>
+              <option value="square">Square</option>
+            </select>
+          </label>
+
           <label class="control-row slider">
             <button type="button" class="setting-title" class:locked={isLocked('prisms.count')} onclick={() => toggleLock('prisms.count')} title="Click to lock/unlock for randomize">Count: {config.prisms.count}</button>
             <input type="range" bind:value={config.prisms.count} min="0" max="2500" step="10" />
@@ -2367,8 +2378,18 @@
           </label>
 
           <label class="control-row slider">
-            <button type="button" class="setting-title" class:locked={isLocked('prisms.wallBulge')} onclick={() => toggleLock('prisms.wallBulge')} title="Click to lock/unlock for randomize">Wall bulge: {config.prisms.wallBulge.toFixed(2)}</button>
-            <input type="range" bind:value={config.prisms.wallBulge} min="-1" max="1" step="0.01" />
+            <button type="button" class="setting-title" class:locked={isLocked('prisms.taper')} onclick={() => toggleLock('prisms.taper')} title="Click to lock/unlock for randomize">Taper: {config.prisms.taper.toFixed(2)}</button>
+            <input type="range" bind:value={config.prisms.taper} min="0" max="1" step="0.01" />
+          </label>
+
+          <label class="control-row slider">
+            <button type="button" class="setting-title" class:locked={isLocked('prisms.wallBulgeX')} onclick={() => toggleLock('prisms.wallBulgeX')} title="Click to lock/unlock for randomize">Wall bulge X: {config.prisms.wallBulgeX.toFixed(2)}</button>
+            <input type="range" bind:value={config.prisms.wallBulgeX} min="-1" max="1" step="0.01" />
+          </label>
+
+          <label class="control-row slider">
+            <button type="button" class="setting-title" class:locked={isLocked('prisms.wallBulgeY')} onclick={() => toggleLock('prisms.wallBulgeY')} title="Click to lock/unlock for randomize">Wall bulge Y: {config.prisms.wallBulgeY.toFixed(2)}</button>
+            <input type="range" bind:value={config.prisms.wallBulgeY} min="-1" max="1" step="0.01" />
           </label>
 
           <label class="control-row slider">

@@ -853,10 +853,15 @@ function generateSpheres3DSVG(config: Extract<WallpaperConfig, { type: 'spheres3
 }
 
 function generateTriangles3DSVG(config: Extract<WallpaperConfig, { type: 'triangles3d' }>): string {
-  // Approximation: draw 2D triangles.
+  // Approximation: draw 2D base polygons (triangle/square) with optional taper hint.
   const { width, height, colors, backgroundColor } = config;
   const count = Math.max(0, Math.round(config.prisms.count));
   const s = Math.max(12, config.prisms.radius * 180);
+
+  const base = config.prisms.base === 'square' ? 'square' : 'triangle';
+  const taper = clamp(Number(config.prisms.taper ?? 1), 0, 1);
+  const sides = base === 'square' ? 4 : 3;
+  const a0 = base === 'square' ? Math.PI / 4 : Math.PI / 6;
 
   const spread = Math.max(0, Number(config.prisms.spread) || 0);
   const jitter = clamp01(Number(config.prisms.jitter) || 0);
@@ -904,10 +909,30 @@ function generateTriangles3DSVG(config: Extract<WallpaperConfig, { type: 'triang
     const idx = config.prisms.paletteMode === 'cycle' ? i % n : sampleWeightedIndex01(u, weightsNorm);
     const col = colors[idx] ?? '#ffffff';
 
-    const p1 = `${cx + Math.cos(a) * s},${cy + Math.sin(a) * s}`;
-    const p2 = `${cx + Math.cos(a + (2 * Math.PI) / 3) * s},${cy + Math.sin(a + (2 * Math.PI) / 3) * s}`;
-    const p3 = `${cx + Math.cos(a + (4 * Math.PI) / 3) * s},${cy + Math.sin(a + (4 * Math.PI) / 3) * s}`;
-    svg += `  <polygon points="${p1} ${p2} ${p3}" fill="${col}" opacity="${opacity}"/>\n`;
+    const pts: string[] = [];
+    for (let k = 0; k < sides; k++) {
+      const ang = a + a0 + (k / sides) * Math.PI * 2;
+      pts.push(`${cx + Math.cos(ang) * s},${cy + Math.sin(ang) * s}`);
+    }
+    svg += `  <polygon points="${pts.join(' ')}" fill="${col}" opacity="${opacity}"/>\n`;
+
+    // Taper hint: draw a smaller, slightly darkened top face.
+    if (taper < 0.999999) {
+      const s2 = s * taper;
+      const topCol = adjustHex(col, -0.08 * (1 - taper));
+      const op2 = opacity * 0.55;
+      if (s2 < 0.75) {
+        const rr = Math.max(1, s * 0.08);
+        svg += `  <circle cx="${cx}" cy="${cy}" r="${rr}" fill="${topCol}" opacity="${op2}"/>\n`;
+      } else {
+        const pts2: string[] = [];
+        for (let k = 0; k < sides; k++) {
+          const ang = a + a0 + (k / sides) * Math.PI * 2;
+          pts2.push(`${cx + Math.cos(ang) * s2},${cy + Math.sin(ang) * s2}`);
+        }
+        svg += `  <polygon points="${pts2.join(' ')}" fill="${topCol}" opacity="${op2}"/>\n`;
+      }
+    }
   }
   svg += svgEnd();
   return svg;
