@@ -232,7 +232,8 @@ export type WallpaperType =
   | 'polygon2d'
   | 'triangles2d'
   | 'triangles3d'
-  | 'hexgrid2d';
+  | 'hexgrid2d'
+  | 'ridges2d';
 
 export interface BaseWallpaperConfig {
   type: WallpaperType;
@@ -488,6 +489,37 @@ export interface HexGrid2DConfig extends BaseWallpaperConfig {
   };
 }
 
+export interface Ridges2DConfig extends BaseWallpaperConfig {
+  type: 'ridges2d';
+  ridges: {
+    /** Sampling resolution in pixels (higher = faster, lower = more detail) */
+    gridStepPx: number;
+    /** Base noise frequency in "noise space" (roughly features per min(width,height)) */
+    frequency: number;
+    /** Fractal octaves (1..8 recommended) */
+    octaves: number;
+    /** Domain warp amount in noise-space units */
+    warpAmount: number;
+    /** Domain warp frequency multiplier */
+    warpFrequency: number;
+    /** Number of contour levels */
+    levels: number;
+    lineWidthPx: number;
+    /** 0..1 */
+    lineOpacity: number;
+    /** 0..1: affects field smoothing + polyline smoothing */
+    smoothing: number;
+    fillBands: {
+      enabled: boolean;
+      /** 0..1 */
+      opacity: number;
+    };
+    paletteMode: PaletteAssignMode;
+    /** Per-palette weights (used when paletteMode=weighted). Length may be < colors.length. */
+    colorWeights: number[];
+  };
+}
+
 export type WallpaperConfig =
   | PopsicleConfig
   | Spheres3DConfig
@@ -495,7 +527,8 @@ export type WallpaperConfig =
   | Polygon2DConfig
   | Triangles2DConfig
   | Triangles3DConfig
-  | HexGrid2DConfig;
+  | HexGrid2DConfig
+  | Ridges2DConfig;
 
 export const RESOLUTION_PRESETS = {
   '1080p': { width: 1920, height: 1080 },
@@ -761,6 +794,29 @@ export const DEFAULT_HEXGRID2D_CONFIG: HexGrid2DConfig = {
   }
 };
 
+export const DEFAULT_RIDGES2D_CONFIG: Ridges2DConfig = {
+  ...DEFAULT_POPSICLE_CONFIG,
+  type: 'ridges2d',
+  // A more "paper"-like default background for topo lines.
+  backgroundColor: '#f2eee4',
+  // Earthy inks; weighted palette tends to pick the darkest for contour lines.
+  colors: ['#263a2f', '#3f6b55', '#7ea66a', '#d0c29c', '#8b5a3c'],
+  ridges: {
+    gridStepPx: 6,
+    frequency: 2.4,
+    octaves: 5,
+    warpAmount: 0.85,
+    warpFrequency: 1.6,
+    levels: 14,
+    lineWidthPx: 1.25,
+    lineOpacity: 0.6,
+    smoothing: 0.35,
+    fillBands: { enabled: true, opacity: 0.18 },
+    paletteMode: 'weighted',
+    colorWeights: [0.58, 0.18, 0.12, 0.08, 0.04]
+  }
+};
+
 export const DEFAULT_CONFIG_BY_TYPE: Record<WallpaperType, WallpaperConfig> = {
   popsicle: DEFAULT_POPSICLE_CONFIG,
   spheres3d: DEFAULT_SPHERES3D_CONFIG,
@@ -768,7 +824,8 @@ export const DEFAULT_CONFIG_BY_TYPE: Record<WallpaperType, WallpaperConfig> = {
   polygon2d: DEFAULT_POLYGON2D_CONFIG,
   triangles2d: DEFAULT_TRIANGLES2D_CONFIG,
   triangles3d: DEFAULT_TRIANGLES3D_CONFIG,
-  hexgrid2d: DEFAULT_HEXGRID2D_CONFIG
+  hexgrid2d: DEFAULT_HEXGRID2D_CONFIG,
+  ridges2d: DEFAULT_RIDGES2D_CONFIG
 };
 
 function isPlainObject(value: unknown): value is Record<string, any> {
@@ -1446,6 +1503,38 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
           fillOpacity: clamp(randomWeighted(rng, 0.2, 1, 0.96), 0, 1)
         }
       };
+    case 'ridges2d':
+      {
+        // Keep ridges configs conservative: disable collisions/emission (not used by this generator).
+        const levels = Math.max(6, Math.min(28, Math.round(tri(6, DEFAULT_RIDGES2D_CONFIG.ridges.levels, 28))));
+        const stepPx = Math.max(3, Math.min(16, Math.round(tri(3, DEFAULT_RIDGES2D_CONFIG.ridges.gridStepPx, 16))));
+        const oct = Math.max(1, Math.min(8, Math.round(tri(1, DEFAULT_RIDGES2D_CONFIG.ridges.octaves, 7))));
+
+        return {
+          ...base,
+          type: 'ridges2d',
+          emission: { ...base.emission, enabled: false },
+          bloom: { ...base.bloom, enabled: false },
+          collisions: { ...base.collisions, mode: 'none', carve: { ...base.collisions.carve, marginPx: 0, featherPx: 0 } },
+          ridges: {
+            gridStepPx: stepPx,
+            frequency: clamp(tri(0.6, DEFAULT_RIDGES2D_CONFIG.ridges.frequency, 5.5), 0.05, 50),
+            octaves: oct,
+            warpAmount: clamp(tri(0.0, DEFAULT_RIDGES2D_CONFIG.ridges.warpAmount, 2.4), 0, 50),
+            warpFrequency: clamp(tri(0.2, DEFAULT_RIDGES2D_CONFIG.ridges.warpFrequency, 4.0), 0.01, 50),
+            levels,
+            lineWidthPx: clamp(tri(0.5, DEFAULT_RIDGES2D_CONFIG.ridges.lineWidthPx, 3.0), 0.1, 50),
+            lineOpacity: clamp(tri(0.08, DEFAULT_RIDGES2D_CONFIG.ridges.lineOpacity, 0.95), 0, 1),
+            smoothing: clamp(tri(0.0, DEFAULT_RIDGES2D_CONFIG.ridges.smoothing, 0.85), 0, 1),
+            fillBands: {
+              enabled: chance(0.65),
+              opacity: clamp(tri(0.04, DEFAULT_RIDGES2D_CONFIG.ridges.fillBands.opacity, 0.45), 0, 1)
+            },
+            paletteMode: chance(0.65) ? 'weighted' : 'cycle',
+            colorWeights: [0.58, 0.18, 0.12, 0.08, 0.04]
+          }
+        };
+      }
     case 'popsicle':
     default:
       const endProfileR = rng();

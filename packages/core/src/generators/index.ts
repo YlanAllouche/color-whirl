@@ -7,7 +7,8 @@ import type {
   Circles2DConfig,
   Polygon2DConfig,
   Triangles2DConfig,
-  HexGrid2DConfig
+  HexGrid2DConfig,
+  Ridges2DConfig
 } from '../types.js';
 
 import { createPopsicleScene, renderPopsicleToCanvas } from './popsicle.js';
@@ -17,6 +18,7 @@ import { renderCircles2DToCanvas } from './circles2d.js';
 import { renderPolygon2DToCanvas } from './polygon2d.js';
 import { renderTriangles2DToCanvas } from './triangles2d.js';
 import { renderHexGrid2DToCanvas } from './hexgrid2d.js';
+import { renderRidges2DToCanvas } from './ridges2d.js';
 
 export function createWallpaperScene(
   config: WallpaperConfig,
@@ -63,6 +65,8 @@ export function renderWallpaperToCanvas(config: WallpaperConfig, canvas?: HTMLCa
       return renderTriangles2DToCanvas(config as Triangles2DConfig, canvas);
     case 'hexgrid2d':
       return renderHexGrid2DToCanvas(config as HexGrid2DConfig, canvas);
+    case 'ridges2d':
+      return renderRidges2DToCanvas(config as Ridges2DConfig, canvas);
     default:
       throw new Error(`Unknown wallpaper type: ${(config as any).type}`);
   }

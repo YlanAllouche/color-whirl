@@ -120,7 +120,7 @@
 
   let is3DType = $derived(config.type === 'popsicle' || config.type === 'spheres3d' || config.type === 'triangles3d');
   let supportsOutlineOnly = $derived(config.type === 'spheres3d' || config.type === 'triangles3d');
-  let supportsBloom = $derived(config.type !== 'hexgrid2d');
+  let supportsBloom = $derived(config.type !== 'hexgrid2d' && config.type !== 'ridges2d');
   let supportsCollisions = $derived(
     config.type === 'popsicle' ||
       config.type === 'circles2d' ||
@@ -786,6 +786,40 @@
             grouping: { ...src.hexgrid.grouping }
           }
         };
+      case 'ridges2d':
+        return {
+          ...src,
+          colors: [...src.colors],
+          textureParams: {
+            drywall: { ...src.textureParams.drywall },
+            glass: { ...src.textureParams.glass },
+            cel: { ...src.textureParams.cel }
+          },
+          facades: {
+            side: { ...src.facades.side },
+            grazing: { ...src.facades.grazing },
+            outline: { ...src.facades.outline }
+          },
+          edge: { ...src.edge, seam: { ...src.edge.seam }, band: { ...src.edge.band } },
+          gruyere: { ...(src as any).gruyere },
+          emission: { ...src.emission },
+          bloom: { ...src.bloom },
+          collisions: { ...src.collisions, carve: { ...src.collisions.carve } },
+          lighting: {
+            ...src.lighting,
+            position: { ...src.lighting.position }
+          },
+          camera: { ...src.camera },
+          environment: { ...src.environment },
+          shadows: { ...src.shadows },
+          rendering: { ...src.rendering },
+          geometry: { ...src.geometry },
+          ridges: {
+            ...src.ridges,
+            fillBands: { ...src.ridges.fillBands },
+            colorWeights: [...src.ridges.colorWeights]
+          }
+        };
     }
   }
 
@@ -828,7 +862,7 @@
     schedulePreviewRender();
   }
 
-  type WeightTarget = 'spheres' | 'circles' | 'polygons' | 'triangles2d' | 'prisms' | 'hexgrid';
+  type WeightTarget = 'spheres' | 'circles' | 'polygons' | 'triangles2d' | 'prisms' | 'hexgrid' | 'ridges';
 
   function setEqualWeights(target: WeightTarget) {
     const n = Math.max(0, config.colors.length);
@@ -840,6 +874,7 @@
     if (target === 'triangles2d' && config.type === 'triangles2d') config.triangles.colorWeights = w;
     if (target === 'prisms' && config.type === 'triangles3d') config.prisms.colorWeights = w;
     if (target === 'hexgrid' && config.type === 'hexgrid2d') config.hexgrid.coloring.weights = w;
+    if (target === 'ridges' && config.type === 'ridges2d') config.ridges.colorWeights = w;
   }
 
   function setRandomWeights(target: WeightTarget) {
@@ -852,6 +887,7 @@
     if (target === 'triangles2d' && config.type === 'triangles2d') config.triangles.colorWeights = w;
     if (target === 'prisms' && config.type === 'triangles3d') config.prisms.colorWeights = w;
     if (target === 'hexgrid' && config.type === 'hexgrid2d') config.hexgrid.coloring.weights = w;
+    if (target === 'ridges' && config.type === 'ridges2d') config.ridges.colorWeights = w;
   }
 
   function updateWeight(target: WeightTarget, index: number, value: number) {
@@ -893,6 +929,12 @@
       a[i] = v;
       config.hexgrid.coloring.weights = a;
     }
+
+    if (target === 'ridges' && config.type === 'ridges2d') {
+      const a = [...(config.ridges.colorWeights ?? [])];
+      a[i] = v;
+      config.ridges.colorWeights = a;
+    }
   }
 
   function generateRandomGeneratedColors() {
@@ -904,7 +946,7 @@
 
   function generateRandomIncludingType() {
     const seed = randomSeedU32();
-    const types: WallpaperType[] = ['popsicle', 'spheres3d', 'circles2d', 'polygon2d', 'triangles2d', 'triangles3d', 'hexgrid2d'];
+    const types: WallpaperType[] = ['popsicle', 'spheres3d', 'circles2d', 'polygon2d', 'triangles2d', 'ridges2d', 'triangles3d', 'hexgrid2d'];
     const currentType = config.type;
     let nextType = types[seed % types.length] ?? 'popsicle';
     if (types.length > 1 && nextType === currentType) {
@@ -1257,7 +1299,7 @@
       }
     }
 
-    if (config.type === 'hexgrid2d') {
+    if (config.type === 'hexgrid2d' || config.type === 'ridges2d') {
       if (config.emission.enabled) config.emission.enabled = false;
       if (config.bloom.enabled) config.bloom.enabled = false;
     }
@@ -1403,6 +1445,7 @@
               <option value="circles2d">Circles (2D)</option>
               <option value="polygon2d">Polygon (2D)</option>
               <option value="triangles2d">Triangles (2D)</option>
+              <option value="ridges2d">Ridges (2D)</option>
               <option value="triangles3d">Triangles (3D)</option>
               <option value="hexgrid2d">Hex Grid (2D)</option>
             </select>
@@ -2302,8 +2345,8 @@
           </details>
         </section>
        {:else if config.type === 'triangles2d'}
-        <section class="control-section">
-          <h3>Triangles (2D)</h3>
+         <section class="control-section">
+           <h3>Triangles (2D)</h3>
 
           <label class="control-row">
             <button type="button" class="setting-title" class:locked={isLocked('triangles.mode')} onclick={() => toggleLock('triangles.mode')} title="Click to lock/unlock for randomize">Mode</button>
@@ -2439,10 +2482,115 @@
               {/each}
             {/if}
           </details>
-        </section>
+         </section>
+       {:else if config.type === 'ridges2d'}
+         <section class="control-section">
+           <h3>Ridges (2D)</h3>
+
+           <label class="control-row slider">
+             <button type="button" class="setting-title" class:locked={isLocked('ridges.gridStepPx')} onclick={() => toggleLock('ridges.gridStepPx')} title="Click to lock/unlock for randomize">Grid step: {Math.round(config.ridges.gridStepPx)}px</button>
+             <input type="range" bind:value={config.ridges.gridStepPx} min="2" max="24" step="1" />
+           </label>
+
+           <label class="control-row slider">
+             <button type="button" class="setting-title" class:locked={isLocked('ridges.frequency')} onclick={() => toggleLock('ridges.frequency')} title="Click to lock/unlock for randomize">Frequency: {config.ridges.frequency.toFixed(2)}</button>
+             <input type="range" bind:value={config.ridges.frequency} min="0.1" max="8" step="0.01" />
+           </label>
+
+           <label class="control-row slider">
+             <button type="button" class="setting-title" class:locked={isLocked('ridges.octaves')} onclick={() => toggleLock('ridges.octaves')} title="Click to lock/unlock for randomize">Octaves: {Math.round(config.ridges.octaves)}</button>
+             <input type="range" bind:value={config.ridges.octaves} min="1" max="8" step="1" />
+           </label>
+
+           <label class="control-row slider">
+             <button type="button" class="setting-title" class:locked={isLocked('ridges.warpAmount')} onclick={() => toggleLock('ridges.warpAmount')} title="Click to lock/unlock for randomize">Warp: {config.ridges.warpAmount.toFixed(2)}</button>
+             <input type="range" bind:value={config.ridges.warpAmount} min="0" max="3" step="0.01" />
+           </label>
+
+           <label class="control-row slider">
+             <button type="button" class="setting-title" class:locked={isLocked('ridges.warpFrequency')} onclick={() => toggleLock('ridges.warpFrequency')} title="Click to lock/unlock for randomize">Warp freq: {config.ridges.warpFrequency.toFixed(2)}</button>
+             <input type="range" bind:value={config.ridges.warpFrequency} min="0.1" max="6" step="0.01" />
+           </label>
+
+           <label class="control-row slider">
+             <button type="button" class="setting-title" class:locked={isLocked('ridges.levels')} onclick={() => toggleLock('ridges.levels')} title="Click to lock/unlock for randomize">Levels: {Math.round(config.ridges.levels)}</button>
+             <input type="range" bind:value={config.ridges.levels} min="3" max="36" step="1" />
+           </label>
+
+           <label class="control-row slider">
+             <button type="button" class="setting-title" class:locked={isLocked('ridges.lineWidthPx')} onclick={() => toggleLock('ridges.lineWidthPx')} title="Click to lock/unlock for randomize">Line width: {config.ridges.lineWidthPx.toFixed(2)}px</button>
+             <input type="range" bind:value={config.ridges.lineWidthPx} min="0.25" max="5" step="0.05" />
+           </label>
+
+           <label class="control-row slider">
+             <button type="button" class="setting-title" class:locked={isLocked('ridges.lineOpacity')} onclick={() => toggleLock('ridges.lineOpacity')} title="Click to lock/unlock for randomize">Line opacity: {config.ridges.lineOpacity.toFixed(2)}</button>
+             <input type="range" bind:value={config.ridges.lineOpacity} min="0" max="1" step="0.01" />
+           </label>
+
+           <label class="control-row slider">
+             <button type="button" class="setting-title" class:locked={isLocked('ridges.smoothing')} onclick={() => toggleLock('ridges.smoothing')} title="Click to lock/unlock for randomize">Smoothing: {config.ridges.smoothing.toFixed(2)}</button>
+             <input type="range" bind:value={config.ridges.smoothing} min="0" max="1" step="0.01" />
+           </label>
+
+           <details class="control-details">
+             <summary class="control-details-summary">Fill bands</summary>
+             <label class="control-row checkbox">
+               <input type="checkbox" bind:checked={config.ridges.fillBands.enabled} />
+               <button
+                 type="button"
+                 class="setting-title"
+                 class:locked={isLocked('ridges.fillBands.enabled')}
+                 onclick={(e) => {
+                   e.preventDefault();
+                   toggleLock('ridges.fillBands.enabled');
+                 }}
+                 title="Click to lock/unlock for randomize"
+               >
+                 Enable
+               </button>
+             </label>
+             <label class="control-row slider">
+               <button type="button" class="setting-title" class:locked={isLocked('ridges.fillBands.opacity')} onclick={() => toggleLock('ridges.fillBands.opacity')} title="Click to lock/unlock for randomize">Opacity: {config.ridges.fillBands.opacity.toFixed(2)}</button>
+               <input type="range" bind:value={config.ridges.fillBands.opacity} min="0" max="1" step="0.01" disabled={!config.ridges.fillBands.enabled} />
+             </label>
+           </details>
+
+           <details class="control-details">
+             <summary class="control-details-summary">Palette</summary>
+             <label class="control-row">
+               <button type="button" class="setting-title" class:locked={isLocked('ridges.paletteMode')} onclick={() => toggleLock('ridges.paletteMode')} title="Click to lock/unlock for randomize">Mode</button>
+               <select bind:value={config.ridges.paletteMode}>
+                 <option value="cycle">Cycle</option>
+                 <option value="weighted">Weighted</option>
+               </select>
+             </label>
+
+             {#if config.ridges.paletteMode === 'weighted'}
+               <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-top:0.5rem;">
+                 <button type="button" onclick={() => setEqualWeights('ridges')}>Equal weights</button>
+                 <button type="button" onclick={() => setRandomWeights('ridges')}>Random weights</button>
+               </div>
+               {#each config.colors as c, i}
+                 <label class="control-row slider">
+                   <button type="button" class="setting-title" class:locked={isLocked('ridges.colorWeights')} onclick={() => toggleLock('ridges.colorWeights')} title="Click to lock/unlock for randomize">w{i + 1}: {(config.ridges.colorWeights[i] ?? 1).toFixed(2)} {c}</button>
+                   <input
+                     type="range"
+                     min="0"
+                     max="5"
+                     step="0.05"
+                     value={config.ridges.colorWeights[i] ?? 1}
+                     oninput={(e) => {
+                       updateWeight('ridges', i, Number((e.currentTarget as HTMLInputElement).value));
+                     }}
+                   />
+                 </label>
+               {/each}
+             {/if}
+           </details>
+         </section>
        {:else if config.type === 'triangles3d'}
-        <section class="control-section">
-          <h3>Triangles (3D)</h3>
+         <section class="control-section">
+           <h3>Triangles (3D)</h3>
 
           <label class="control-row">
             <button type="button" class="setting-title" class:locked={isLocked('prisms.mode')} onclick={() => toggleLock('prisms.mode')} title="Click to lock/unlock for randomize">Mode</button>
