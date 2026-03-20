@@ -609,7 +609,7 @@
           shadows: { ...src.shadows },
           rendering: { ...src.rendering },
           geometry: { ...src.geometry },
-          spheres: { ...src.spheres, colorWeights: [...src.spheres.colorWeights] }
+          spheres: { ...src.spheres, colorWeights: [...src.spheres.colorWeights], shape: { ...src.spheres.shape } }
         };
       case 'circles2d':
         return {
@@ -1093,6 +1093,9 @@
       void c.spheres.paletteMode;
       void c.spheres.colorWeights.join(',');
       void c.spheres.opacity;
+      void c.spheres.shape.kind;
+      void c.spheres.shape.roundness;
+      void c.spheres.shape.faceting;
     }
     if (c.type === 'circles2d') {
       void c.circles.mode;
@@ -1884,6 +1887,27 @@
        {:else if config.type === 'spheres3d'}
         <section class="control-section">
           <h3>Spheres (3D)</h3>
+
+          <details class="control-details">
+            <summary class="control-details-summary">Shape</summary>
+            <label class="control-row">
+              <button type="button" class="setting-title" class:locked={isLocked('spheres.shape.kind')} onclick={() => toggleLock('spheres.shape.kind')} title="Click to lock/unlock for randomize">Kind</button>
+              <select bind:value={config.spheres.shape.kind}>
+                <option value="uvSphere">UV sphere</option>
+                <option value="spherifiedBox">Spherified box</option>
+              </select>
+            </label>
+
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('spheres.shape.roundness')} onclick={() => toggleLock('spheres.shape.roundness')} title="Click to lock/unlock for randomize">Roundness: {config.spheres.shape.roundness.toFixed(2)}</button>
+              <input type="range" bind:value={config.spheres.shape.roundness} min="0" max="1" step="0.01" disabled={config.spheres.shape.kind !== 'spherifiedBox'} />
+            </label>
+
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('spheres.shape.faceting')} onclick={() => toggleLock('spheres.shape.faceting')} title="Click to lock/unlock for randomize">Faceting: {config.spheres.shape.faceting.toFixed(2)}</button>
+              <input type="range" bind:value={config.spheres.shape.faceting} min="0" max="1" step="0.01" disabled={config.spheres.shape.kind !== 'spherifiedBox'} />
+            </label>
+          </details>
 
           <label class="control-row slider">
             <button type="button" class="setting-title" class:locked={isLocked('spheres.count')} onclick={() => toggleLock('spheres.count')} title="Click to lock/unlock for randomize">Count: {config.spheres.count}</button>

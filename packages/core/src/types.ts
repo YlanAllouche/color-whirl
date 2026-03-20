@@ -269,6 +269,16 @@ export interface PopsicleConfig extends BaseWallpaperConfig {
 export type SphereDistribution = 'jitteredGrid' | 'scatter' | 'layeredDepth';
 export type PaletteAssignMode = 'cycle' | 'weighted';
 
+export type Spheres3DShapeKind = 'uvSphere' | 'spherifiedBox';
+
+export interface Spheres3DShapeConfig {
+  kind: Spheres3DShapeKind;
+  /** 0..1: 0 = cube, 1 = sphere (only used when kind=spherifiedBox) */
+  roundness: number;
+  /** 0..1: 0 = smooth, 1 = faceted (only used when kind=spherifiedBox) */
+  faceting: number;
+}
+
 export interface Spheres3DConfig extends BaseWallpaperConfig {
   type: 'spheres3d';
   spheres: {
@@ -289,6 +299,8 @@ export interface Spheres3DConfig extends BaseWallpaperConfig {
     colorWeights: number[];
     /** 0..1 */
     opacity: number;
+
+    shape: Spheres3DShapeConfig;
   };
 }
 
@@ -623,7 +635,12 @@ export const DEFAULT_SPHERES3D_CONFIG: Spheres3DConfig = {
     layers: 3,
     paletteMode: 'weighted',
     colorWeights: [0.34, 0.28, 0.18, 0.12, 0.08],
-    opacity: 1.0
+    opacity: 1.0,
+    shape: {
+      kind: 'uvSphere',
+      roundness: 1,
+      faceting: 0
+    }
   }
 };
 
@@ -1214,6 +1231,18 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
 
   switch (type) {
     case 'spheres3d':
+      {
+        const useSpherifiedBox = chance(0.22);
+        const shape = useSpherifiedBox
+          ? (() => {
+              // Bias to "good looking": fairly round + some faceting; allow rare cubes.
+              const cubeish = chance(0.08);
+              const roundness = cubeish ? clamp(tri(0.0, 0.12, 0.55), 0, 1) : clamp(tri(0.35, 0.9, 1.0), 0, 1);
+              const faceting = cubeish ? clamp(tri(0.75, 1.0, 1.0), 0, 1) : clamp(tri(0.05, 0.55, 1.0), 0, 1);
+              return { kind: 'spherifiedBox' as const, roundness, faceting };
+            })()
+          : { kind: 'uvSphere' as const, roundness: 1, faceting: 0 };
+
       return {
         ...base,
         type: 'spheres3d',
@@ -1227,9 +1256,11 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
           layers: Math.max(1, Math.min(8, Math.round(randomWeighted(rng, 1, 8, 3)))),
           paletteMode: rng() < 0.55 ? 'weighted' : 'cycle',
           colorWeights: [0.34, 0.28, 0.18, 0.12, 0.08],
-          opacity: randomStickOpacity()
+          opacity: randomStickOpacity(),
+          shape
         }
       };
+      }
     case 'circles2d':
       return {
         ...base,

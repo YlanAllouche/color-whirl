@@ -13,6 +13,59 @@ function clamp01(n: number): number {
   return clamp(n, 0, 1);
 }
 
+function getSpheres3DGeometry(config: Spheres3DConfig): { geometry: THREE.BufferGeometry; flatShading: boolean } {
+  const rawShape = (config.spheres as any)?.shape as any;
+  const kind = rawShape?.kind === 'spherifiedBox' ? 'spherifiedBox' : 'uvSphere';
+
+  if (kind === 'uvSphere') {
+    const seg = Math.round(8 + clamp(config.geometry.quality, 0, 1) * 48);
+    const geometry = new THREE.SphereGeometry(1, seg, seg);
+    geometry.computeBoundingBox();
+    geometry.computeBoundingSphere();
+    return { geometry, flatShading: false };
+  }
+
+  const roundness = clamp01(Number(rawShape?.roundness ?? 1));
+  const faceting = clamp01(Number(rawShape?.faceting ?? 0));
+  const quality = clamp01(Number(config.geometry.quality ?? 0.6));
+
+  // faceting=1 -> cube-ish (few segments). faceting=0 -> smoother (more segments).
+  const segMax = Math.round(3 + quality * 18); // 3..21
+  const segMin = 1;
+  const seg = Math.max(segMin, Math.round(segMin + (1 - faceting) * (segMax - segMin)));
+
+  // Use an inscribed cube so the bounding radius stays ~1 when roundness=0.
+  const size = 2 / Math.sqrt(3);
+  const geometry = new THREE.BoxGeometry(size, size, size, seg, seg, seg);
+
+  const pos = geometry.getAttribute('position') as THREE.BufferAttribute;
+  const t = roundness;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i);
+    const y = pos.getY(i);
+    const z = pos.getZ(i);
+
+    const len = Math.sqrt(x * x + y * y + z * z);
+    if (!(len > 1e-12)) continue;
+    const nx = x / len;
+    const ny = y / len;
+    const nz = z / len;
+
+    const sx = x + (nx - x) * t;
+    const sy = y + (ny - y) * t;
+    const sz = z + (nz - z) * t;
+    pos.setXYZ(i, sx, sy, sz);
+  }
+  pos.needsUpdate = true;
+
+  geometry.computeVertexNormals();
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
+
+  const flatShading = faceting > 0.6 || seg <= 2;
+  return { geometry, flatShading };
+}
+
 function degToRad(deg: number): number {
   return (deg * Math.PI) / 180;
 }
@@ -281,14 +334,15 @@ export function createSpheres3DScene(
 
   const opacity = clamp(Number(config.spheres.opacity) || 1, 0, 1);
 
-  const seg = Math.round(8 + clamp(config.geometry.quality, 0, 1) * 48);
-  const geometry = new THREE.SphereGeometry(1, seg, seg);
-  geometry.computeBoundingBox();
-  geometry.computeBoundingSphere();
+  const { geometry, flatShading } = getSpheres3DGeometry(config);
 
   const perColor: Array<{ idx: number; inst: THREE.InstancedMesh; mat: THREE.Material; outline?: THREE.InstancedMesh }> = [];
   for (let pi = 0; pi < nColors; pi++) {
     const mat = createSurfaceMaterial(config, pi, colors[pi], envIntensity, opacity);
+    if ('flatShading' in (mat as any)) {
+      (mat as any).flatShading = flatShading;
+      (mat as any).needsUpdate = true;
+    }
     const inst = new THREE.InstancedMesh(geometry, mat, count);
     inst.castShadow = useShadows;
     inst.receiveShadow = useShadows;
