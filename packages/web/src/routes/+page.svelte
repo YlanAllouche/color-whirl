@@ -1076,7 +1076,10 @@
       void c.stickSize;
       void c.stickRatio;
       void c.stickThickness;
+      void c.stickEndProfile;
       void c.stickRoundness;
+      void c.stickChipAmount;
+      void c.stickChipJaggedness;
       void c.stickBevel;
       void c.stickOpacity;
     }
@@ -1803,15 +1806,36 @@
            <label class="control-row slider">
             <button type="button" class="setting-title" class:locked={isLocked('stickRatio')} onclick={() => toggleLock('stickRatio')} title="Click to lock/unlock for randomize">Ratio: {config.stickRatio.toFixed(2)}</button>
              <input type="range" bind:value={config.stickRatio} min="0.5" max="12" step="0.05" />
-           </label>
-           <label class="control-row slider">
-            <button type="button" class="setting-title" class:locked={isLocked('stickThickness')} onclick={() => toggleLock('stickThickness')} title="Click to lock/unlock for randomize">Thickness: {config.stickThickness.toFixed(1)}</button>
-              <input type="range" bind:value={config.stickThickness} min="0.1" max="3.0" step="0.1" />
             </label>
            <label class="control-row slider">
-            <button type="button" class="setting-title" class:locked={isLocked('stickRoundness')} onclick={() => toggleLock('stickRoundness')} title="Click to lock/unlock for randomize">Roundness: {config.stickRoundness.toFixed(2)}</button>
-             <input type="range" bind:value={config.stickRoundness} min="0" max="1" step="0.01" />
-           </label>
+            <button type="button" class="setting-title" class:locked={isLocked('stickThickness')} onclick={() => toggleLock('stickThickness')} title="Click to lock/unlock for randomize">Thickness: {config.stickThickness.toFixed(1)}</button>
+               <input type="range" bind:value={config.stickThickness} min="0.1" max="3.0" step="0.1" />
+             </label>
+
+            <label class="control-row">
+              <button type="button" class="setting-title" class:locked={isLocked('stickEndProfile')} onclick={() => toggleLock('stickEndProfile')} title="Click to lock/unlock for randomize">End profile</button>
+              <select bind:value={config.stickEndProfile}>
+                <option value="rounded">Rounded</option>
+                <option value="chamfer">Chamfer</option>
+                <option value="chipped">Chipped</option>
+              </select>
+            </label>
+
+            <label class="control-row slider">
+             <button type="button" class="setting-title" class:locked={isLocked('stickRoundness')} onclick={() => toggleLock('stickRoundness')} title="Click to lock/unlock for randomize">Roundness: {config.stickRoundness.toFixed(2)}</button>
+              <input type="range" bind:value={config.stickRoundness} min="0" max="1" step="0.01" />
+            </label>
+
+            {#if config.stickEndProfile === 'chipped'}
+              <label class="control-row slider">
+                <button type="button" class="setting-title" class:locked={isLocked('stickChipAmount')} onclick={() => toggleLock('stickChipAmount')} title="Click to lock/unlock for randomize">Chip amount: {config.stickChipAmount.toFixed(2)}</button>
+                <input type="range" bind:value={config.stickChipAmount} min="0" max="1" step="0.01" />
+              </label>
+              <label class="control-row slider">
+                <button type="button" class="setting-title" class:locked={isLocked('stickChipJaggedness')} onclick={() => toggleLock('stickChipJaggedness')} title="Click to lock/unlock for randomize">Chip jaggedness: {config.stickChipJaggedness.toFixed(2)}</button>
+                <input type="range" bind:value={config.stickChipJaggedness} min="0" max="1" step="0.01" />
+              </label>
+            {/if}
            <label class="control-row slider">
             <button type="button" class="setting-title" class:locked={isLocked('stickBevel')} onclick={() => toggleLock('stickBevel')} title="Click to lock/unlock for randomize">Bevel: {config.stickBevel.toFixed(2)}</button>
              <input type="range" bind:value={config.stickBevel} min="0" max="1" step="0.01" />

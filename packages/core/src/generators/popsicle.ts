@@ -48,20 +48,66 @@ function createRoundedBox(
   width: number,
   height: number,
   depth: number,
+  endProfile: 'rounded' | 'chamfer' | 'chipped',
   roundness: number,
+  chipAmount: number,
+  chipJaggedness: number,
   bevel: number,
-  quality: number
+  quality: number,
+  seed: number
 ): THREE.BufferGeometry {
   const safeRoundness = Math.max(0, Math.min(1, roundness));
   const safeBevel = Math.max(0, Math.min(1, bevel));
+  const safeChipAmount = Math.max(0, Math.min(1, chipAmount));
+  const safeChipJaggedness = Math.max(0, Math.min(1, chipJaggedness));
   const q = Math.max(0, Math.min(1, quality));
 
   const maxRadius = Math.min(width, height) / 2;
   const radius = maxRadius * safeRoundness;
 
+  const rng = (() => {
+    let t = ((seed >>> 0) || 1) ^ 0x9e3779b9;
+    return () => {
+      // mulberry32
+      t += 0x6D2B79F5;
+      let x = Math.imul(t ^ (t >>> 15), 1 | t);
+      x ^= x + Math.imul(x ^ (x >>> 7), 61 | x);
+      return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+    };
+  })();
+
   const shape = new THREE.Shape();
   const x = -width / 2;
   const y = -height / 2;
+
+  const profile = endProfile === 'chamfer' || endProfile === 'chipped' || endProfile === 'rounded' ? endProfile : 'rounded';
+
+  const addChippedCorner = (
+    fromX: number,
+    fromY: number,
+    toX: number,
+    toY: number,
+    inwardX: number,
+    inwardY: number
+  ) => {
+    const segBase = 2 + Math.round(safeChipJaggedness * 6);
+    const segs = Math.max(2, Math.min(10, segBase));
+    const invLen = 1 / Math.max(1e-6, Math.hypot(inwardX, inwardY));
+    const ix = inwardX * invLen;
+    const iy = inwardY * invLen;
+
+    for (let i = 1; i < segs; i++) {
+      const t = i / segs;
+      const bx = fromX + (toX - fromX) * t;
+      const by = fromY + (toY - fromY) * t;
+
+      const jitter = (rng() - 0.5) * 2;
+      const amt = safeChipAmount * radius * (0.25 + 0.55 * safeChipJaggedness) * (0.35 + 0.65 * Math.abs(jitter));
+      const px = bx + ix * amt;
+      const py = by + iy * amt;
+      shape.lineTo(px, py);
+    }
+  };
 
   if (radius <= 0) {
     shape.moveTo(x, y);
@@ -69,7 +115,7 @@ function createRoundedBox(
     shape.lineTo(x + width, y + height);
     shape.lineTo(x, y + height);
     shape.closePath();
-  } else {
+  } else if (profile === 'rounded') {
     shape.moveTo(x + radius, y);
     shape.lineTo(x + width - radius, y);
     shape.quadraticCurveTo(x + width, y, x + width, y + radius);
@@ -79,6 +125,37 @@ function createRoundedBox(
     shape.quadraticCurveTo(x, y + height, x, y + height - radius);
     shape.lineTo(x, y + radius);
     shape.quadraticCurveTo(x, y, x + radius, y);
+  } else {
+    // Chamfer/chipped: use a straight-corner profile in the 2D shape.
+    const c = radius;
+    shape.moveTo(x + c, y);
+    shape.lineTo(x + width - c, y);
+    // Bottom-right corner
+    if (profile === 'chipped' && safeChipAmount > 0) {
+      addChippedCorner(x + width - c, y, x + width, y + c, -1, 1);
+    }
+    shape.lineTo(x + width, y + c);
+
+    shape.lineTo(x + width, y + height - c);
+    // Top-right corner
+    if (profile === 'chipped' && safeChipAmount > 0) {
+      addChippedCorner(x + width, y + height - c, x + width - c, y + height, -1, -1);
+    }
+    shape.lineTo(x + width - c, y + height);
+
+    shape.lineTo(x + c, y + height);
+    // Top-left corner
+    if (profile === 'chipped' && safeChipAmount > 0) {
+      addChippedCorner(x + c, y + height, x, y + height - c, 1, -1);
+    }
+    shape.lineTo(x, y + height - c);
+
+    shape.lineTo(x, y + c);
+    // Bottom-left corner
+    if (profile === 'chipped' && safeChipAmount > 0) {
+      addChippedCorner(x, y + c, x + c, y, 1, 1);
+    }
+    shape.lineTo(x + c, y);
   }
   
   const maxBevel = Math.min(width, height) * 0.15;
@@ -374,9 +451,13 @@ export function createPopsicleScene(
     stickDimensions.width,
     stickDimensions.height,
     stickDimensions.depth,
+    config.stickEndProfile,
     stickRoundness,
+    config.stickChipAmount,
+    config.stickChipJaggedness,
     stickBevel,
-    geometry?.quality ?? 0.6
+    geometry?.quality ?? 0.6,
+    config.seed
   );
 
   const envIntensity = environment?.enabled ? Number(environment.intensity) || 0 : 0;

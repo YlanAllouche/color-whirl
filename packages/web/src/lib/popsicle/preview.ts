@@ -126,20 +126,62 @@ function createRoundedBox(
   width: number,
   height: number,
   depth: number,
+  endProfile: 'rounded' | 'chamfer' | 'chipped',
   roundness: number,
+  chipAmount: number,
+  chipJaggedness: number,
   bevel: number,
-  quality: number
+  quality: number,
+  seed: number
 ): THREE.BufferGeometry {
   const safeRoundness = clamp(roundness, 0, 1);
   const safeBevel = clamp(bevel, 0, 1);
+  const safeChipAmount = clamp(chipAmount, 0, 1);
+  const safeChipJaggedness = clamp(chipJaggedness, 0, 1);
   const q = clamp(quality, 0, 1);
 
   const maxRadius = Math.min(width, height) / 2;
   const radius = maxRadius * safeRoundness;
 
+  const rng = (() => {
+    let t = ((seed >>> 0) || 1) ^ 0x9e3779b9;
+    return () => {
+      t += 0x6D2B79F5;
+      let x = Math.imul(t ^ (t >>> 15), 1 | t);
+      x ^= x + Math.imul(x ^ (x >>> 7), 61 | x);
+      return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+    };
+  })();
+
   const shape = new THREE.Shape();
   const x = -width / 2;
   const y = -height / 2;
+
+  const profile = endProfile === 'chamfer' || endProfile === 'chipped' || endProfile === 'rounded' ? endProfile : 'rounded';
+
+  const addChippedCorner = (
+    fromX: number,
+    fromY: number,
+    toX: number,
+    toY: number,
+    inwardX: number,
+    inwardY: number
+  ) => {
+    const segBase = 2 + Math.round(safeChipJaggedness * 6);
+    const segs = Math.max(2, Math.min(10, segBase));
+    const invLen = 1 / Math.max(1e-6, Math.hypot(inwardX, inwardY));
+    const ix = inwardX * invLen;
+    const iy = inwardY * invLen;
+
+    for (let i = 1; i < segs; i++) {
+      const t = i / segs;
+      const bx = fromX + (toX - fromX) * t;
+      const by = fromY + (toY - fromY) * t;
+      const jitter = (rng() - 0.5) * 2;
+      const amt = safeChipAmount * radius * (0.25 + 0.55 * safeChipJaggedness) * (0.35 + 0.65 * Math.abs(jitter));
+      shape.lineTo(bx + ix * amt, by + iy * amt);
+    }
+  };
 
   if (radius <= 0) {
     shape.moveTo(x, y);
@@ -147,7 +189,7 @@ function createRoundedBox(
     shape.lineTo(x + width, y + height);
     shape.lineTo(x, y + height);
     shape.closePath();
-  } else {
+  } else if (profile === 'rounded') {
     shape.moveTo(x + radius, y);
     shape.lineTo(x + width - radius, y);
     shape.quadraticCurveTo(x + width, y, x + width, y + radius);
@@ -157,6 +199,29 @@ function createRoundedBox(
     shape.quadraticCurveTo(x, y + height, x, y + height - radius);
     shape.lineTo(x, y + radius);
     shape.quadraticCurveTo(x, y, x + radius, y);
+  } else {
+    const c = radius;
+    shape.moveTo(x + c, y);
+    shape.lineTo(x + width - c, y);
+    if (profile === 'chipped' && safeChipAmount > 0) {
+      addChippedCorner(x + width - c, y, x + width, y + c, -1, 1);
+    }
+    shape.lineTo(x + width, y + c);
+    shape.lineTo(x + width, y + height - c);
+    if (profile === 'chipped' && safeChipAmount > 0) {
+      addChippedCorner(x + width, y + height - c, x + width - c, y + height, -1, -1);
+    }
+    shape.lineTo(x + width - c, y + height);
+    shape.lineTo(x + c, y + height);
+    if (profile === 'chipped' && safeChipAmount > 0) {
+      addChippedCorner(x + c, y + height, x, y + height - c, 1, -1);
+    }
+    shape.lineTo(x, y + height - c);
+    shape.lineTo(x, y + c);
+    if (profile === 'chipped' && safeChipAmount > 0) {
+      addChippedCorner(x, y + c, x + c, y, 1, 1);
+    }
+    shape.lineTo(x + c, y);
   }
 
   const maxBevel = Math.min(width, height) * 0.15;
@@ -628,9 +693,13 @@ export class PopsiclePreview {
       stickDimensions.width.toFixed(4),
       stickDimensions.height.toFixed(4),
       stickDimensions.depth.toFixed(4),
+      String(effective.stickEndProfile),
       effective.stickRoundness.toFixed(4),
+      effective.stickChipAmount.toFixed(4),
+      effective.stickChipJaggedness.toFixed(4),
       effective.stickBevel.toFixed(4),
-      effective.geometry.quality.toFixed(3)
+      effective.geometry.quality.toFixed(3),
+      String(effective.seed)
     ].join(':');
 
     if (!this.stickGeometry || (this.stickGeometry as any).__key !== geoKey) {
@@ -639,9 +708,13 @@ export class PopsiclePreview {
         stickDimensions.width,
         stickDimensions.height,
         stickDimensions.depth,
+        effective.stickEndProfile,
         effective.stickRoundness,
+        effective.stickChipAmount,
+        effective.stickChipJaggedness,
         effective.stickBevel,
-        effective.geometry.quality
+        effective.geometry.quality,
+        effective.seed
       );
       (this.stickGeometry as any).__key = geoKey;
     }
@@ -1197,7 +1270,10 @@ void wmApplyCollisionMask(inout vec4 col) {
       size: config.stickSize,
       ratio: config.stickRatio,
       thick: config.stickThickness,
+      endProfile: (config as any).stickEndProfile,
       round: config.stickRoundness,
+      chipAmount: (config as any).stickChipAmount,
+      chipJagged: (config as any).stickChipJaggedness,
       bevel: config.stickBevel,
       so: config.stickOpacity,
       cam: config.camera,
@@ -1337,9 +1413,13 @@ void wmApplyCollisionMask(inout vec4 col) {
       stickDimensions.width,
       stickDimensions.height,
       stickDimensions.depth,
+      config.stickEndProfile,
       config.stickRoundness,
+      config.stickChipAmount,
+      config.stickChipJaggedness,
       config.stickBevel,
-      config.geometry.quality
+      config.geometry.quality,
+      config.seed
     );
 
     const envIntensity = config.environment.enabled ? config.environment.intensity : 0;
@@ -1467,9 +1547,13 @@ export async function renderRasterToCanvas(config: PopsicleConfig): Promise<HTML
     stickDimensions.width,
     stickDimensions.height,
     stickDimensions.depth,
+    config.stickEndProfile,
     config.stickRoundness,
+    config.stickChipAmount,
+    config.stickChipJaggedness,
     config.stickBevel,
-    config.geometry.quality
+    config.geometry.quality,
+    config.seed
   );
 
   const useShadows = !!config.shadows.enabled;

@@ -255,8 +255,13 @@ export interface PopsicleConfig extends BaseWallpaperConfig {
   /** Stick aspect ratio (length/width) */
   stickRatio: number;
   stickThickness: number;
-  /** 0 = square ends, 1 = fully rounded pill ends */
+  stickEndProfile: 'rounded' | 'chamfer' | 'chipped';
+  /** 0 = square ends, 1 = strongest effect (profile-dependent) */
   stickRoundness: number;
+  /** 0..1: only used when stickEndProfile=chipped */
+  stickChipAmount: number;
+  /** 0..1: only used when stickEndProfile=chipped */
+  stickChipJaggedness: number;
   /** 0 = no bevel, 1 = strongest bevel */
   stickBevel: number;
   /** 0..1: stick material opacity; 1 = fully opaque */
@@ -559,7 +564,10 @@ export const DEFAULT_POPSICLE_CONFIG: PopsicleConfig = {
   stickSize: 1.0,
   stickRatio: 3.0,
   stickThickness: 1.0,
+  stickEndProfile: 'rounded',
   stickRoundness: 0.15,
+  stickChipAmount: 0.35,
+  stickChipJaggedness: 0.55,
   stickBevel: 0.35,
   stickOpacity: 1.0,
   lighting: {
@@ -1315,7 +1323,10 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
         stickSize: randomWeighted(rng, 0.25, 2.5, 1.0),
         stickRatio: randomWeighted(rng, 0.75, 12, 3.0),
         stickThickness: randomWeighted(rng, 0.1, 3, 1.0),
+        stickEndProfile: 'rounded',
         stickRoundness: randomWeighted(rng, 0, 1, 0.15),
+        stickChipAmount: randomWeighted(rng, 0, 1, 0.35),
+        stickChipJaggedness: randomWeighted(rng, 0, 1, 0.55),
         stickBevel: randomWeighted(rng, 0, 1, 0.35),
         stickOpacity: randomStickOpacity()
       };
