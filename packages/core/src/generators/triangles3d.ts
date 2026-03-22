@@ -86,16 +86,27 @@ function createBulgedPrismGeometry(options: {
   geom.translate(0, -0.5, 0);
 
   // Apply taper based on shape mode:
-  // - 'prism': taper applies normally (1 = full prism, 0 = frustum)
-  // - 'pyramidTri' / 'pyramidSquare': taper applies normally (1 = prism with flat top, 0 = full pyramid)
+  // - 'prism': taper applies normally (1 = full prism, 0 = frustum/truncated)
+  // - 'pyramidTri' / 'pyramidSquare': taper applies to converge to apex (0 = sharp pyramid, 1 = flat top)
   if (taper < 0.999999) {
     const pos = geom.getAttribute('position') as THREE.BufferAttribute;
+    const isPyramid = taper <= 0.000001;
+    
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i);
       const y = pos.getY(i);
       const z = pos.getZ(i);
-      const t = clamp(y + 0.5, 0, 1);
-      const s = 1 - (1 - taper) * t;
+      
+      let s: number;
+      if (isPyramid) {
+        // For pyramids: bottom half (y < 0) stays at full scale, top half converges to apex at y=0.5
+        s = y < 0 ? 1 : 1 - (y / 0.5);
+      } else {
+        // For prisms/frustum: linear taper across full height
+        const t = clamp(y + 0.5, 0, 1);
+        s = 1 - (1 - taper) * t;
+      }
+      
       pos.setXYZ(i, x * s, y, z * s);
     }
     pos.needsUpdate = true;
