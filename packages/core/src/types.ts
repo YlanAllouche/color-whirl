@@ -1462,7 +1462,10 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
     return Math.round(clamp(randomWeighted(rng, softMax, hardMax, tailMode), min, hardMax));
   };
 
-  const emissionEnabled = chance(0.22);
+  const emissionPaletteIndex = Math.floor(rng() * Math.max(1, theme.colors.length));
+  const emissionIntensityBase = clamp(tri(0, DEFAULT_POPSICLE_CONFIG.emission.intensity, 14), 0, 20);
+  const emissionIntensitySeed = emissionIntensityBase > 0 ? emissionIntensityBase : DEFAULT_POPSICLE_CONFIG.emission.intensity;
+  const fallbackGlobalEmission = chance(0.08);
   const bloomEnabled = chance(0.35);
 
   const is3DType = type === 'popsicle' || type === 'spheres3d' || type === 'triangles3d' || type === 'svg3d';
@@ -1563,9 +1566,9 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
       seedOffset: gruyereEnabled ? Math.round(tri(-50, 0, 50)) : DEFAULT_POPSICLE_CONFIG.gruyere.seedOffset
     },
     emission: {
-      enabled: emissionEnabled,
-      paletteIndex: Math.floor(rng() * Math.max(1, theme.colors.length)),
-      intensity: clamp(tri(0, DEFAULT_POPSICLE_CONFIG.emission.intensity, 14), 0, 20)
+      enabled: fallbackGlobalEmission,
+      paletteIndex: emissionPaletteIndex,
+      intensity: emissionIntensityBase
     },
     bloom: {
       enabled: bloomEnabled,
@@ -1623,72 +1626,96 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
 
   // Palette overrides: strongly biased toward none.
   // Occasionally enables a single accent color emission and/or a per-color texture.
-  {
-    const n = Math.max(0, base.colors.length);
-    const overrides: Array<any> = [];
+  const paletteCount = Math.max(0, base.colors.length);
+  const paletteOverrides: Array<any> = [];
 
-    const setOverride = (pi: number, patch: any) => {
-      const cur = overrides[pi] && typeof overrides[pi] === 'object' ? overrides[pi] : null;
-      overrides[pi] = { ...(cur ?? { enabled: true }), ...patch, enabled: true };
+  const setOverride = (pi: number, patch: any) => {
+    if (pi < 0 || pi >= paletteCount) return;
+    const existing = paletteOverrides[pi] && typeof paletteOverrides[pi] === 'object' ? paletteOverrides[pi] : { enabled: true };
+    const merged = deepMerge(existing, patch ?? {});
+    merged.enabled = true;
+    paletteOverrides[pi] = merged;
+  };
+
+  const allowOverrides = chance(0.06);
+  if (allowOverrides && paletteCount > 0) {
+    const emissionIndices = new Set<number>();
+    const addEmissionTarget = () => {
+      if (paletteCount === 0) return;
+      if (emissionIndices.size >= paletteCount) return;
+      let idx = Math.floor(rng() * paletteCount);
+      let tries = 0;
+      while (emissionIndices.has(idx) && tries < 5) {
+        idx = Math.floor(rng() * paletteCount);
+        tries++;
+      }
+      emissionIndices.add(idx);
     };
 
-    const hasGlobalEmission = !!base.emission.enabled && (Number(base.emission.intensity) || 0) > 0;
-    const allowOverrides = chance(0.06);
+    if (chance(0.55)) addEmissionTarget();
+    if (chance(0.22) && paletteCount > 1) addEmissionTarget();
+    if (chance(0.08) && paletteCount > 2) addEmissionTarget();
 
-    if (allowOverrides && n > 0) {
-      // Emission accent.
-      if (chance(hasGlobalEmission ? 0.22 : 0.55)) {
-        const idx0 = Math.floor(rng() * n);
-        const idx = hasGlobalEmission && n > 1 ? (idx0 + 1 + Math.floor(rng() * (n - 1))) % n : idx0;
-        const baseIntensity = clamp(Number(base.emission.intensity) || DEFAULT_POPSICLE_CONFIG.emission.intensity, 0, 20);
-        const intensity = hasGlobalEmission
-          ? clamp(baseIntensity * tri(0.25, 0.7, 1.0), 0, 20)
-          : clamp(tri(0.6, baseIntensity, 14), 0, 20);
-        setOverride(idx, { emission: { enabled: true, intensity } });
-        // Keep random configs coherent: bloom is required for 2D glow and improves 3D emission.
-        base.bloom.enabled = true;
-      }
+    let emissionOrder = 0;
+    for (const idx of emissionIndices) {
+      const intensity = emissionOrder === 0
+        ? clamp(tri(0.6, emissionIntensitySeed, 14), 0, 20)
+        : clamp(emissionIntensitySeed * tri(0.35, 0.7, 1.0), 0, 20);
+      setOverride(idx, { emission: { enabled: true, intensity } });
+      emissionOrder++;
+    }
 
-      // Very rare: per-color texture for 3D types.
-      if (is3DType && chance(0.12)) {
-        const idx = Math.floor(rng() * n);
-        const type: TextureType = chance(0.55) ? 'glass' : chance(0.6) ? 'mirror' : chance(0.5) ? 'metallic' : 'matte';
-        const params: any =
-          type === 'glass'
-            ? { glass: { style: (['simple', 'frosted', 'thick', 'stylized'] as const)[Math.floor(rng() * 4)] } }
-            : undefined;
-        setOverride(idx, { texture: { type, params } });
-      }
+    // Very rare: per-color texture for 3D types.
+    if (is3DType && chance(0.12)) {
+      const idx = Math.floor(rng() * paletteCount);
+      const type: TextureType = chance(0.55) ? 'glass' : chance(0.6) ? 'mirror' : chance(0.5) ? 'metallic' : 'matte';
+      const params: any =
+        type === 'glass'
+          ? { glass: { style: (['simple', 'frosted', 'thick', 'stylized'] as const)[Math.floor(rng() * 4)] } }
+          : undefined;
+      setOverride(idx, { texture: { type, params } });
+    }
 
-      // Rare: per-color geometry multipliers (subtle accent near 1.0).
-      if (chance(0.18)) {
-        const idx = Math.floor(rng() * n);
-        const mult = () => clamp(tri(0.85, 1.0, 1.18), 0.5, 2.0);
+    // Rare: per-color geometry multipliers (subtle accent near 1.0).
+    if (chance(0.18)) {
+      const idx = Math.floor(rng() * paletteCount);
+      const mult = () => clamp(tri(0.85, 1.0, 1.18), 0.5, 2.0);
 
-        if (type === 'popsicle') {
-          setOverride(idx, {
-            geometry: {
-              popsicle: {
-                sizeMult: mult(),
-                ratioMult: mult(),
-                thicknessMult: mult()
-              }
+      if (type === 'popsicle') {
+        setOverride(idx, {
+          geometry: {
+            popsicle: {
+              sizeMult: mult(),
+              ratioMult: mult(),
+              thicknessMult: mult()
             }
-          });
-        } else if (type === 'spheres3d') {
-          setOverride(idx, { geometry: { spheres3d: { radiusMult: mult() } } });
-        } else if (type === 'triangles3d') {
-          setOverride(idx, { geometry: { triangles3d: { radiusMult: mult(), heightMult: mult() } } });
-        } else if (type === 'svg2d') {
-          setOverride(idx, { geometry: { svg: { sizeMult: mult() } } });
-        } else if (type === 'svg3d') {
-          setOverride(idx, { geometry: { svg: { sizeMult: mult(), extrudeMult: mult() } } });
-        }
+          }
+        });
+      } else if (type === 'spheres3d') {
+        setOverride(idx, { geometry: { spheres3d: { radiusMult: mult() } } });
+      } else if (type === 'triangles3d') {
+        setOverride(idx, { geometry: { triangles3d: { radiusMult: mult(), heightMult: mult() } } });
+      } else if (type === 'svg2d') {
+        setOverride(idx, { geometry: { svg: { sizeMult: mult() } } });
+      } else if (type === 'svg3d') {
+        setOverride(idx, { geometry: { svg: { sizeMult: mult(), extrudeMult: mult() } } });
       }
-
-      base.palette.overrides = overrides;
     }
   }
+
+  base.palette.overrides = paletteOverrides;
+
+  const paletteEmissionActive = paletteOverrides.some(
+    (ov) => !!ov && typeof ov === 'object' && !!ov.emission?.enabled && Number(ov.emission?.intensity) > 0
+  );
+  const fallbackEmissionActive = !!base.emission.enabled && Number(base.emission.intensity) > 0;
+
+  if (paletteEmissionActive) {
+    base.emission = { ...base.emission, enabled: false, intensity: 0 };
+    base.bloom = { ...base.bloom, enabled: true };
+  }
+
+  const emissionInfluencesBloom = paletteEmissionActive || fallbackEmissionActive;
 
   switch (type) {
     case 'spheres3d':
