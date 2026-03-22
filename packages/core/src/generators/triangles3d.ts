@@ -31,16 +31,29 @@ function createBulgedPrismGeometry(options: {
   const taper = clamp(Number(options.taper) || 1, 0, 1);
   const curveSegments = Math.max(2, Math.round(Number(options.curveSegments) || 2));
 
+  const isPyramid = base === 'pyramidTri' || base === 'pyramidSquare';
+
+  if (isPyramid) {
+    const radialSegments = base === 'pyramidTri' ? 3 : 4;
+    const geom = new THREE.ConeGeometry(1, 1, radialSegments, 1);
+    
+    // ConeGeometry apex at +0.5, base at -0.5; rotate to match CylinderGeometry
+    geom.rotateY(Math.PI);
+    
+    geom.computeBoundingBox();
+    geom.computeBoundingSphere();
+    geom.computeVertexNormals();
+    return geom;
+  }
+
+  const isSquareBase = base === 'prism';
   const r = 1;
   const v: THREE.Vector2[] = [];
-  const isSquareBase = base === 'pyramidSquare';
   
   if (isSquareBase) {
-    // Axis-aligned square (so normals map cleanly to bulgeX/bulgeY).
     const a = r / Math.SQRT2;
     v.push(new THREE.Vector2(a, a), new THREE.Vector2(-a, a), new THREE.Vector2(-a, -a), new THREE.Vector2(a, -a));
   } else {
-    // Match the historical CylinderGeometry(3) orientation (rotated by pi/6).
     const a0 = Math.PI / 6;
     const angles = [a0, a0 + (2 * Math.PI) / 3, a0 + (4 * Math.PI) / 3];
     for (const a of angles) v.push(new THREE.Vector2(Math.cos(a) * r, Math.sin(a) * r));
@@ -49,7 +62,7 @@ function createBulgedPrismGeometry(options: {
   const shape = new THREE.Shape();
   shape.moveTo(v[0].x, v[0].y);
 
-  const ctrlScale = 0.35; // tuned for a subtle but visible bulge
+  const ctrlScale = 0.35;
   const sides = v.length;
   for (let i = 0; i < sides; i++) {
     const a = v[i];
@@ -60,7 +73,6 @@ function createBulgedPrismGeometry(options: {
     const len = Math.hypot(n.x, n.y) || 1;
     n.multiplyScalar(1 / len);
 
-    // Ensure "outward" points away from center.
     if (n.dot(mid) < 0) n.multiplyScalar(-1);
 
     const axisBulge = bulgeX * Math.abs(n.x) + bulgeY * Math.abs(n.y);
@@ -80,14 +92,9 @@ function createBulgedPrismGeometry(options: {
     bevelEnabled: false
   });
 
-  // ExtrudeGeometry extrudes along +Z; rotate so the prism height is along +Y.
   geom.rotateX(-Math.PI / 2);
-  // Center like CylinderGeometry (y in [-0.5, +0.5]).
   geom.translate(0, -0.5, 0);
 
-  // Apply taper based on shape mode:
-  // - 'prism': taper applies normally (1 = full prism, 0 = frustum)
-  // - 'pyramidTri' / 'pyramidSquare': taper applies normally (1 = prism with flat top, 0 = full pyramid)
   if (taper < 0.999999) {
     const pos = geom.getAttribute('position') as THREE.BufferAttribute;
     for (let i = 0; i < pos.count; i++) {
