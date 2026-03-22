@@ -3385,17 +3385,18 @@
               <select bind:value={config.spheres.shape.kind}>
                 <option value="uvSphere">UV sphere</option>
                 <option value="spherifiedBox">Spherified box</option>
+                <option value="geodesicPoly">Geodesic poly</option>
               </select>
             </label>
 
             <label class="control-row slider">
               <button type="button" class="setting-title" class:locked={isLocked('spheres.shape.roundness')} onclick={() => toggleLock('spheres.shape.roundness')} title="Click to lock/unlock for randomize">Roundness: {config.spheres.shape.roundness.toFixed(2)}</button>
-              <input type="range" bind:value={config.spheres.shape.roundness} min="0" max="1" step="0.01" disabled={config.spheres.shape.kind !== 'spherifiedBox'} />
+              <input type="range" bind:value={config.spheres.shape.roundness} min="0" max="1" step="0.01" disabled={config.spheres.shape.kind === 'uvSphere'} />
             </label>
 
             <label class="control-row slider">
               <button type="button" class="setting-title" class:locked={isLocked('spheres.shape.faceting')} onclick={() => toggleLock('spheres.shape.faceting')} title="Click to lock/unlock for randomize">Faceting: {config.spheres.shape.faceting.toFixed(2)}</button>
-              <input type="range" bind:value={config.spheres.shape.faceting} min="0" max="1" step="0.01" disabled={config.spheres.shape.kind !== 'spherifiedBox'} />
+              <input type="range" bind:value={config.spheres.shape.faceting} min="0" max="1" step="0.01" disabled={config.spheres.shape.kind === 'uvSphere'} />
             </label>
           </details>
 

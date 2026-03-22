@@ -366,13 +366,19 @@ export interface PopsicleConfig extends BaseWallpaperConfig {
 export type SphereDistribution = 'jitteredGrid' | 'scatter' | 'layeredDepth';
 export type PaletteAssignMode = 'cycle' | 'weighted';
 
-export type Spheres3DShapeKind = 'uvSphere' | 'spherifiedBox';
+export type Spheres3DShapeKind = 'uvSphere' | 'spherifiedBox' | 'geodesicPoly';
 
 export interface Spheres3DShapeConfig {
   kind: Spheres3DShapeKind;
-  /** 0..1: 0 = cube, 1 = sphere (only used when kind=spherifiedBox) */
+  /**
+   * 0..1: when `kind='spherifiedBox'` this blends cube -> sphere, and when
+   * `kind='geodesicPoly'` it controls subdivision/detail for the faceted poly.
+   */
   roundness: number;
-  /** 0..1: 0 = smooth, 1 = faceted (only used when kind=spherifiedBox) */
+  /**
+   * 0..1: when `kind='spherifiedBox'` it toggles smooth vs faceted interpolation,
+   * and when `kind='geodesicPoly'` it controls how strongly facets are preserved.
+   */
   faceting: number;
 }
 
@@ -1687,18 +1693,28 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
   switch (type) {
     case 'spheres3d':
       {
-        const useSpherifiedBox = chance(0.22);
-        const shape = useSpherifiedBox
-          ? (() => {
-              // Bias to "good looking": fairly round + some faceting; allow rare cubes.
-              const cubeish = chance(0.08);
-              const roundness = cubeish ? clamp(tri(0.0, 0.12, 0.55), 0, 1) : clamp(tri(0.35, 0.9, 1.0), 0, 1);
-              const faceting = cubeish ? clamp(tri(0.75, 1.0, 1.0), 0, 1) : clamp(tri(0.05, 0.55, 1.0), 0, 1);
-              return { kind: 'spherifiedBox' as const, roundness, faceting };
-            })()
-          : { kind: 'uvSphere' as const, roundness: 1, faceting: 0 };
+        const shape: Spheres3DShapeConfig = (() => {
+          const polyChance = 0.32;
+          const boxChance = 0.22;
+          const roll = rng();
+          if (roll < polyChance) {
+            const roundness = clamp(tri(0.35, 0.75, 1.0), 0, 1);
+            const faceting = clamp(tri(0.5, 0.85, 1.0), 0, 1);
+            return { kind: 'geodesicPoly' as const, roundness, faceting };
+          }
 
-      return {
+          if (roll < polyChance + boxChance) {
+            // Bias to "good looking": fairly round + some faceting; allow rare cubes.
+            const cubeish = chance(0.08);
+            const roundness = cubeish ? clamp(tri(0.0, 0.12, 0.55), 0, 1) : clamp(tri(0.35, 0.9, 1.0), 0, 1);
+            const faceting = cubeish ? clamp(tri(0.75, 1.0, 1.0), 0, 1) : clamp(tri(0.05, 0.55, 1.0), 0, 1);
+            return { kind: 'spherifiedBox' as const, roundness, faceting };
+          }
+
+          return { kind: 'uvSphere' as const, roundness: 1, faceting: 0 };
+        })();
+
+        return {
         ...base,
         type: 'spheres3d',
         spheres: {

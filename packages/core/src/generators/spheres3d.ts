@@ -17,7 +17,7 @@ function clamp01(n: number): number {
 
 function getSpheres3DGeometry(config: Spheres3DConfig): { geometry: THREE.BufferGeometry; flatShading: boolean } {
   const rawShape = (config.spheres as any)?.shape as any;
-  const kind = rawShape?.kind === 'spherifiedBox' ? 'spherifiedBox' : 'uvSphere';
+  const kind = rawShape?.kind === 'spherifiedBox' ? 'spherifiedBox' : rawShape?.kind === 'geodesicPoly' ? 'geodesicPoly' : 'uvSphere';
 
   if (kind === 'uvSphere') {
     const seg = Math.round(8 + clamp(config.geometry.quality, 0, 1) * 48);
@@ -30,6 +30,17 @@ function getSpheres3DGeometry(config: Spheres3DConfig): { geometry: THREE.Buffer
   const roundness = clamp01(Number(rawShape?.roundness ?? 1));
   const faceting = clamp01(Number(rawShape?.faceting ?? 0));
   const quality = clamp01(Number(config.geometry.quality ?? 0.6));
+
+  if (kind === 'geodesicPoly') {
+    const detailMax = Math.max(1, Math.round(1 + quality * 4));
+    const detail = Math.max(0, Math.min(detailMax, Math.round(roundness * detailMax)));
+    const geometry = new THREE.IcosahedronGeometry(1, detail);
+    geometry.computeVertexNormals();
+    geometry.computeBoundingBox();
+    geometry.computeBoundingSphere();
+    const flatShading = faceting > 0.6 || detail === 0;
+    return { geometry, flatShading };
+  }
 
   // faceting=1 -> cube-ish (few segments). faceting=0 -> smoother (more segments).
   const segMax = Math.round(3 + quality * 18); // 3..21
