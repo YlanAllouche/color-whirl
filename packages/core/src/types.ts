@@ -571,14 +571,26 @@ export interface Ridges2DConfig extends BaseWallpaperConfig {
     gridStepPx: number;
     /** Base noise frequency in "noise space" (roughly features per min(width,height)) */
     frequency: number;
+    /** High-frequency detail frequency multiplier */
+    detailFrequency: number;
+    /** Strength of the high-frequency detail layer */
+    detailAmplitude: number;
     /** Fractal octaves (1..8 recommended) */
     octaves: number;
     /** Domain warp amount in noise-space units */
     warpAmount: number;
+    /** How quickly warp influence tapers across octaves (0..1) */
+    warpDepth: number;
     /** Domain warp frequency multiplier */
     warpFrequency: number;
+    /** How far contours deviate from the mean field */
+    contrast: number;
+    /** Bias applied after contrast (positive = brighten overall) */
+    bias: number;
     /** Number of contour levels */
     levels: number;
+    /** Per-level offset for contour thresholds (0..0.3) */
+    levelJitter: number;
     lineWidthPx: number;
     /** 0..1 */
     lineOpacity: number;
@@ -936,10 +948,16 @@ export const DEFAULT_RIDGES2D_CONFIG: Ridges2DConfig = {
   ridges: {
     gridStepPx: 6,
     frequency: 2.4,
+    detailFrequency: 7.5,
+    detailAmplitude: 0.18,
     octaves: 5,
     warpAmount: 0.85,
+    warpDepth: 0.25,
     warpFrequency: 1.6,
+    contrast: 1.1,
+    bias: -0.03,
     levels: 14,
+    levelJitter: 0.08,
     lineWidthPx: 1.25,
     lineOpacity: 0.6,
     smoothing: 0.35,
@@ -1853,6 +1871,12 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
         const levels = Math.max(6, Math.min(28, Math.round(tri(6, DEFAULT_RIDGES2D_CONFIG.ridges.levels, 28))));
         const stepPx = Math.max(3, Math.min(16, Math.round(tri(3, DEFAULT_RIDGES2D_CONFIG.ridges.gridStepPx, 16))));
         const oct = Math.max(1, Math.min(8, Math.round(tri(1, DEFAULT_RIDGES2D_CONFIG.ridges.octaves, 7))));
+        const detailFrequency = clamp(randomWeighted(rng, 3, 12, 7), 0.1, 40);
+        const detailAmplitude = clamp(randomWeighted(rng, 0, 0.35, 0.18), 0, 1);
+        const contrast = clamp(randomWeighted(rng, 0.6, 1.6, 1.15), 0.2, 3);
+        const bias = clamp(randomWeighted(rng, -0.2, 0.2, 0), -0.5, 0.5);
+        const levelJitter = clamp(randomWeighted(rng, 0, 0.25, 0.08), 0, 0.3);
+        const warpDepth = clamp(randomWeighted(rng, 0, 0.85, 0.25), 0, 1);
 
         return {
           ...base,
@@ -1863,10 +1887,16 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
           ridges: {
             gridStepPx: stepPx,
             frequency: clamp(tri(0.6, DEFAULT_RIDGES2D_CONFIG.ridges.frequency, 5.5), 0.05, 50),
+            detailFrequency,
+            detailAmplitude,
             octaves: oct,
             warpAmount: clamp(tri(0.0, DEFAULT_RIDGES2D_CONFIG.ridges.warpAmount, 2.4), 0, 50),
+            warpDepth,
             warpFrequency: clamp(tri(0.2, DEFAULT_RIDGES2D_CONFIG.ridges.warpFrequency, 4.0), 0.01, 50),
+            contrast,
+            bias,
             levels,
+            levelJitter,
             lineWidthPx: clamp(tri(0.5, DEFAULT_RIDGES2D_CONFIG.ridges.lineWidthPx, 3.0), 0.1, 50),
             lineOpacity: clamp(tri(0.08, DEFAULT_RIDGES2D_CONFIG.ridges.lineOpacity, 0.95), 0, 1),
             smoothing: clamp(tri(0.0, DEFAULT_RIDGES2D_CONFIG.ridges.smoothing, 0.85), 0, 1),

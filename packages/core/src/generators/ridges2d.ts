@@ -66,15 +66,27 @@ function valueNoise2D(seed: number, x: number, y: number, channel: number): numb
   return lerp(a, b, sy);
 }
 
-function fbm2D(seed: number, x: number, y: number, frequency: number, octaves: number, channelBase: number): number {
+function fbm2D(
+  seed: number,
+  x: number,
+  y: number,
+  frequency: number,
+  octaves: number,
+  channelBase: number,
+  octaveScale?: (i: number, octaves: number) => number
+): number {
   const oct = Math.max(1, Math.min(16, Math.round(octaves)));
   let amp = 1;
   let sum = 0;
   let norm = 0;
   let f = Math.max(0.000001, frequency);
   for (let i = 0; i < oct; i++) {
-    sum += amp * valueNoise2D(seed, x * f, y * f, channelBase + i * 97);
-    norm += amp;
+    const scale = octaveScale ? Math.max(0, octaveScale(i, oct)) : 1;
+    const weight = amp * scale;
+    if (weight > 0) {
+      sum += weight * valueNoise2D(seed, x * f, y * f, channelBase + i * 97);
+      norm += weight;
+    }
     amp *= 0.5;
     f *= 2.0;
   }
@@ -237,6 +249,16 @@ export function buildRidges2DFieldGrid(config: Ridges2DConfig): {
   const octaves = Math.max(1, Math.round(Number(config.ridges.octaves) || 1));
   const warpAmount = Math.max(0, Number(config.ridges.warpAmount) || 0);
   const warpFreq = Math.max(0.000001, Number(config.ridges.warpFrequency) || 1);
+  const detailFrequency = Number(config.ridges.detailFrequency) || 0;
+  const detailAmplitude = clamp01(Number(config.ridges.detailAmplitude) || 0);
+  const contrast = Math.max(0, Number(config.ridges.contrast) || 1);
+  const bias = clamp(Number(config.ridges.bias) || 0, -1, 1);
+  const warpDepth = clamp01(Number(config.ridges.warpDepth) || 0);
+  const warpOctaves = Math.max(1, Math.min(6, Math.max(1, Math.round(octaves))));
+  const warpScaleFn =
+    warpDepth > 0
+      ? (i: number) => 1 - warpDepth * (warpOctaves > 1 ? i / (warpOctaves - 1) : 0)
+      : undefined;
 
   let vMin = Number.POSITIVE_INFINITY;
   let vMax = Number.NEGATIVE_INFINITY;
@@ -248,18 +270,30 @@ export function buildRidges2DFieldGrid(config: Ridges2DConfig): {
       const xPx = gx * stepPx;
       const nx0 = (xPx / baseScale) * freq;
 
-      // Domain warp in noise space
-      const wx = warpAmount > 0 ? (fbm2D(seed, nx0, ny0, warpFreq, Math.max(1, Math.min(6, octaves)), 2001) - 0.5) * 2 : 0;
-      const wy = warpAmount > 0 ? (fbm2D(seed, nx0 + 13.1, ny0 - 9.2, warpFreq, Math.max(1, Math.min(6, octaves)), 3001) - 0.5) * 2 : 0;
+      // Domain warp in noise space (optional depth modulation)
+      const wx =
+        warpAmount > 0
+          ? (fbm2D(seed, nx0, ny0, warpFreq, warpOctaves, 2001, warpScaleFn) - 0.5) * 2
+          : 0;
+      const wy =
+        warpAmount > 0
+          ? (fbm2D(seed, nx0 + 13.1, ny0 - 9.2, warpFreq, warpOctaves, 3001, warpScaleFn) - 0.5) * 2
+          : 0;
 
       const nx = nx0 + wx * warpAmount;
       const ny = ny0 + wy * warpAmount;
 
-      // Height field in [0,1]
-      const v = fbm2D(seed, nx, ny, 1.0, octaves, 1001);
-      values[gy * gridW + gx] = v;
-      if (v < vMin) vMin = v;
-      if (v > vMax) vMax = v;
+      // Height field before remap
+      let value = fbm2D(seed, nx, ny, 1.0, octaves, 1001);
+      if (detailAmplitude > 0 && detailFrequency > 0) {
+        const detailFreq = Math.max(0.000001, detailFrequency);
+        const detail = fbm2D(seed ^ 0x1f2f3d4, nx, ny, detailFreq, octaves, 4001);
+        value += (detail - 0.5) * detailAmplitude;
+      }
+      const remapped = (value - 0.5) * contrast + 0.5 + bias;
+      values[gy * gridW + gx] = remapped;
+      if (remapped < vMin) vMin = remapped;
+      if (remapped > vMax) vMax = remapped;
     }
   }
 
@@ -285,11 +319,15 @@ export function buildRidges2DContourPolylines(options: {
   stepPx: number;
   levels: number;
   smoothing: number;
+  seed: number;
+  levelJitter: number;
 }): Vec2[][][] {
   const { values01, gridW, gridH, stepPx } = options;
   const levels = Math.max(1, Math.round(options.levels));
   const polySmooth = clamp01(options.smoothing);
   const polySmoothIts = Math.max(0, Math.min(2, Math.round(polySmooth * 2)));
+  const jitterAmount = clamp01(options.levelJitter);
+  const seedU32 = options.seed >>> 0;
 
   const idx = (x: number, y: number) => y * gridW + x;
 
@@ -302,7 +340,10 @@ export function buildRidges2DContourPolylines(options: {
   const perLevel: Vec2[][][] = [];
 
   for (let li = 0; li < levels; li++) {
-    const t = (li + 1) / (levels + 1);
+    const baseT = (li + 1) / (levels + 1);
+    const jitter =
+      jitterAmount > 0 ? (cellRand01(seedU32, li, 0, 6001) * 2 - 1) * jitterAmount : 0;
+    const t = clamp01(baseT + jitter);
     const segments: Segment[] = [];
 
     for (let y = 0; y < gridH - 1; y++) {
@@ -452,7 +493,9 @@ export function renderRidges2DToCanvas(config: Ridges2DConfig, canvas?: HTMLCanv
     gridH,
     stepPx,
     levels,
-    smoothing: clamp01(Number(ridges.smoothing) || 0)
+    smoothing: clamp01(Number(ridges.smoothing) || 0),
+    seed,
+    levelJitter: clamp01(Number(ridges.levelJitter) || 0)
   });
 
   const lineOpacity = clamp01(Number(ridges.lineOpacity) || 0);
