@@ -1282,10 +1282,11 @@ function generateTriangles3DSVG(config: Extract<WallpaperConfig, { type: 'triang
   const count = Math.max(0, Math.round(config.prisms.count));
   const s = Math.max(12, config.prisms.radius * 180);
 
-  const base = config.prisms.base === 'square' ? 'square' : 'triangle';
+  const isSquare = config.prisms.base === 'pyramidSquare';
+  const base = isSquare ? 'square' : 'triangle';
   const taper = clamp(Number(config.prisms.taper ?? 1), 0, 1);
-  const sides = base === 'square' ? 4 : 3;
-  const a0 = base === 'square' ? Math.PI / 4 : Math.PI / 6;
+  const sides = isSquare ? 4 : 3;
+  const a0 = isSquare ? Math.PI / 4 : Math.PI / 6;
 
   const spread = Math.max(0, Number(config.prisms.spread) || 0);
   const jitter = clamp01(Number(config.prisms.jitter) || 0);

@@ -4122,12 +4122,13 @@
           </label>
 
           <label class="control-row">
-            <button type="button" class="setting-title" class:locked={isLocked('prisms.base')} onclick={() => toggleLock('prisms.base')} title="Click to lock/unlock for randomize">Base</button>
-            <select bind:value={config.prisms.base}>
-              <option value="triangle">Triangle</option>
-              <option value="square">Square</option>
-            </select>
-          </label>
+             <button type="button" class="setting-title" class:locked={isLocked('prisms.base')} onclick={() => toggleLock('prisms.base')} title="Click to lock/unlock for randomize">Shape</button>
+             <select bind:value={config.prisms.base}>
+               <option value="prism">Prism</option>
+               <option value="pyramidTri">Pyramid (tri)</option>
+               <option value="pyramidSquare">Pyramid (square)</option>
+             </select>
+           </label>
 
           <label class="control-row slider">
             <button type="button" class="setting-title" class:locked={isLocked('prisms.count')} onclick={() => toggleLock('prisms.count')} title="Click to lock/unlock for randomize">Count: {config.prisms.count}</button>

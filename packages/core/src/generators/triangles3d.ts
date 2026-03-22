@@ -19,13 +19,13 @@ function degToRad(deg: number): number {
 }
 
 function createBulgedPrismGeometry(options: {
-  base: 'triangle' | 'square';
+  base: 'prism' | 'pyramidTri' | 'pyramidSquare';
   wallBulgeX: number;
   wallBulgeY: number;
   taper: number;
   curveSegments: number;
 }): THREE.BufferGeometry {
-  const base = options.base === 'square' ? 'square' : 'triangle';
+  const base = options.base;
   const bulgeX = clamp(Number(options.wallBulgeX) || 0, -1, 1);
   const bulgeY = clamp(Number(options.wallBulgeY) || 0, -1, 1);
   const taper = clamp(Number(options.taper) || 1, 0, 1);
@@ -33,7 +33,9 @@ function createBulgedPrismGeometry(options: {
 
   const r = 1;
   const v: THREE.Vector2[] = [];
-  if (base === 'square') {
+  const isSquareBase = base === 'pyramidSquare';
+  
+  if (isSquareBase) {
     // Axis-aligned square (so normals map cleanly to bulgeX/bulgeY).
     const a = r / Math.SQRT2;
     v.push(new THREE.Vector2(a, a), new THREE.Vector2(-a, a), new THREE.Vector2(-a, -a), new THREE.Vector2(a, -a));
@@ -83,7 +85,9 @@ function createBulgedPrismGeometry(options: {
   // Center like CylinderGeometry (y in [-0.5, +0.5]).
   geom.translate(0, -0.5, 0);
 
-  // Apply taper (1 = prism, 0 = pyramid apex) by scaling X/Z as a function of Y.
+  // Apply taper based on shape mode:
+  // - 'prism': taper applies normally (1 = full prism, 0 = frustum)
+  // - 'pyramidTri' / 'pyramidSquare': taper applies normally (1 = prism with flat top, 0 = full pyramid)
   if (taper < 0.999999) {
     const pos = geom.getAttribute('position') as THREE.BufferAttribute;
     for (let i = 0; i < pos.count; i++) {

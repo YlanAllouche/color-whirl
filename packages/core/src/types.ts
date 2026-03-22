@@ -506,8 +506,8 @@ export interface Triangles3DConfig extends BaseWallpaperConfig {
   prisms: {
     mode: Triangles3DMode;
     count: number;
-    /** Base polygon for each prism/pyramid */
-    base: 'triangle' | 'square';
+    /** Shape mode: prism, pyramid with triangular base, or pyramid with square base */
+    base: 'prism' | 'pyramidTri' | 'pyramidSquare';
     /** Scene units */
     radius: number;
     /** Scene units */
@@ -917,7 +917,7 @@ export const DEFAULT_TRIANGLES3D_CONFIG: Triangles3DConfig = {
   prisms: {
     mode: 'stackedPrisms',
     count: 160,
-    base: 'triangle',
+    base: 'prism',
     radius: 0.22,
     height: 0.5,
     taper: 1,
@@ -1204,7 +1204,7 @@ export function normalizeWallpaperConfig(input: any): WallpaperConfig {
       if ('wallBulge' in prisms) delete prisms.wallBulge;
 
       // Light validation for new triangles3d fields.
-      if (prisms.base !== 'triangle' && prisms.base !== 'square') prisms.base = 'triangle';
+      if (prisms.base !== 'prism' && prisms.base !== 'pyramidTri' && prisms.base !== 'pyramidSquare') prisms.base = 'prism';
       const t = Number(prisms.taper);
       prisms.taper = Number.isFinite(t) ? clamp(t, 0, 1) : 1;
       const bx = Number(prisms.wallBulgeX);
@@ -1830,7 +1830,7 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
         prisms: {
           mode: 'stackedPrisms',
           count: skewCountLow(10, DEFAULT_TRIANGLES3D_CONFIG.prisms.count, 360, 1500, 0.03),
-          base: rng() < 0.72 ? 'triangle' : 'square',
+          base: (['prism', 'pyramidTri', 'pyramidSquare'] as const)[Math.floor(rng() * 3)],
           radius: randomWeighted(rng, 0.06, 0.6, 0.22),
           height: randomWeighted(rng, 0.06, 1.2, 0.5),
           taper: (() => {
