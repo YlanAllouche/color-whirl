@@ -125,6 +125,8 @@ export interface GruyereConfig {
   enabled: boolean;
   /** Cell density in world units. Higher = more cavities. */
   frequency: number;
+  /** Variation range for the density (0..1). */
+  frequencyVariance: number;
   /** Maximum number of nearby cell samples to test (capped in shader). */
   count: number;
   /** Scene units */
@@ -133,8 +135,8 @@ export interface GruyereConfig {
   radiusMax: number;
   /** Scene units: 0 = hard discard */
   softness: number;
-  /** 0..1: cavity influence (1 = full hole) */
-  strength: number;
+  /** 0..1: thickness of the carved wall in shader space */
+  wallThickness: number;
   /** Additional offset applied to the hash seed */
   seedOffset: number;
 }
@@ -748,11 +750,12 @@ export const DEFAULT_POPSICLE_CONFIG: PopsicleConfig = {
   gruyere: {
     enabled: false,
     frequency: 1.8,
+    frequencyVariance: 0.22,
     count: 8,
     radiusMin: 0.12,
     radiusMax: 0.38,
     softness: 0.06,
-    strength: 1.0,
+    wallThickness: 0.08,
     seedOffset: 0
   },
   emission: {
@@ -1136,6 +1139,10 @@ export function normalizeWallpaperConfig(input: any): WallpaperConfig {
     gAny.enabled = typeof gAny.enabled === 'boolean' ? gAny.enabled : !!gAny.enabled;
     const freq = Number(gAny.frequency);
     gAny.frequency = Number.isFinite(freq) ? clamp(freq, 0, 20) : Number(baseGruyere.frequency) || 0;
+    const variance = Number(gAny.frequencyVariance);
+    gAny.frequencyVariance = Number.isFinite(variance)
+      ? clamp(variance, 0, 1)
+      : clamp(Number(baseGruyere.frequencyVariance) || 0, 0, 1);
     const cnt = Number(gAny.count);
     gAny.count = Number.isFinite(cnt) ? Math.max(0, Math.min(16, Math.round(cnt))) : Math.round(Number(baseGruyere.count) || 0);
     const rMin = Number(gAny.radiusMin);
@@ -1144,8 +1151,10 @@ export function normalizeWallpaperConfig(input: any): WallpaperConfig {
     gAny.radiusMax = Number.isFinite(rMax) ? Math.max(gAny.radiusMin, rMax) : Math.max(gAny.radiusMin, Number(baseGruyere.radiusMax) || gAny.radiusMin);
     const soft = Number(gAny.softness);
     gAny.softness = Number.isFinite(soft) ? clamp(soft, 0, 2) : Math.max(0, Number(baseGruyere.softness) || 0);
-    const str = Number(gAny.strength);
-    gAny.strength = Number.isFinite(str) ? clamp(str, 0, 1) : clamp(Number(baseGruyere.strength) || 0, 0, 1);
+    const wall = Number(gAny.wallThickness);
+    gAny.wallThickness = Number.isFinite(wall)
+      ? clamp(wall, 0, 1)
+      : Math.max(0, Number(baseGruyere.wallThickness) || 0);
     const so = Number(gAny.seedOffset);
     gAny.seedOffset = Number.isFinite(so) ? so : Number(baseGruyere.seedOffset) || 0;
   }
@@ -1539,11 +1548,12 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
       enabled: gruyereEnabled,
       // frequency controls density; count is the sample budget in shader.
       frequency: gruyereEnabled ? clamp(tri(1.1, 1.8, 3.2), 0.1, 20) : DEFAULT_POPSICLE_CONFIG.gruyere.frequency,
+      frequencyVariance: gruyereEnabled ? clamp(tri(0.0, 0.22, 0.4), 0, 1) : DEFAULT_POPSICLE_CONFIG.gruyere.frequencyVariance,
       count: gruyereEnabled ? Math.max(3, Math.min(8, Math.round(tri(4, 6, 8)))) : DEFAULT_POPSICLE_CONFIG.gruyere.count,
       radiusMin: gruyereEnabled ? clamp(tri(0.06, 0.12, 0.22), 0.0, 10) : DEFAULT_POPSICLE_CONFIG.gruyere.radiusMin,
       radiusMax: gruyereEnabled ? clamp(tri(0.18, 0.32, 0.55), 0.0, 10) : DEFAULT_POPSICLE_CONFIG.gruyere.radiusMax,
       softness: gruyereEnabled ? clamp(tri(0.0, 0.05, 0.12), 0.0, 2) : DEFAULT_POPSICLE_CONFIG.gruyere.softness,
-      strength: gruyereEnabled ? clamp(tri(0.75, 1.0, 1.0), 0.0, 1) : DEFAULT_POPSICLE_CONFIG.gruyere.strength,
+      wallThickness: gruyereEnabled ? clamp(tri(0.04, 0.08, 0.2), 0.0, 0.3) : DEFAULT_POPSICLE_CONFIG.gruyere.wallThickness,
       seedOffset: gruyereEnabled ? Math.round(tri(-50, 0, 50)) : DEFAULT_POPSICLE_CONFIG.gruyere.seedOffset
     },
     emission: {

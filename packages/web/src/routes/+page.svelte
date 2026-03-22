@@ -1422,11 +1422,12 @@
     void c.collisions.carve.featherPx;
     void (c as any).gruyere?.enabled;
     void (c as any).gruyere?.frequency;
+    void (c as any).gruyere?.frequencyVariance;
     void (c as any).gruyere?.count;
     void (c as any).gruyere?.radiusMin;
     void (c as any).gruyere?.radiusMax;
     void (c as any).gruyere?.softness;
-    void (c as any).gruyere?.strength;
+    void (c as any).gruyere?.wallThickness;
     void (c as any).gruyere?.seedOffset;
     if (c.type === 'popsicle') {
       void c.stickCount;
@@ -3250,6 +3251,11 @@
           </label>
 
           <label class="control-row slider">
+            <button type="button" class="setting-title" class:locked={isLocked('gruyere.frequencyVariance')} onclick={() => toggleLock('gruyere.frequencyVariance')} title="Click to lock/unlock for randomize">Variance: {(config as any).gruyere.frequencyVariance.toFixed(2)}</button>
+            <input type="range" bind:value={(config as any).gruyere.frequencyVariance} min="0" max="1" step="0.01" disabled={!(config as any).gruyere.enabled} />
+          </label>
+
+          <label class="control-row slider">
             <button type="button" class="setting-title" class:locked={isLocked('gruyere.radiusMin')} onclick={() => toggleLock('gruyere.radiusMin')} title="Click to lock/unlock for randomize">Radius min: {(config as any).gruyere.radiusMin.toFixed(2)}</button>
             <input type="range" bind:value={(config as any).gruyere.radiusMin} min="0" max="1.5" step="0.01" disabled={!(config as any).gruyere.enabled} />
           </label>
@@ -3265,8 +3271,8 @@
           </label>
 
           <label class="control-row slider">
-            <button type="button" class="setting-title" class:locked={isLocked('gruyere.strength')} onclick={() => toggleLock('gruyere.strength')} title="Click to lock/unlock for randomize">Strength: {(config as any).gruyere.strength.toFixed(2)}</button>
-            <input type="range" bind:value={(config as any).gruyere.strength} min="0" max="1" step="0.01" disabled={!(config as any).gruyere.enabled} />
+            <button type="button" class="setting-title" class:locked={isLocked('gruyere.wallThickness')} onclick={() => toggleLock('gruyere.wallThickness')} title="Click to lock/unlock for randomize">Wall thickness: {(config as any).gruyere.wallThickness.toFixed(2)}</button>
+            <input type="range" bind:value={(config as any).gruyere.wallThickness} min="0" max="1" step="0.01" disabled={!(config as any).gruyere.enabled} />
           </label>
 
           <label class="control-row slider">

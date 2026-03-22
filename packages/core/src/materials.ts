@@ -242,14 +242,15 @@ export function applyGruyere(material: THREE.Material, config: WallpaperConfig, 
 
   const enabled = !!g.enabled;
   const frequency = clamp(Number(g.frequency) || 0, 0, 20);
+  const variance = clamp(Number(g.frequencyVariance) || 0, 0, 1);
   const count = Math.max(0, Math.min(16, Math.round(Number(g.count) || 0)));
   const radiusMin = Math.max(0, Number(g.radiusMin) || 0);
   const radiusMax = Math.max(radiusMin, Number(g.radiusMax) || radiusMin);
   const softness = Math.max(0, Number(g.softness) || 0);
-  const strength = clamp(Number(g.strength) || 0, 0, 1);
+  const wallThickness = Math.max(0, Number(g.wallThickness) || 0);
   const seedOffset = Number.isFinite(Number(g.seedOffset)) ? Number(g.seedOffset) : 0;
 
-  if (!enabled || !(frequency > 0) || !(strength > 0) || !(count > 0) || !(radiusMax > 0)) return;
+  if (!enabled || frequency <= 0 || count <= 0 || radiusMax <= 0) return;
 
   const anyMat: any = material as any;
   // Soft edges rely on alpha; enable transparency when needed.
@@ -269,10 +270,10 @@ export function applyGruyere(material: THREE.Material, config: WallpaperConfig, 
   const seedBase = ((Number(config.seed) >>> 0) % 100000) * 0.001 + seedOffset;
 
   const key =
-    `gruyere-v1:${enabled ? 1 : 0}:` +
-    `${frequency.toFixed(4)}:${count}:` +
+    `gruyere-v2:${enabled ? 1 : 0}:` +
+    `${frequency.toFixed(4)}:${variance.toFixed(4)}:${count}:` +
     `${radiusMin.toFixed(4)}:${radiusMax.toFixed(4)}:` +
-    `${softness.toFixed(4)}:${strength.toFixed(4)}:` +
+    `${softness.toFixed(4)}:${wallThickness.toFixed(4)}:` +
     `${seedBase.toFixed(4)}:` +
     `${scaleVec.x.toFixed(4)},${scaleVec.y.toFixed(4)},${scaleVec.z.toFixed(4)}`;
 
@@ -281,11 +282,12 @@ export function applyGruyere(material: THREE.Material, config: WallpaperConfig, 
     (shader) => {
       shader.uniforms.wmGruyereEnabled = { value: enabled ? 1 : 0 };
       shader.uniforms.wmGruyereFrequency = { value: frequency };
+      shader.uniforms.wmGruyereFrequencyVariance = { value: variance };
       shader.uniforms.wmGruyereCount = { value: count };
       shader.uniforms.wmGruyereRadiusMin = { value: radiusMin };
       shader.uniforms.wmGruyereRadiusMax = { value: radiusMax };
       shader.uniforms.wmGruyereSoftness = { value: softness };
-      shader.uniforms.wmGruyereStrength = { value: strength };
+      shader.uniforms.wmGruyereWallThickness = { value: wallThickness };
       shader.uniforms.wmGruyereSeed = { value: seedBase };
       shader.uniforms.wmGruyereScale = { value: scaleVec };
 
@@ -311,11 +313,12 @@ export function applyGruyere(material: THREE.Material, config: WallpaperConfig, 
       const fragHeader = `
 uniform int wmGruyereEnabled;
 uniform float wmGruyereFrequency;
+uniform float wmGruyereFrequencyVariance;
 uniform int wmGruyereCount;
 uniform float wmGruyereRadiusMin;
 uniform float wmGruyereRadiusMax;
 uniform float wmGruyereSoftness;
-uniform float wmGruyereStrength;
+uniform float wmGruyereWallThickness;
 uniform float wmGruyereSeed;
 uniform vec3 wmGruyereScale;
 varying vec3 wmGruyereWorldPos;
@@ -332,6 +335,13 @@ vec3 wmHash3(vec3 p) {
   );
 }
 
+float wmGruyereEffectiveFrequency() {
+  float baseFreq = max(1e-6, wmGruyereFrequency);
+  float variance = clamp(wmGruyereFrequencyVariance, 0.0, 1.0);
+  float bias = wmHash1(vec3(wmGruyereSeed, wmGruyereSeed + 3.1, wmGruyereSeed + 7.2));
+  return baseFreq * (1.0 + (bias - 0.5) * 2.0 * variance);
+}
+
 float wmCavitySdf(vec3 cell, vec3 p, float invFreq) {
   vec3 seed = vec3(wmGruyereSeed);
   vec3 jitter = wmHash3(cell + seed);
@@ -341,9 +351,9 @@ float wmCavitySdf(vec3 cell, vec3 p, float invFreq) {
 }
 
 float wmGruyereMinSdf(vec3 p) {
-  float f = max(1e-6, wmGruyereFrequency);
-  float invF = 1.0 / f;
-  vec3 gp = p * f;
+  float freq = wmGruyereEffectiveFrequency();
+  float invF = 1.0 / freq;
+  vec3 gp = p * freq;
   vec3 i = floor(gp);
   vec3 fracP = fract(gp);
   vec3 o = step(vec3(0.5), fracP);
@@ -351,7 +361,6 @@ float wmGruyereMinSdf(vec3 p) {
 
   float dMin = 1e9;
 
-  // 8 nearby cells around a chosen corner. wmGruyereCount limits the sample budget.
   if (wmGruyereCount > 0) dMin = min(dMin, wmCavitySdf(base + vec3( 0.0,  0.0,  0.0), p, invF));
   if (wmGruyereCount > 1) dMin = min(dMin, wmCavitySdf(base + vec3(-1.0,  0.0,  0.0), p, invF));
   if (wmGruyereCount > 2) dMin = min(dMin, wmCavitySdf(base + vec3( 0.0, -1.0,  0.0), p, invF));
@@ -367,23 +376,35 @@ float wmGruyereMinSdf(vec3 p) {
 void wmApplyGruyere(inout vec4 col) {
   if (wmGruyereEnabled == 0) return;
 
-  // Optional scaling hook (defaults to 1,1,1).
   vec3 p = wmGruyereWorldPos / max(wmGruyereScale, vec3(1e-6));
 
   float sdf = wmGruyereMinSdf(p);
   if (sdf >= 0.0) return;
 
-  float soft = max(0.0, wmGruyereSoftness);
-  float hole = 0.0;
-  if (soft <= 1e-6) {
-    hole = wmGruyereStrength;
+  float depth = -sdf;
+  float softness = max(0.0, wmGruyereSoftness);
+  float thickness = max(0.0, wmGruyereWallThickness);
+
+  float fade;
+  if (softness <= 1e-6) {
+    fade = depth >= thickness ? 1.0 : 0.0;
   } else {
-    hole = wmGruyereStrength * smoothstep(0.0, soft, -sdf);
+    fade = smoothstep(thickness, thickness + softness, depth);
   }
 
-  if (hole >= 0.999) discard;
-  col.a *= max(0.0, 1.0 - hole);
+  if (fade >= 0.999) {
+    discard;
+  }
+
+  col.a *= max(0.0, 1.0 - fade);
   if (col.a <= 0.001) discard;
+
+  if (thickness > 1e-6 && depth <= thickness) {
+    float wallNorm = clamp(1.0 - depth / thickness, 0.0, 1.0);
+    vec3 wallTone = mix(vec3(0.04, 0.04, 0.05), col.rgb * 0.32, wallNorm);
+    float mixAmt = clamp(0.45 + 0.45 * wallNorm, 0.0, 1.0);
+    col.rgb = mix(col.rgb, wallTone, mixAmt);
+  }
 }
 `;
 

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import type { PopsicleConfig, EnvironmentStyle } from '../types.js';
+import type { PopsicleConfig, EnvironmentStyle, GruyereConfig } from '../types.js';
+import { buildGruyereHoles, buildGruyereSeed, buildGruyereInteriorWalls } from '../gruyere.js';
 import { createStickMeshMaterial } from '../materials.js';
 import { resolvePaletteConfig } from '../palette.js';
 import { renderWithOptionalBloom } from './postprocessing.js';
@@ -582,6 +583,31 @@ export function createPopsicleScene(
   const box = new THREE.Box3().setFromObject(group);
   const center = box.getCenter(new THREE.Vector3());
   group.position.sub(center);
+
+  const finalBounds = new THREE.Box3().setFromObject(group);
+  const gruyereConfig = (config as any).gruyere as GruyereConfig | undefined;
+  if (gruyereConfig?.enabled && gruyereConfig.wallThickness > 0) {
+    const seedBase = buildGruyereSeed(config.seed, gruyereConfig.seedOffset);
+    const holes = buildGruyereHoles(gruyereConfig, new THREE.Vector3(1, 1, 1), seedBase, 48);
+    const hasBounds = !finalBounds.isEmpty();
+    if (holes.length > 0 && hasBounds) {
+      const radiusMax = Math.max(0, Number(gruyereConfig.radiusMax) || 0);
+      const expanded = finalBounds.clone().expandByScalar(radiusMax + 0.15);
+      const filtered = holes.filter((hole) => expanded.containsPoint(hole.center));
+      if (filtered.length > 0) {
+        const walls = buildGruyereInteriorWalls({
+          holes: filtered,
+          palette: colors,
+          wallThickness: gruyereConfig.wallThickness,
+          maxMeshes: 20,
+          tintStrength: 0.35,
+          opacity: 0.92
+        });
+        if (walls) group.add(walls);
+      }
+    }
+  }
+
   scene.add(group);
   
   const renderer = new THREE.WebGLRenderer({
