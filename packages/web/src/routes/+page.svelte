@@ -3962,83 +3962,88 @@
           </details>
          </section>
        {:else if config.type === 'ridges2d'}
-         <section class="control-section">
-           <h3>Ridges (2D)</h3>
-
-           <label class="control-row slider">
-             <button type="button" class="setting-title" class:locked={isLocked('ridges.gridStepPx')} onclick={() => toggleLock('ridges.gridStepPx')} title="Click to lock/unlock for randomize">Grid step: {Math.round(config.ridges.gridStepPx)}px</button>
-             <input type="range" bind:value={config.ridges.gridStepPx} min="2" max="24" step="1" />
-           </label>
+          <section class="control-section">
+            <h3>Ridges (2D)</h3>
 
             <label class="control-row slider">
-              <button type="button" class="setting-title" class:locked={isLocked('ridges.frequency')} onclick={() => toggleLock('ridges.frequency')} title="Click to lock/unlock for randomize">Frequency: {config.ridges.frequency.toFixed(2)}</button>
-              <input type="range" bind:value={config.ridges.frequency} min="0.1" max="8" step="0.01" />
+              <button type="button" class="setting-title" class:locked={isLocked('ridges.gridStepPx')} onclick={() => toggleLock('ridges.gridStepPx')} title="Click to lock/unlock for randomize">Grid step: {Math.round(config.ridges.gridStepPx)}px</button>
+              <input type="range" bind:value={config.ridges.gridStepPx} min="2" max="24" step="1" />
             </label>
 
-            <label class="control-row slider">
-              <button type="button" class="setting-title" class:locked={isLocked('ridges.detailFrequency')} onclick={() => toggleLock('ridges.detailFrequency')} title="Click to lock/unlock for randomize">Detail freq: {config.ridges.detailFrequency.toFixed(2)}</button>
-              <input type="range" bind:value={config.ridges.detailFrequency} min="0.1" max="25" step="0.1" />
-            </label>
+            <details class="control-details" open>
+              <summary class="control-details-summary">Field detail</summary>
+              <label class="control-row slider">
+                <button type="button" class="setting-title" class:locked={isLocked('ridges.frequency')} onclick={() => toggleLock('ridges.frequency')} title="Click to lock/unlock for randomize">Frequency: {config.ridges.frequency.toFixed(2)}</button>
+                <input type="range" bind:value={config.ridges.frequency} min="0.1" max="8" step="0.01" />
+              </label>
+              <label class="control-row slider">
+                <button type="button" class="setting-title" class:locked={isLocked('ridges.detailFrequency')} onclick={() => toggleLock('ridges.detailFrequency')} title="Click to lock/unlock for randomize">Detail freq: {config.ridges.detailFrequency.toFixed(2)}</button>
+                <input type="range" bind:value={config.ridges.detailFrequency} min="0.1" max="25" step="0.1" />
+              </label>
+              <label class="control-row slider">
+                <button type="button" class="setting-title" class:locked={isLocked('ridges.detailAmplitude')} onclick={() => toggleLock('ridges.detailAmplitude')} title="Click to lock/unlock for randomize">Detail amp: {config.ridges.detailAmplitude.toFixed(2)}</button>
+                <input type="range" bind:value={config.ridges.detailAmplitude} min="0" max="1" step="0.01" />
+              </label>
+              <label class="control-row slider">
+                <button type="button" class="setting-title" class:locked={isLocked('ridges.octaves')} onclick={() => toggleLock('ridges.octaves')} title="Click to lock/unlock for randomize">Octaves: {Math.round(config.ridges.octaves)}</button>
+                <input type="range" bind:value={config.ridges.octaves} min="1" max="8" step="1" />
+              </label>
+            </details>
 
-            <label class="control-row slider">
-              <button type="button" class="setting-title" class:locked={isLocked('ridges.detailAmplitude')} onclick={() => toggleLock('ridges.detailAmplitude')} title="Click to lock/unlock for randomize">Detail amp: {config.ridges.detailAmplitude.toFixed(2)}</button>
-              <input type="range" bind:value={config.ridges.detailAmplitude} min="0" max="1" step="0.01" />
-            </label>
+            <details class="control-details" open>
+              <summary class="control-details-summary">Warp</summary>
+              <label class="control-row slider">
+                <button type="button" class="setting-title" class:locked={isLocked('ridges.warpAmount')} onclick={() => toggleLock('ridges.warpAmount')} title="Click to lock/unlock for randomize">Warp: {config.ridges.warpAmount.toFixed(2)}</button>
+                <input type="range" bind:value={config.ridges.warpAmount} min="0" max="3" step="0.01" />
+              </label>
+              <label class="control-row slider">
+                <button type="button" class="setting-title" class:locked={isLocked('ridges.warpFrequency')} onclick={() => toggleLock('ridges.warpFrequency')} title="Click to lock/unlock for randomize">Warp freq: {config.ridges.warpFrequency.toFixed(2)}</button>
+                <input type="range" bind:value={config.ridges.warpFrequency} min="0.1" max="6" step="0.01" />
+              </label>
+              <label class="control-row slider">
+                <button type="button" class="setting-title" class:locked={isLocked('ridges.warpDepth')} onclick={() => toggleLock('ridges.warpDepth')} title="Click to lock/unlock for randomize">Warp depth: {config.ridges.warpDepth.toFixed(2)}</button>
+                <input type="range" bind:value={config.ridges.warpDepth} min="0" max="1" step="0.01" />
+              </label>
+            </details>
 
-            <label class="control-row slider">
-              <button type="button" class="setting-title" class:locked={isLocked('ridges.octaves')} onclick={() => toggleLock('ridges.octaves')} title="Click to lock/unlock for randomize">Octaves: {Math.round(config.ridges.octaves)}</button>
-              <input type="range" bind:value={config.ridges.octaves} min="1" max="8" step="1" />
-            </label>
+            <details class="control-details" open>
+              <summary class="control-details-summary">Remap</summary>
+              <label class="control-row slider">
+                <button type="button" class="setting-title" class:locked={isLocked('ridges.contrast')} onclick={() => toggleLock('ridges.contrast')} title="Click to lock/unlock for randomize">Contrast: {config.ridges.contrast.toFixed(2)}</button>
+                <input type="range" bind:value={config.ridges.contrast} min="0.3" max="3" step="0.01" />
+              </label>
+              <label class="control-row slider">
+                <button type="button" class="setting-title" class:locked={isLocked('ridges.bias')} onclick={() => toggleLock('ridges.bias')} title="Click to lock/unlock for randomize">Bias: {config.ridges.bias.toFixed(2)}</button>
+                <input type="range" bind:value={config.ridges.bias} min="-0.5" max="0.5" step="0.01" />
+              </label>
+            </details>
 
-            <label class="control-row slider">
-              <button type="button" class="setting-title" class:locked={isLocked('ridges.warpAmount')} onclick={() => toggleLock('ridges.warpAmount')} title="Click to lock/unlock for randomize">Warp: {config.ridges.warpAmount.toFixed(2)}</button>
-              <input type="range" bind:value={config.ridges.warpAmount} min="0" max="3" step="0.01" />
-            </label>
-
-            <label class="control-row slider">
-              <button type="button" class="setting-title" class:locked={isLocked('ridges.warpFrequency')} onclick={() => toggleLock('ridges.warpFrequency')} title="Click to lock/unlock for randomize">Warp freq: {config.ridges.warpFrequency.toFixed(2)}</button>
-              <input type="range" bind:value={config.ridges.warpFrequency} min="0.1" max="6" step="0.01" />
-            </label>
-
-            <label class="control-row slider">
-              <button type="button" class="setting-title" class:locked={isLocked('ridges.warpDepth')} onclick={() => toggleLock('ridges.warpDepth')} title="Click to lock/unlock for randomize">Warp depth: {config.ridges.warpDepth.toFixed(2)}</button>
-              <input type="range" bind:value={config.ridges.warpDepth} min="0" max="1" step="0.01" />
-            </label>
-
-            <label class="control-row slider">
-              <button type="button" class="setting-title" class:locked={isLocked('ridges.contrast')} onclick={() => toggleLock('ridges.contrast')} title="Click to lock/unlock for randomize">Contrast: {config.ridges.contrast.toFixed(2)}</button>
-              <input type="range" bind:value={config.ridges.contrast} min="0.3" max="3" step="0.01" />
-            </label>
-
-            <label class="control-row slider">
-              <button type="button" class="setting-title" class:locked={isLocked('ridges.bias')} onclick={() => toggleLock('ridges.bias')} title="Click to lock/unlock for randomize">Bias: {config.ridges.bias.toFixed(2)}</button>
-              <input type="range" bind:value={config.ridges.bias} min="-0.5" max="0.5" step="0.01" />
-            </label>
-
-            <label class="control-row slider">
-              <button type="button" class="setting-title" class:locked={isLocked('ridges.levels')} onclick={() => toggleLock('ridges.levels')} title="Click to lock/unlock for randomize">Levels: {Math.round(config.ridges.levels)}</button>
-              <input type="range" bind:value={config.ridges.levels} min="3" max="36" step="1" />
-            </label>
-
-            <label class="control-row slider">
-              <button type="button" class="setting-title" class:locked={isLocked('ridges.levelJitter')} onclick={() => toggleLock('ridges.levelJitter')} title="Click to lock/unlock for randomize">Level jitter: {config.ridges.levelJitter.toFixed(2)}</button>
-              <input type="range" bind:value={config.ridges.levelJitter} min="0" max="0.3" step="0.01" />
-            </label>
+            <details class="control-details" open>
+              <summary class="control-details-summary">Contours</summary>
+              <label class="control-row slider">
+                <button type="button" class="setting-title" class:locked={isLocked('ridges.levels')} onclick={() => toggleLock('ridges.levels')} title="Click to lock/unlock for randomize">Levels: {Math.round(config.ridges.levels)}</button>
+                <input type="range" bind:value={config.ridges.levels} min="3" max="36" step="1" />
+              </label>
+              <label class="control-row slider">
+                <button type="button" class="setting-title" class:locked={isLocked('ridges.levelJitter')} onclick={() => toggleLock('ridges.levelJitter')} title="Click to lock/unlock for randomize">Level jitter: {config.ridges.levelJitter.toFixed(2)}</button>
+                <input type="range" bind:value={config.ridges.levelJitter} min="0" max="0.3" step="0.01" />
+              </label>
+            </details>
 
             <label class="control-row slider">
              <button type="button" class="setting-title" class:locked={isLocked('ridges.lineWidthPx')} onclick={() => toggleLock('ridges.lineWidthPx')} title="Click to lock/unlock for randomize">Line width: {config.ridges.lineWidthPx.toFixed(2)}px</button>
              <input type="range" bind:value={config.ridges.lineWidthPx} min="0.25" max="5" step="0.05" />
            </label>
 
-           <label class="control-row slider">
-             <button type="button" class="setting-title" class:locked={isLocked('ridges.lineOpacity')} onclick={() => toggleLock('ridges.lineOpacity')} title="Click to lock/unlock for randomize">Line opacity: {config.ridges.lineOpacity.toFixed(2)}</button>
-             <input type="range" bind:value={config.ridges.lineOpacity} min="0" max="1" step="0.01" />
-           </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('ridges.lineOpacity')} onclick={() => toggleLock('ridges.lineOpacity')} title="Click to lock/unlock for randomize">Line opacity: {config.ridges.lineOpacity.toFixed(2)}</button>
+              <input type="range" bind:value={config.ridges.lineOpacity} min="0" max="1" step="0.01" />
+            </label>
 
-           <label class="control-row slider">
-             <button type="button" class="setting-title" class:locked={isLocked('ridges.smoothing')} onclick={() => toggleLock('ridges.smoothing')} title="Click to lock/unlock for randomize">Smoothing: {config.ridges.smoothing.toFixed(2)}</button>
-             <input type="range" bind:value={config.ridges.smoothing} min="0" max="1" step="0.01" />
-           </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('ridges.smoothing')} onclick={() => toggleLock('ridges.smoothing')} title="Click to lock/unlock for randomize">Smoothing: {config.ridges.smoothing.toFixed(2)}</button>
+              <input type="range" bind:value={config.ridges.smoothing} min="0" max="1" step="0.01" />
+            </label>
 
            <details class="control-details">
              <summary class="control-details-summary">Fill bands</summary>

@@ -47,6 +47,13 @@ function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
 }
 
+function applyContrastBias(value: number, contrast: number, bias: number): number {
+  const c = Math.max(0.25, Math.min(4, contrast));
+  const b = clamp(bias, -0.5, 0.5);
+  const scaled = 0.5 + (value - 0.5) * c;
+  return clamp01(scaled + b);
+}
+
 function valueNoise2D(seed: number, x: number, y: number, channel: number): number {
   const xi = Math.floor(x);
   const yi = Math.floor(y);
@@ -249,16 +256,11 @@ export function buildRidges2DFieldGrid(config: Ridges2DConfig): {
   const octaves = Math.max(1, Math.round(Number(config.ridges.octaves) || 1));
   const warpAmount = Math.max(0, Number(config.ridges.warpAmount) || 0);
   const warpFreq = Math.max(0.000001, Number(config.ridges.warpFrequency) || 1);
-  const detailFrequency = Number(config.ridges.detailFrequency) || 0;
-  const detailAmplitude = clamp01(Number(config.ridges.detailAmplitude) || 0);
-  const contrast = Math.max(0, Number(config.ridges.contrast) || 1);
-  const bias = clamp(Number(config.ridges.bias) || 0, -1, 1);
+  const detailFreq = Math.max(0.000001, Number(config.ridges.detailFrequency) || freq * 2);
+  const detailAmp = clamp01(Number(config.ridges.detailAmplitude) || 0);
   const warpDepth = clamp01(Number(config.ridges.warpDepth) || 0);
-  const warpOctaves = Math.max(1, Math.min(6, Math.max(1, Math.round(octaves))));
-  const warpScaleFn =
-    warpDepth > 0
-      ? (i: number) => 1 - warpDepth * (warpOctaves > 1 ? i / (warpOctaves - 1) : 0)
-      : undefined;
+  const contrast = Number(config.ridges.contrast) || 1;
+  const bias = Number(config.ridges.bias) || 0;
 
   let vMin = Number.POSITIVE_INFINITY;
   let vMax = Number.NEGATIVE_INFINITY;
@@ -270,30 +272,36 @@ export function buildRidges2DFieldGrid(config: Ridges2DConfig): {
       const xPx = gx * stepPx;
       const nx0 = (xPx / baseScale) * freq;
 
-      // Domain warp in noise space (optional depth modulation)
-      const wx =
-        warpAmount > 0
-          ? (fbm2D(seed, nx0, ny0, warpFreq, warpOctaves, 2001, warpScaleFn) - 0.5) * 2
+      // Domain warp in noise space with depth mixing
+      const wxBase =
+        warpAmount > 0 ? (fbm2D(seed, nx0, ny0, warpFreq, Math.max(1, Math.round(octaves)), 2001) - 0.5) * 2 : 0;
+      const wyBase =
+        warpAmount > 0 ? (fbm2D(seed, nx0 + 14.1, ny0 - 8.2, warpFreq, Math.max(1, Math.round(octaves)), 3001) - 0.5) * 2 : 0;
+      const wxDetail =
+        warpDepth > 0
+          ? (fbm2D(seed ^ 0x3213f0b, nx0 * 1.2, ny0 * 0.8, warpFreq * 2.5, Math.max(1, Math.round(octaves)), 4001) - 0.5) * 2
           : 0;
-      const wy =
-        warpAmount > 0
-          ? (fbm2D(seed, nx0 + 13.1, ny0 - 9.2, warpFreq, warpOctaves, 3001, warpScaleFn) - 0.5) * 2
+      const wyDetail =
+        warpDepth > 0
+          ? (fbm2D(seed ^ 0x432f5a1, nx0 * 0.7 + 7.3, ny0 * 1.3 - 2.1, warpFreq * 1.8, Math.max(1, Math.round(octaves)), 5001) - 0.5) * 2
           : 0;
+
+      const wx = warpDepth > 0 ? wxBase * (1 - warpDepth) + wxDetail * warpDepth : wxBase;
+      const wy = warpDepth > 0 ? wyBase * (1 - warpDepth) + wyDetail * warpDepth : wyBase;
 
       const nx = nx0 + wx * warpAmount;
       const ny = ny0 + wy * warpAmount;
 
-      // Height field before remap
+      // Height field before detail blending
       let value = fbm2D(seed, nx, ny, 1.0, octaves, 1001);
-      if (detailAmplitude > 0 && detailFrequency > 0) {
-        const detailFreq = Math.max(0.000001, detailFrequency);
-        const detail = fbm2D(seed ^ 0x1f2f3d4, nx, ny, detailFreq, octaves, 4001);
-        value += (detail - 0.5) * detailAmplitude;
+      if (detailAmp > 0 && detailFreq > 0) {
+        const detailOctaves = Math.max(1, Math.round(octaves * 1.3));
+        const detail = fbm2D(seed ^ 0x5a1d2c7, nx, ny, detailFreq, detailOctaves, 4101);
+        value += (detail - 0.5) * detailAmp;
       }
-      const remapped = (value - 0.5) * contrast + 0.5 + bias;
-      values[gy * gridW + gx] = remapped;
-      if (remapped < vMin) vMin = remapped;
-      if (remapped > vMax) vMax = remapped;
+      values[gy * gridW + gx] = value;
+      if (value < vMin) vMin = value;
+      if (value > vMax) vMax = value;
     }
   }
 
@@ -307,6 +315,10 @@ export function buildRidges2DFieldGrid(config: Ridges2DConfig): {
   if (smooth > 0) {
     const it = Math.max(0, Math.min(6, Math.round(smooth * 4)));
     blurField(values, gridW, gridH, it);
+  }
+
+  for (let i = 0; i < values.length; i++) {
+    values[i] = applyContrastBias(values[i], contrast, bias);
   }
 
   return { values01: values, gridW, gridH, stepPx };

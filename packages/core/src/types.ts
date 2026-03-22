@@ -571,25 +571,25 @@ export interface Ridges2DConfig extends BaseWallpaperConfig {
     gridStepPx: number;
     /** Base noise frequency in "noise space" (roughly features per min(width,height)) */
     frequency: number;
-    /** High-frequency detail frequency multiplier */
+    /** Frequency of the high-frequency detail FBM layer */
     detailFrequency: number;
-    /** Strength of the high-frequency detail layer */
+    /** Strength/amplitude of the detail layer (0..1) */
     detailAmplitude: number;
     /** Fractal octaves (1..8 recommended) */
     octaves: number;
     /** Domain warp amount in noise-space units */
     warpAmount: number;
-    /** How quickly warp influence tapers across octaves (0..1) */
+    /** 0..1: blend between coarse warp (0) and high-frequency warp (1) */
     warpDepth: number;
     /** Domain warp frequency multiplier */
     warpFrequency: number;
-    /** How far contours deviate from the mean field */
+    /** Contrast multiplier applied after normalization */
     contrast: number;
-    /** Bias applied after contrast (positive = brighten overall) */
+    /** Bias offset added after contrast (positive = brighten overall) */
     bias: number;
     /** Number of contour levels */
     levels: number;
-    /** Per-level offset for contour thresholds (0..0.3) */
+    /** 0..0.3: per-level threshold jitter for marching squares */
     levelJitter: number;
     lineWidthPx: number;
     /** 0..1 */
@@ -1871,12 +1871,12 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
         const levels = Math.max(6, Math.min(28, Math.round(tri(6, DEFAULT_RIDGES2D_CONFIG.ridges.levels, 28))));
         const stepPx = Math.max(3, Math.min(16, Math.round(tri(3, DEFAULT_RIDGES2D_CONFIG.ridges.gridStepPx, 16))));
         const oct = Math.max(1, Math.min(8, Math.round(tri(1, DEFAULT_RIDGES2D_CONFIG.ridges.octaves, 7))));
-        const detailFrequency = clamp(randomWeighted(rng, 3, 12, 7), 0.1, 40);
-        const detailAmplitude = clamp(randomWeighted(rng, 0, 0.35, 0.18), 0, 1);
-        const contrast = clamp(randomWeighted(rng, 0.6, 1.6, 1.15), 0.2, 3);
-        const bias = clamp(randomWeighted(rng, -0.2, 0.2, 0), -0.5, 0.5);
-        const levelJitter = clamp(randomWeighted(rng, 0, 0.25, 0.08), 0, 0.3);
-        const warpDepth = clamp(randomWeighted(rng, 0, 0.85, 0.25), 0, 1);
+        const detailFrequency = clamp(randomWeighted(rng, 3.5, 12, 7.5), 0.1, 40);
+        const detailAmplitude = clamp(randomWeighted(rng, 0.02, 0.36, 0.18), 0, 0.7);
+        const contrast = clamp(randomWeighted(rng, 0.75, 1.55, 1.05), 0.2, 3);
+        const bias = clamp(randomWeighted(rng, -0.18, 0.18, 0), -0.5, 0.5);
+        const levelJitter = clamp(randomWeighted(rng, 0.02, 0.32, 0.1), 0, 0.4);
+        const warpDepth = clamp(randomWeighted(rng, 0, 0.72, 0.28), 0, 1);
 
         return {
           ...base,
