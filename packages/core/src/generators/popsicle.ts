@@ -712,6 +712,7 @@ export function createPopsicleScene(
           bubbles: filtered,
           palette: colors,
           wallThickness: bubblesConfig.wallThickness,
+          softness: bubblesConfig.softness,
           maxMeshes: 20,
           tintStrength: 0.35,
           opacity: 0.92

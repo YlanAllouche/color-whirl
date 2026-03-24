@@ -42,6 +42,8 @@ export interface BubblesInteriorWallOptions {
   bubbles: Bubble[];
   palette: string[];
   wallThickness: number;
+  /** Optional: match bubble softness for better alignment with discard region */
+  softness?: number;
   maxMeshes?: number;
   tintStrength?: number;
   opacity?: number;
@@ -158,6 +160,8 @@ export function buildBubblesInteriorWalls(options: BubblesInteriorWallOptions): 
   const thickness = Math.max(0, options.wallThickness || 0);
   if (thickness <= 1e-6) return null;
 
+  const softness = Math.max(0, Number(options.softness) || 0);
+
   const bubbles = options.bubbles ?? [];
   if (bubbles.length === 0) return null;
 
@@ -187,7 +191,9 @@ export function buildBubblesInteriorWalls(options: BubblesInteriorWallOptions): 
   let placed = 0;
   for (let i = 0; i < bubbles.length && placed < maxMeshes; i++) {
     const bubble = bubbles[i];
-    const radius = Math.max(0.01, bubble.radius - thickness * 0.5);
+    // The shader starts fading/discarding only once depth > wallThickness (+ softness).
+    // Place interior geometry near that boundary so it becomes visible through the carved region.
+    const radius = Math.max(0.01, bubble.radius - thickness - softness);
     if (radius <= 0) continue;
 
     const mat = materials[placed % materials.length];

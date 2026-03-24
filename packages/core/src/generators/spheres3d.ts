@@ -918,6 +918,7 @@ void wmApplyCollisionMask(inout vec4 col) {
           bubbles: intersecting,
           palette: colors,
           wallThickness: bubblesConfig.wallThickness,
+          softness: bubblesConfig.softness,
           maxMeshes: 32,
           tintStrength: 0.35,
           opacity: 0.92
