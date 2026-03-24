@@ -1224,7 +1224,9 @@ export function normalizeWallpaperConfig(input: any): WallpaperConfig {
     } else {
       if (typeof sAny.source !== 'string') sAny.source = String(sAny.source ?? baseSvg?.source ?? '');
       const cnt = Number(sAny.count);
-      sAny.count = Number.isFinite(cnt) ? Math.max(0, Math.round(cnt)) : Math.round(Number(baseSvg?.count) || 0);
+      sAny.count = Number.isFinite(cnt)
+        ? Math.max(1, Math.round(cnt))
+        : Math.max(1, Math.round(Number(baseSvg?.count) || 0));
       if ((merged as any).type === 'svg2d') {
         const rMin = Number(sAny.rMinPx);
         const rMax = Number(sAny.rMaxPx);
@@ -1857,7 +1859,7 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
         type: 'svg2d',
         svg: {
           source: DEFAULT_SVG_SOURCE,
-          count: skewCountLow(10, DEFAULT_SVG2D_CONFIG.svg.count, 420, 1600, 0.03),
+          count: chance(0.15) ? 1 : skewCountLow(2, DEFAULT_SVG2D_CONFIG.svg.count, 420, 1600, 0.03),
           rMinPx: Math.round(randomWeighted(rng, 6, 40, DEFAULT_SVG2D_CONFIG.svg.rMinPx)),
           rMaxPx: Math.round(randomWeighted(rng, 30, 280, DEFAULT_SVG2D_CONFIG.svg.rMaxPx)),
           jitter: clamp(randomWeighted(rng, 0, 1, DEFAULT_SVG2D_CONFIG.svg.jitter), 0, 1),
@@ -1874,7 +1876,7 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
         type: 'svg3d',
         svg: {
           source: DEFAULT_SVG_SOURCE,
-          count: skewCountLow(10, DEFAULT_SVG3D_CONFIG.svg.count, 360, 1500, 0.03),
+          count: chance(0.15) ? 1 : skewCountLow(2, DEFAULT_SVG3D_CONFIG.svg.count, 360, 1500, 0.03),
           spread: randomWeighted(rng, 0.8, 6.5, DEFAULT_SVG3D_CONFIG.svg.spread),
           depth: randomWeighted(rng, 0.5, 7.0, DEFAULT_SVG3D_CONFIG.svg.depth),
           sizeMin: randomWeighted(rng, 0.05, 0.32, DEFAULT_SVG3D_CONFIG.svg.sizeMin),

@@ -771,7 +771,7 @@ function generatePolygon2DSVG(config: Extract<WallpaperConfig, { type: 'polygon2
 function generateSvg2DSVG(config: Extract<WallpaperConfig, { type: 'svg2d' }>): string {
   const { width, height, colors, backgroundColor } = config;
   const n = Math.max(1, colors.length);
-  const count = Math.max(0, Math.round(Number(config.svg.count) || 0));
+  const count = Math.max(1, Math.round(Number(config.svg.count) || 0));
   const rMin = Math.max(0.1, Number(config.svg.rMinPx) || 1);
   const rMax = Math.max(rMin, Number(config.svg.rMaxPx) || rMin);
   const fillOpacity = clamp01(Number(config.svg.fillOpacity) || 0);
@@ -837,7 +837,7 @@ function generateSvg3DSVG(config: Extract<WallpaperConfig, { type: 'svg3d' }>): 
   // 2D approximation.
   const { width, height, colors, backgroundColor } = config;
   const n = Math.max(1, colors.length);
-  const count = Math.max(0, Math.round(Number(config.svg.count) || 0));
+  const count = Math.max(1, Math.round(Number(config.svg.count) || 0));
 
   validateSvgSource(config.svg.source);
   const { viewBox, inner } = extractSvgRootAttributes(config.svg.source);

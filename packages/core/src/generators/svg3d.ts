@@ -336,7 +336,7 @@ export function createSvg3DScene(
   const sizeMultByIndex = Array.from({ length: nColors }, (_, pi) => resolvePaletteConfig(config as any, pi).multipliers.svg.sizeMult);
   const extrudeMultByIndex = Array.from({ length: nColors }, (_, pi) => resolvePaletteConfig(config as any, pi).multipliers.svg.extrudeMult);
 
-  const count = Math.max(0, Math.round(Number(config.svg.count) || 0));
+  const count = Math.max(1, Math.round(Number(config.svg.count) || 0));
   const spread = Math.max(0, Number(config.svg.spread) || 0);
   const depth = Math.max(0, Number(config.svg.depth) || 0);
   const sizeMin = Math.max(0.0001, Number(config.svg.sizeMin) || 0.0001);

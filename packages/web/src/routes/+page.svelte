@@ -3736,10 +3736,10 @@
              <div class="error-box" style="margin-top:0.5rem;">{renderError}</div>
            {/if}
 
-           <label class="control-row slider">
-             <button type="button" class="setting-title" class:locked={isLocked('svg.count')} onclick={() => toggleLock('svg.count')} title="Click to lock/unlock for randomize">Count: {(config as any).svg.count}</button>
-             <input type="range" bind:value={(config as any).svg.count} min="0" max="4000" step="10" />
-           </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('svg.count')} onclick={() => toggleLock('svg.count')} title="Click to lock/unlock for randomize">Count: {(config as any).svg.count}</button>
+              <input type="range" bind:value={(config as any).svg.count} min="1" max="4000" step="1" />
+            </label>
 
            <label class="control-row slider">
              <button type="button" class="setting-title" class:locked={isLocked('svg.rMinPx')} onclick={() => toggleLock('svg.rMinPx')} title="Click to lock/unlock for randomize">Size min: {Math.round((config as any).svg.rMinPx)}px</button>
@@ -4232,10 +4232,10 @@
              <div class="error-box" style="margin-top:0.5rem;">{renderError}</div>
            {/if}
 
-           <label class="control-row slider">
-             <button type="button" class="setting-title" class:locked={isLocked('svg.count')} onclick={() => toggleLock('svg.count')} title="Click to lock/unlock for randomize">Count: {(config as any).svg.count}</button>
-             <input type="range" bind:value={(config as any).svg.count} min="0" max="2000" step="10" />
-           </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('svg.count')} onclick={() => toggleLock('svg.count')} title="Click to lock/unlock for randomize">Count: {(config as any).svg.count}</button>
+              <input type="range" bind:value={(config as any).svg.count} min="1" max="2000" step="1" />
+            </label>
 
            <label class="control-row slider">
              <button type="button" class="setting-title" class:locked={isLocked('svg.spread')} onclick={() => toggleLock('svg.spread')} title="Click to lock/unlock for randomize">Spread: {Number((config as any).svg.spread).toFixed(2)}</button>

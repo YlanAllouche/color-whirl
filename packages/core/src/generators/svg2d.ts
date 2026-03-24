@@ -182,7 +182,7 @@ export function renderSvg2DToCanvas(config: Svg2DConfig, canvas?: HTMLCanvasElem
     return { enabled: !!e.enabled && !!config.bloom.enabled, intensity: e.intensity };
   });
 
-  const count = Math.max(0, Math.round(Number(config.svg.count) || 0));
+  const count = Math.max(1, Math.round(Number(config.svg.count) || 0));
   const rMin = Math.max(0.1, Number(config.svg.rMinPx) || 1);
   const rMax = Math.max(rMin, Number(config.svg.rMaxPx) || rMin);
   const jitter = clamp01(Number(config.svg.jitter) || 0);
