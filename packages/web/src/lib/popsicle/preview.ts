@@ -1629,6 +1629,7 @@ void wmApplyCollisionMask(inout vec4 col) {
       w: config.width,
       h: config.height,
       colors: config.colors,
+      palette: (config as any).palette?.overrides ?? [],
       tex: config.texture,
       bg: config.backgroundColor,
       count: config.stickCount,
@@ -1649,7 +1650,8 @@ void wmApplyCollisionMask(inout vec4 col) {
       light: config.lighting,
       env: config.environment,
       tm: config.rendering,
-      geo: config.geometry
+      geo: config.geometry,
+      bubbles: (config as any).bubbles ?? null
     };
     return JSON.stringify(keyObj);
   }
