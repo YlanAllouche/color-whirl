@@ -196,6 +196,13 @@ function sampleWeightedIndex01(u: number, wNorm: number[]): number {
   return wNorm.length - 1;
 }
 
+function hash01(seed: number, a: number, b: number): number {
+  let x = (Number(seed) >>> 0) ^ (Math.imul(a | 0, 374761393) >>> 0) ^ (Math.imul(b | 0, 668265263) >>> 0);
+  x = Math.imul(x ^ (x >>> 13), 1274126177);
+  x = (x ^ (x >>> 16)) >>> 0;
+  return x / 4294967296;
+}
+
 function pickIndex(mode: PaletteAssignMode, i: number, rng: () => number, w: number[], n: number): number {
   if (mode === 'cycle') return i % n;
   return sampleWeightedIndex01(rng(), w);
@@ -339,7 +346,21 @@ export function createSpheres3DScene(
   const nColors = colors.length;
   const w = normalizeWeights(config.spheres.colorWeights, nColors);
 
-  const radiusMultByIndex = Array.from({ length: nColors }, (_, pi) => resolvePaletteConfig(config, pi).multipliers.spheres3d.radiusMult);
+  const paletteOverrides: any[] = Array.isArray((config as any).palette?.overrides) ? (config as any).palette.overrides : [];
+  const hasPaletteOverride = new Array(nColors).fill(false);
+  const overrideFrequency = new Array(nColors).fill(1);
+  for (let pi = 0; pi < nColors; pi++) {
+    const ov = paletteOverrides[pi];
+    if (!ov || typeof ov !== 'object' || Array.isArray(ov)) continue;
+    if (!(typeof ov.enabled === 'boolean' ? ov.enabled : !!ov.enabled)) continue;
+    hasPaletteOverride[pi] = true;
+    overrideFrequency[pi] = clamp(Number(ov.frequency ?? 1), 0, 1);
+  }
+
+  const resolvedBaseByPalette = Array.from({ length: nColors }, (_, pi) => resolvePaletteConfig(config, pi, { applyOverrides: false }));
+  const resolvedOvByPalette = Array.from({ length: nColors }, (_, pi) => resolvePaletteConfig(config, pi, { applyOverrides: true }));
+  const radiusMultBaseByIndex = Array.from({ length: nColors }, (_, pi) => resolvedBaseByPalette[pi].multipliers.spheres3d.radiusMult);
+  const radiusMultOvByIndex = Array.from({ length: nColors }, (_, pi) => resolvedOvByPalette[pi].multipliers.spheres3d.radiusMult);
 
   const count = Math.max(0, Math.round(config.spheres.count));
   const spread = Math.max(0, Number(config.spheres.spread) || 0);
@@ -351,19 +372,174 @@ export function createSpheres3DScene(
 
   const { geometry, flatShading } = getSpheres3DGeometry(config);
 
-  const perColor: Array<{ idx: number; inst: THREE.InstancedMesh; mat: THREE.Material; outline?: THREE.InstancedMesh }> = [];
-  for (let pi = 0; pi < nColors; pi++) {
-    const mat = createSurfaceMaterial(config, pi, colors[pi], envIntensity, opacity);
-    if ('flatShading' in (mat as any)) {
-      (mat as any).flatShading = flatShading;
-      (mat as any).needsUpdate = true;
+  // Assign each occurrence to a palette index.
+  const indices: number[] = [];
+  for (let i = 0; i < count; i++) indices.push(pickIndex(config.spheres.paletteMode, i, rng, w, nColors));
+
+  // Compute positions (consume rng after palette assignment).
+  const distribution = config.spheres.distribution;
+  const layers = Math.max(1, Math.round(config.spheres.layers));
+  const posByIndex: Array<{ x: number; y: number; z: number; rad: number }> = new Array(count);
+  const posForIndex = (i: number): { x: number; y: number; z: number; rad: number } => {
+    const rad = rMin + rng() * (rMax - rMin);
+    if (distribution === 'layeredDepth') {
+      const layer = i % layers;
+      const zBase = layers === 1 ? 0 : lerp(-depth * 0.5, depth * 0.5, layer / (layers - 1));
+      const z = zBase + (rng() - 0.5) * (depth / layers) * 0.75;
+      const x = (rng() - 0.5) * 2 * spread;
+      const y = (rng() - 0.5) * 2 * spread;
+      return { x, y, z, rad };
     }
-    const inst = new THREE.InstancedMesh(geometry, mat, count);
-    inst.castShadow = useShadows;
-    inst.receiveShadow = useShadows;
-    perColor.push({ idx: pi, inst, mat });
-    scene.add(inst);
+    if (distribution === 'jitteredGrid') {
+      const gx = Math.max(1, Math.round(Math.sqrt(count * (config.width / Math.max(1, config.height)))));
+      const gy = Math.max(1, Math.round(count / gx));
+      const cx = i % gx;
+      const cy = Math.floor(i / gx) % gy;
+      const cellW = (spread * 2) / gx;
+      const cellH = (spread * 2) / gy;
+      const x = -spread + (cx + 0.5) * cellW + (rng() - 0.5) * cellW * 0.85;
+      const y = -spread + (cy + 0.5) * cellH + (rng() - 0.5) * cellH * 0.85;
+      const z = (rng() - 0.5) * depth;
+      return { x, y, z, rad };
+    }
+    return { x: (rng() - 0.5) * 2 * spread, y: (rng() - 0.5) * 2 * spread, z: (rng() - 0.5) * depth, rad };
+  };
+  for (let i = 0; i < count; i++) posByIndex[i] = posForIndex(i);
+
+  // Group occurrences per palette index.
+  const occByPalette: number[][] = Array.from({ length: nColors }, () => []);
+  for (let i = 0; i < count; i++) occByPalette[indices[i]].push(i);
+
+  // Decide which occurrences receive palette overrides.
+  const applyOverrideByIndex = new Array(count).fill(false);
+  for (let pi = 0; pi < nColors; pi++) {
+    if (!hasPaletteOverride[pi]) continue;
+    const freq = overrideFrequency[pi] ?? 1;
+    const occ = occByPalette[pi] ?? [];
+    if (occ.length === 0) continue;
+
+    if (freq >= 0.999) {
+      for (const idx of occ) applyOverrideByIndex[idx] = true;
+      continue;
+    }
+
+    if (freq <= 0.000001) {
+      let best = -1;
+      let bestD = Infinity;
+      for (const idx of occ) {
+        const p = posByIndex[idx];
+        const dx = camera.position.x - p.x;
+        const dy = camera.position.y - p.y;
+        const dz = camera.position.z - p.z;
+        const d = dx * dx + dy * dy + dz * dz;
+        if (d < bestD) {
+          bestD = d;
+          best = idx;
+        }
+      }
+      if (best >= 0) applyOverrideByIndex[best] = true;
+      continue;
+    }
+
+    for (let oi = 0; oi < occ.length; oi++) {
+      const idx = occ[oi];
+      if (hash01(config.seed, pi, oi) < freq) applyOverrideByIndex[idx] = true;
+    }
   }
+
+  // Create per-palette base/override instanced meshes.
+  const baseCountByPalette = new Array(nColors).fill(0);
+  const ovCountByPalette = new Array(nColors).fill(0);
+  for (let i = 0; i < count; i++) {
+    const pi = indices[i];
+    if (applyOverrideByIndex[i]) ovCountByPalette[pi]++;
+    else baseCountByPalette[pi]++;
+  }
+
+  const paletteMeshesByPalette: THREE.InstancedMesh[][] = Array.from({ length: nColors }, () => []);
+  const paletteMaterialsByPalette: THREE.Material[][] = Array.from({ length: nColors }, () => []);
+
+  const perPalette: Array<{
+    base?: { inst: THREE.InstancedMesh; mat: THREE.Material };
+    ov?: { inst: THREE.InstancedMesh; mat: THREE.Material };
+  }> = Array.from({ length: nColors }, () => ({}));
+
+  for (let pi = 0; pi < nColors; pi++) {
+    const mk = (applyOverrides: boolean) => {
+      const mat = createSurfaceMaterial(config, pi, colors[pi], envIntensity, opacity, { applyOverrides });
+      if ('flatShading' in (mat as any)) {
+        (mat as any).flatShading = flatShading;
+        (mat as any).needsUpdate = true;
+      }
+      return mat;
+    };
+
+    if (baseCountByPalette[pi] > 0) {
+      const mat = mk(false);
+      const inst = new THREE.InstancedMesh(geometry, mat, baseCountByPalette[pi]);
+      inst.count = baseCountByPalette[pi];
+      inst.castShadow = useShadows;
+      inst.receiveShadow = useShadows;
+      perPalette[pi].base = { inst, mat };
+      paletteMeshesByPalette[pi].push(inst);
+      paletteMaterialsByPalette[pi].push(mat);
+      scene.add(inst);
+    }
+    if (ovCountByPalette[pi] > 0) {
+      const mat = mk(true);
+      const inst = new THREE.InstancedMesh(geometry, mat, ovCountByPalette[pi]);
+      inst.count = ovCountByPalette[pi];
+      inst.castShadow = useShadows;
+      inst.receiveShadow = useShadows;
+      perPalette[pi].ov = { inst, mat };
+      paletteMeshesByPalette[pi].push(inst);
+      paletteMaterialsByPalette[pi].push(mat);
+      scene.add(inst);
+    }
+  }
+
+  // Fill instance matrices.
+  const tmpMat = new THREE.Matrix4();
+  const tmpPos = new THREE.Vector3();
+  const tmpQuat = new THREE.Quaternion();
+  const tmpScale = new THREE.Vector3();
+
+  // Used to filter interior surfaces so they only appear when intersecting a sphere volume.
+  const spheresForInterior: Array<{ x: number; y: number; z: number; r: number }> = new Array(count);
+
+  const baseCursor = new Array(nColors).fill(0);
+  const ovCursor = new Array(nColors).fill(0);
+
+  for (let i = 0; i < count; i++) {
+    const pi = indices[i];
+    const applyOv = !!applyOverrideByIndex[i];
+    const bucket = applyOv ? perPalette[pi].ov : perPalette[pi].base;
+    if (!bucket) continue;
+    const slot = applyOv ? ovCursor[pi]++ : baseCursor[pi]++;
+
+    const p = posByIndex[i];
+    tmpPos.set(p.x, p.y, p.z);
+    tmpQuat.identity();
+    const rm = applyOv ? (radiusMultOvByIndex[pi] ?? 1) : (radiusMultBaseByIndex[pi] ?? 1);
+    tmpScale.setScalar(p.rad * rm);
+    tmpMat.compose(tmpPos, tmpQuat, tmpScale);
+    bucket.inst.setMatrixAt(slot, tmpMat);
+
+    spheresForInterior[i] = { x: p.x, y: p.y, z: p.z, r: p.rad * rm };
+  }
+
+  for (let pi = 0; pi < nColors; pi++) {
+    for (const b of [perPalette[pi].base, perPalette[pi].ov]) {
+      if (!b) continue;
+      b.inst.instanceMatrix.needsUpdate = true;
+      b.inst.computeBoundingBox();
+      b.inst.computeBoundingSphere();
+    }
+  }
+
+  // Optional groups created later (used by collision depth rendering).
+  let outlineGroup: THREE.Group | null = null;
+  let interiorWallsGroup: THREE.Group | null = null;
 
   // Palette-group collision masking (3D): build per-group depth textures and apply shader alpha/discard.
   if (config.collisions.mode === 'carve' && nColors <= 8) {
@@ -424,22 +600,24 @@ export function createSpheres3DScene(
 
       otherIndicesByPalette[pi] = others.slice(0, 7);
 
-      const otherDepth = otherIndicesByPalette[pi].map((j) => depthRTs[j].depthTexture);
-      const mat = perColor[pi].mat;
+      const idxs = otherIndicesByPalette[pi];
+      const otherDepth = idxs.map((j) => depthRTs[j].depthTexture);
+      const matsForPalette = paletteMaterialsByPalette[pi] ?? [];
 
       const finishEnabled = config.collisions.mode === 'carve' && config.collisions.carve.finish === 'wallsCap' ? 1 : 0;
       const finishDepthPx =
         (Math.max(0, Number(config.collisions.carve.marginPx) || 0) +
           (config.collisions.carve.edge === 'soft' ? Math.max(0, Number(config.collisions.carve.featherPx) || 0) : 0)) *
         Math.max(0, Number(config.collisions.carve.finishAutoDepthMult) || 0);
-      if (softEdge) {
-        mat.transparent = true;
-        mat.depthWrite = false;
-      }
+      for (const mat of matsForPalette) {
+        if (softEdge) {
+          mat.transparent = true;
+          mat.depthWrite = false;
+        }
 
-      chainOnBeforeCompile(
-        mat,
-        (shader) => {
+        chainOnBeforeCompile(
+          mat,
+          (shader) => {
           shader.uniforms.wmCollideRes = { value: new THREE.Vector2(screenW, screenH) };
           shader.uniforms.wmCollideMarginPx = { value: marginPx };
           shader.uniforms.wmCollideFeatherPx = { value: featherPx };
@@ -566,12 +744,13 @@ void wmApplyCollisionMask(inout vec4 col) {
           }
           fs = fs.replace('#include <dithering_fragment>', `wmApplyCollisionMask(gl_FragColor);\n#include <dithering_fragment>`);
           shader.fragmentShader = fs;
-        },
-        `collide-v1:${config.collisions.carve.direction}:${config.collisions.carve.edge}:${marginPx.toFixed(2)}:${featherPx.toFixed(2)}:${otherDepth.length}`
-      );
+          },
+          `collide-v1:${config.collisions.carve.direction}:${config.collisions.carve.edge}:${marginPx.toFixed(2)}:${featherPx.toFixed(2)}:${otherDepth.length}`
+        );
+      }
     }
 
-    const paletteMeshes = perColor.map((p) => p.inst);
+    const paletteMeshes = paletteMeshesByPalette.flat();
     (scene.userData as any).__wmBeforeRender = (r: THREE.WebGLRenderer, s: THREE.Scene, camera: THREE.Camera) => {
       const sz = new THREE.Vector2();
       r.getDrawingBufferSize(sz);
@@ -587,29 +766,30 @@ void wmApplyCollisionMask(inout vec4 col) {
         depthRTs = Array.from({ length: nColors }, () => makeRT());
 
         for (let pi = 0; pi < nColors; pi++) {
-          const mat = perColor[pi].mat;
-          const shader = (mat.userData as any).__wmCollisionShader;
-          if (!shader) continue;
-          shader.uniforms.wmCollideRes.value.set(nextScreenW, nextScreenH);
-
           const idxs = otherIndicesByPalette[pi] ?? [];
-          shader.uniforms.wmOtherDepthCount.value = idxs.length;
-          shader.uniforms.wmOtherDepth0.value = (depthRTs[idxs[0]]?.depthTexture as any) ?? dummy;
-          shader.uniforms.wmOtherDepth1.value = (depthRTs[idxs[1]]?.depthTexture as any) ?? dummy;
-          shader.uniforms.wmOtherDepth2.value = (depthRTs[idxs[2]]?.depthTexture as any) ?? dummy;
-          shader.uniforms.wmOtherDepth3.value = (depthRTs[idxs[3]]?.depthTexture as any) ?? dummy;
-          shader.uniforms.wmOtherDepth4.value = (depthRTs[idxs[4]]?.depthTexture as any) ?? dummy;
-          shader.uniforms.wmOtherDepth5.value = (depthRTs[idxs[5]]?.depthTexture as any) ?? dummy;
-          shader.uniforms.wmOtherDepth6.value = (depthRTs[idxs[6]]?.depthTexture as any) ?? dummy;
+          for (const mat of paletteMaterialsByPalette[pi] ?? []) {
+            const shader = (mat.userData as any).__wmCollisionShader;
+            if (!shader) continue;
+            shader.uniforms.wmCollideRes.value.set(nextScreenW, nextScreenH);
+            shader.uniforms.wmOtherDepthCount.value = idxs.length;
+            shader.uniforms.wmOtherDepth0.value = (depthRTs[idxs[0]]?.depthTexture as any) ?? dummy;
+            shader.uniforms.wmOtherDepth1.value = (depthRTs[idxs[1]]?.depthTexture as any) ?? dummy;
+            shader.uniforms.wmOtherDepth2.value = (depthRTs[idxs[2]]?.depthTexture as any) ?? dummy;
+            shader.uniforms.wmOtherDepth3.value = (depthRTs[idxs[3]]?.depthTexture as any) ?? dummy;
+            shader.uniforms.wmOtherDepth4.value = (depthRTs[idxs[4]]?.depthTexture as any) ?? dummy;
+            shader.uniforms.wmOtherDepth5.value = (depthRTs[idxs[5]]?.depthTexture as any) ?? dummy;
+            shader.uniforms.wmOtherDepth6.value = (depthRTs[idxs[6]]?.depthTexture as any) ?? dummy;
+          }
         }
       }
 
       // Update uniforms that might be tied to size.
       for (let pi = 0; pi < nColors; pi++) {
-        const mat = perColor[pi].mat;
-        const shader = (mat.userData as any).__wmCollisionShader;
-        if (!shader) continue;
-        shader.uniforms.wmCollideRes.value.set(nextScreenW, nextScreenH);
+        for (const mat of paletteMaterialsByPalette[pi] ?? []) {
+          const shader = (mat.userData as any).__wmCollisionShader;
+          if (!shader) continue;
+          shader.uniforms.wmCollideRes.value.set(nextScreenW, nextScreenH);
+        }
       }
 
       screenW = nextScreenW;
@@ -621,16 +801,25 @@ void wmApplyCollisionMask(inout vec4 col) {
       const clearCol = r.getClearColor(new THREE.Color());
       const clearA = r.getClearAlpha();
 
+      const outlineVis = outlineGroup ? outlineGroup.visible : true;
+      const interiorVis = interiorWallsGroup ? interiorWallsGroup.visible : true;
+
       r.setClearColor(0x000000, 0);
       (s as any).overrideMaterial = depthMat;
+      if (outlineGroup) outlineGroup.visible = false;
+      if (interiorWallsGroup) interiorWallsGroup.visible = false;
+
       for (let i = 0; i < nColors; i++) {
-        for (let j = 0; j < nColors; j++) paletteMeshes[j].visible = j === i;
+        for (const m of paletteMeshes) m.visible = false;
+        for (const m of paletteMeshesByPalette[i] ?? []) m.visible = true;
         r.setRenderTarget(depthRTs[i]);
         r.clear(true, true, false);
         r.render(s, camera);
       }
       (s as any).overrideMaterial = prevOverride;
-      for (let j = 0; j < nColors; j++) paletteMeshes[j].visible = vis[j];
+      if (outlineGroup) outlineGroup.visible = outlineVis;
+      if (interiorWallsGroup) interiorWallsGroup.visible = interiorVis;
+      for (let j = 0; j < paletteMeshes.length; j++) paletteMeshes[j].visible = vis[j];
       r.setRenderTarget(prevTarget);
       r.setClearColor(clearCol, clearA);
     };
@@ -647,85 +836,17 @@ void wmApplyCollisionMask(inout vec4 col) {
     };
   }
 
-  // Bucket instances by palette index.
-  const indices: number[] = [];
-  for (let i = 0; i < count; i++) indices.push(pickIndex(config.spheres.paletteMode, i, rng, w, nColors));
-  const buckets = Array.from({ length: nColors }, () => [] as number[]);
-  for (let i = 0; i < indices.length; i++) buckets[indices[i]].push(i);
-
-  for (let pi = 0; pi < nColors; pi++) {
-    const inst = perColor[pi].inst;
-    inst.count = buckets[pi].length;
-  }
-
-  // Compute positions.
-  const tmpMat = new THREE.Matrix4();
-  const tmpPos = new THREE.Vector3();
-  const tmpQuat = new THREE.Quaternion();
-  const tmpScale = new THREE.Vector3();
-
-  // Used to filter interior surfaces so they only appear when intersecting a sphere volume.
-  const spheresForInterior: Array<{ x: number; y: number; z: number; r: number }> = new Array(count);
-
-  const distribution = config.spheres.distribution;
-  const layers = Math.max(1, Math.round(config.spheres.layers));
-
-  const posForIndex = (i: number): { x: number; y: number; z: number; rad: number } => {
-    const rad = rMin + rng() * (rMax - rMin);
-    if (distribution === 'layeredDepth') {
-      const layer = i % layers;
-      const zBase = layers === 1 ? 0 : lerp(-depth * 0.5, depth * 0.5, layer / (layers - 1));
-      const z = zBase + (rng() - 0.5) * (depth / layers) * 0.75;
-      const x = (rng() - 0.5) * 2 * spread;
-      const y = (rng() - 0.5) * 2 * spread;
-      return { x, y, z, rad };
-    }
-    if (distribution === 'jitteredGrid') {
-      const gx = Math.max(1, Math.round(Math.sqrt(count * (config.width / Math.max(1, config.height)))));
-      const gy = Math.max(1, Math.round(count / gx));
-      const cx = i % gx;
-      const cy = Math.floor(i / gx) % gy;
-      const cellW = (spread * 2) / gx;
-      const cellH = (spread * 2) / gy;
-      const x = -spread + (cx + 0.5) * cellW + (rng() - 0.5) * cellW * 0.85;
-      const y = -spread + (cy + 0.5) * cellH + (rng() - 0.5) * cellH * 0.85;
-      const z = (rng() - 0.5) * depth;
-      return { x, y, z, rad };
-    }
-    // scatter
-    return { x: (rng() - 0.5) * 2 * spread, y: (rng() - 0.5) * 2 * spread, z: (rng() - 0.5) * depth, rad };
-  };
-
-  const perColorCursor = new Array(nColors).fill(0);
-  for (let i = 0; i < count; i++) {
-    const pi = indices[i];
-    const slot = perColorCursor[pi]++;
-    const p = posForIndex(i);
-    tmpPos.set(p.x, p.y, p.z);
-    tmpQuat.identity();
-    const rm = radiusMultByIndex[pi] ?? 1;
-    tmpScale.setScalar(p.rad * rm);
-    tmpMat.compose(tmpPos, tmpQuat, tmpScale);
-    perColor[pi].inst.setMatrixAt(slot, tmpMat);
-
-    spheresForInterior[i] = { x: p.x, y: p.y, z: p.z, r: p.rad * rm };
-  }
-  for (let pi = 0; pi < nColors; pi++) {
-    perColor[pi].inst.instanceMatrix.needsUpdate = true;
-    perColor[pi].inst.computeBoundingBox();
-    perColor[pi].inst.computeBoundingSphere();
-  }
-
-  // Outline (optional): per-palette overrides are supported.
+  // Outline (optional): per-bucket overrides are supported via frequency selection.
   {
+    outlineGroup = new THREE.Group();
     const outlineMats = new Map<string, THREE.MeshBasicMaterial>();
-    for (let pi = 0; pi < nColors; pi++) {
-      const oc = resolvePaletteConfig(config, pi).facades.outline;
-      if (!oc?.enabled) continue;
 
+    const addBucketOutline = (bucket: { inst: THREE.InstancedMesh } | undefined, oc: any) => {
+      if (!bucket) return;
+      if (!oc?.enabled) return;
       const opacity = clamp(Number(oc.opacity) || 1, 0, 1);
       const thickness = Math.max(0, Math.min(0.2, Number(oc.thickness) || 0));
-      if (!(thickness > 0)) continue;
+      if (!(thickness > 0) || opacity <= 0) return;
 
       const matKey = `${String(oc.color)}:${opacity.toFixed(4)}`;
       let outlineMat = outlineMats.get(matKey);
@@ -740,19 +861,31 @@ void wmApplyCollisionMask(inout vec4 col) {
         outlineMats.set(matKey, outlineMat);
       }
 
-      const baseInst = perColor[pi].inst;
+      const baseInst = bucket.inst;
       const outInst = new THREE.InstancedMesh(geometry, outlineMat, baseInst.count);
       outInst.castShadow = false;
       outInst.receiveShadow = false;
+      const s = new THREE.Vector3(1 + thickness, 1 + thickness, 1 + thickness);
       for (let j = 0; j < baseInst.count; j++) {
         baseInst.getMatrixAt(j, tmpMat);
-        tmpMat.scale(new THREE.Vector3(1 + thickness, 1 + thickness, 1 + thickness));
+        tmpMat.scale(s);
         outInst.setMatrixAt(j, tmpMat);
       }
       outInst.instanceMatrix.needsUpdate = true;
       outInst.computeBoundingBox();
       outInst.computeBoundingSphere();
-      scene.add(outInst);
+      outlineGroup!.add(outInst);
+    };
+
+    for (let pi = 0; pi < nColors; pi++) {
+      addBucketOutline(perPalette[pi].base, resolvedBaseByPalette[pi].facades.outline);
+      addBucketOutline(perPalette[pi].ov, resolvedOvByPalette[pi].facades.outline);
+    }
+
+    if (outlineGroup.children.length > 0) {
+      scene.add(outlineGroup);
+    } else {
+      outlineGroup = null;
     }
   }
 
@@ -789,7 +922,10 @@ void wmApplyCollisionMask(inout vec4 col) {
           tintStrength: 0.35,
           opacity: 0.92
         });
-        if (walls) scene.add(walls);
+        if (walls) {
+          interiorWallsGroup = walls;
+          scene.add(walls);
+        }
       }
     }
   }
