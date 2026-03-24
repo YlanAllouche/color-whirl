@@ -16,6 +16,13 @@ function clamp(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, n));
 }
 
+function hash01(seed: number, a: number, b: number): number {
+  let x = (Number(seed) >>> 0) ^ (Math.imul(a | 0, 374761393) >>> 0) ^ (Math.imul(b | 0, 668265263) >>> 0);
+  x = Math.imul(x ^ (x >>> 13), 1274126177);
+  x = (x ^ (x >>> 16)) >>> 0;
+  return x / 4294967296;
+}
+
 function getStickDimensions(
   canvasWidth: number,
   canvasHeight: number,
@@ -451,23 +458,68 @@ export function createPopsicleScene(
   
   const nColors = Math.max(1, colors.length);
 
-  const stickDimensionsByPalette: StickDimensions[] = new Array(nColors);
-  const geometryByPalette: THREE.BufferGeometry[] = new Array(nColors);
+  const paletteOverrides: any[] = Array.isArray((config as any).palette?.overrides) ? (config as any).palette.overrides : [];
+  const hasPaletteOverride = new Array(nColors).fill(false);
+  const overrideFrequency = new Array(nColors).fill(1);
+  for (let pi = 0; pi < nColors; pi++) {
+    const ov = paletteOverrides[pi];
+    if (!ov || typeof ov !== 'object' || Array.isArray(ov)) continue;
+    if (!(typeof ov.enabled === 'boolean' ? ov.enabled : !!ov.enabled)) continue;
+    hasPaletteOverride[pi] = true;
+    overrideFrequency[pi] = clamp(Number(ov.frequency ?? 1), 0, 1);
+  }
+
+  const resolvedBaseByPalette = new Array(nColors);
+  const resolvedOvByPalette = new Array(nColors);
+
+  const stickDimensionsByPaletteBase: StickDimensions[] = new Array(nColors);
+  const stickDimensionsByPaletteOv: StickDimensions[] = new Array(nColors);
+  const geometryByPaletteBase: THREE.BufferGeometry[] = new Array(nColors);
+  const geometryByPaletteOv: THREE.BufferGeometry[] = new Array(nColors);
 
   for (let pi = 0; pi < nColors; pi++) {
-    const mult = resolvePaletteConfig(config, pi).multipliers.popsicle;
-    const stickDimensions = getStickDimensions(
+    const baseResolved = resolvePaletteConfig(config, pi, { applyOverrides: false });
+    const ovResolved = resolvePaletteConfig(config, pi, { applyOverrides: true });
+    resolvedBaseByPalette[pi] = baseResolved;
+    resolvedOvByPalette[pi] = ovResolved;
+
+    const multBase = baseResolved.multipliers.popsicle;
+    const multOv = ovResolved.multipliers.popsicle;
+
+    const dimsBase = getStickDimensions(
       width,
       height,
-      stickThickness * (mult.thicknessMult ?? 1),
-      stickSize * (mult.sizeMult ?? 1),
-      stickRatio * (mult.ratioMult ?? 1)
+      stickThickness * (multBase.thicknessMult ?? 1),
+      stickSize * (multBase.sizeMult ?? 1),
+      stickRatio * (multBase.ratioMult ?? 1)
     );
-    stickDimensionsByPalette[pi] = stickDimensions;
-    geometryByPalette[pi] = createRoundedBox(
-      stickDimensions.width,
-      stickDimensions.height,
-      stickDimensions.depth,
+    const dimsOv = getStickDimensions(
+      width,
+      height,
+      stickThickness * (multOv.thicknessMult ?? 1),
+      stickSize * (multOv.sizeMult ?? 1),
+      stickRatio * (multOv.ratioMult ?? 1)
+    );
+
+    stickDimensionsByPaletteBase[pi] = dimsBase;
+    stickDimensionsByPaletteOv[pi] = dimsOv;
+
+    geometryByPaletteBase[pi] = createRoundedBox(
+      dimsBase.width,
+      dimsBase.height,
+      dimsBase.depth,
+      config.stickEndProfile,
+      stickRoundness,
+      config.stickChipAmount,
+      config.stickChipJaggedness,
+      stickBevel,
+      geometry?.quality ?? 0.6,
+      config.seed
+    );
+    geometryByPaletteOv[pi] = createRoundedBox(
+      dimsOv.width,
+      dimsOv.height,
+      dimsOv.depth,
       config.stickEndProfile,
       stickRoundness,
       config.stickChipAmount,
@@ -484,10 +536,11 @@ export function createPopsicleScene(
   const group = new THREE.Group();
   const materialCache = new Map<string, THREE.Material | THREE.Material[]>();
   const materialParamsKey = JSON.stringify({ t: config.textureParams, f: config.facades, ed: config.edge, b: (config as any).bubbles, em: config.emission, p: (config as any).palette });
-  const getMat = (paletteIndex: number, hex: string, stickDimensions: StickDimensions) => {
+  const getMat = (paletteIndex: number, hex: string, stickDimensions: StickDimensions, applyOverrides: boolean) => {
     const key = [
       texture,
       materialParamsKey,
+      applyOverrides ? 'ov1' : 'ov0',
       String(paletteIndex),
       hex,
       stickDimensions.width.toFixed(4),
@@ -499,12 +552,68 @@ export function createPopsicleScene(
     ].join(':');
     const existing = materialCache.get(key);
     if (existing) return existing;
-    const m = createStickMeshMaterial(config, paletteIndex, hex, envIntensity, safeStickOpacity, stickDimensions);
+    const m = createStickMeshMaterial(config, paletteIndex, hex, envIntensity, safeStickOpacity, stickDimensions, { applyOverrides });
     materialCache.set(key, m);
     return m;
   };
 
   const baseMeshesByPalette: THREE.Mesh[][] = Array.from({ length: nColors }, () => []);
+
+  const sticksByPalette: number[][] = Array.from({ length: nColors }, () => []);
+  for (let i = 0; i < stickCount; i++) sticksByPalette[((i % nColors) + nColors) % nColors].push(i);
+
+  const approxPos: Array<THREE.Vector3> = new Array(stickCount);
+  {
+    const safeStickGap = Number.isFinite(Number(stickGap)) ? Number(stickGap) : 0;
+    let zCursor = 0;
+    let prevDepth = 0;
+    for (let i = 0; i < stickCount; i++) {
+      const paletteIndex = ((i % nColors) + nColors) % nColors;
+      const dims = stickDimensionsByPaletteBase[paletteIndex];
+      if (i === 0) zCursor = 0;
+      else zCursor += prevDepth * 0.5 + dims.depth * 0.5 + safeStickGap;
+      prevDepth = dims.depth;
+      const o = getStackingOffset(i, dims, stickOverhang, rotationCenterOffsetX, rotationCenterOffsetY, zCursor);
+      approxPos[i] = new THREE.Vector3(o.x, o.y, o.z);
+    }
+  }
+
+  const closestStickByPalette = new Array(nColors).fill(-1);
+  for (let pi = 0; pi < nColors; pi++) {
+    if (!hasPaletteOverride[pi]) continue;
+    if ((overrideFrequency[pi] ?? 1) > 0) continue;
+    let best = -1;
+    let bestD = Infinity;
+    for (const idx of sticksByPalette[pi]) {
+      const p = approxPos[idx];
+      const d = camera.position.distanceToSquared(p);
+      if (d < bestD) {
+        bestD = d;
+        best = idx;
+      }
+    }
+    closestStickByPalette[pi] = best;
+  }
+
+  const applyOverrideByStick = new Array(stickCount).fill(false);
+  for (let pi = 0; pi < nColors; pi++) {
+    if (!hasPaletteOverride[pi]) continue;
+    const freq = overrideFrequency[pi] ?? 1;
+    if (freq >= 0.999) {
+      for (const idx of sticksByPalette[pi]) applyOverrideByStick[idx] = true;
+      continue;
+    }
+    if (freq <= 0.000001) {
+      const idx = closestStickByPalette[pi];
+      if (idx >= 0) applyOverrideByStick[idx] = true;
+      continue;
+    }
+    const occ = sticksByPalette[pi] ?? [];
+    for (let oi = 0; oi < occ.length; oi++) {
+      const idx = occ[oi];
+      if (hash01(config.seed, pi, oi) < freq) applyOverrideByStick[idx] = true;
+    }
+  }
 
   const safeStickGap = Number.isFinite(Number(stickGap)) ? Number(stickGap) : 0;
   let zCursor = 0;
@@ -512,10 +621,13 @@ export function createPopsicleScene(
 
   for (let i = 0; i < stickCount; i++) {
     const paletteIndex = ((i % nColors) + nColors) % nColors;
+    const applyOverrides = !!applyOverrideByStick[i];
     const hex = colors[paletteIndex] ?? '#ffffff';
-    const stickDimensions = stickDimensionsByPalette[paletteIndex];
-    const mesh = new THREE.Mesh(geometryByPalette[paletteIndex], getMat(paletteIndex, hex, stickDimensions));
+    const stickDimensions = applyOverrides ? stickDimensionsByPaletteOv[paletteIndex] : stickDimensionsByPaletteBase[paletteIndex];
+    const geo = applyOverrides ? geometryByPaletteOv[paletteIndex] : geometryByPaletteBase[paletteIndex];
+    const mesh = new THREE.Mesh(geo, getMat(paletteIndex, hex, stickDimensions, applyOverrides));
     (mesh.userData as any).__wmPaletteIndex = paletteIndex;
+    (mesh.userData as any).__wmApplyOverrides = applyOverrides;
     mesh.castShadow = useShadows;
     mesh.receiveShadow = useShadows;
 
@@ -540,28 +652,29 @@ export function createPopsicleScene(
     const outlineMats = new Map<string, THREE.MeshBasicMaterial>();
 
     for (let pi = 0; pi < nColors; pi++) {
-      const resolved = resolvePaletteConfig(config, pi);
-      const oc = resolved.facades.outline;
-      if (!oc?.enabled) continue;
-
-      const opacity = clamp(Number(oc.opacity) || 1, 0, 1);
-      const thickness = Math.max(0, Math.min(0.2, Number(oc.thickness) || 0));
-      if (!(thickness > 0)) continue;
-
-      const matKey = `${String(oc.color)}:${opacity.toFixed(4)}`;
-      let outlineMat = outlineMats.get(matKey);
-      if (!outlineMat) {
-        outlineMat = new THREE.MeshBasicMaterial({
-          color: new THREE.Color(oc.color),
-          side: THREE.BackSide,
-          transparent: opacity < 1,
-          opacity,
-          depthWrite: false
-        });
-        outlineMats.set(matKey, outlineMat);
-      }
-
       for (const mesh of baseMeshesByPalette[pi] ?? []) {
+        const applyOverrides = !!(mesh.userData as any).__wmApplyOverrides;
+        const resolved = resolvePaletteConfig(config, pi, { applyOverrides });
+        const oc = resolved.facades.outline;
+        if (!oc?.enabled) continue;
+
+        const opacity = clamp(Number(oc.opacity) || 1, 0, 1);
+        const thickness = Math.max(0, Math.min(0.2, Number(oc.thickness) || 0));
+        if (!(thickness > 0) || opacity <= 0) continue;
+
+        const matKey = `${String(oc.color)}:${opacity.toFixed(4)}`;
+        let outlineMat = outlineMats.get(matKey);
+        if (!outlineMat) {
+          outlineMat = new THREE.MeshBasicMaterial({
+            color: new THREE.Color(oc.color),
+            side: THREE.BackSide,
+            transparent: opacity < 1,
+            opacity,
+            depthWrite: false
+          });
+          outlineMats.set(matKey, outlineMat);
+        }
+
         const o = new THREE.Mesh(mesh.geometry, outlineMat);
         o.position.copy(mesh.position);
         o.rotation.copy(mesh.rotation);
