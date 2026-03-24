@@ -1,6 +1,7 @@
 export * from './types.js';
 export * from './state.js';
 export * from './materials.js';
+export * from './palette.js';
 export * from './bubbles.js';
 export * from './generators/index.js';
 export * from './generators/popsicle.js';

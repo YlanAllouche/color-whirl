@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
-import { createStickMeshMaterial } from '@wallpaper-maker/core';
+import { createStickMeshMaterial, resolvePaletteConfig } from '@wallpaper-maker/core';
 import type { WallpaperConfig, EnvironmentStyle, ShadowType, TextureType } from '@wallpaper-maker/core';
 
 type PopsicleConfig = Extract<WallpaperConfig, { type: 'popsicle' }>;
@@ -26,6 +26,13 @@ function clampMult(raw: unknown, min: number = 0.25, max: number = 4): number {
   const v = Number(raw);
   if (!Number.isFinite(v)) return 1;
   return clamp(v, min, max);
+}
+
+function hash01(seed: number, a: number, b: number): number {
+  let x = (Number(seed) >>> 0) ^ (Math.imul(a | 0, 374761393) >>> 0) ^ (Math.imul(b | 0, 668265263) >>> 0);
+  x = Math.imul(x ^ (x >>> 13), 1274126177);
+  x = (x ^ (x >>> 16)) >>> 0;
+  return x / 4294967296;
 }
 
 function getEnabledPaletteOverride(config: PopsicleConfig, paletteIndex: number): any | null {
@@ -386,9 +393,10 @@ function createMaterialForColor(
   color: string,
   envIntensity: number,
   stickOpacity: number,
-  stickDimensions?: { width: number; height: number; depth: number }
+  stickDimensions?: { width: number; height: number; depth: number },
+  options?: { applyOverrides?: boolean }
 ): THREE.Material | THREE.Material[] {
-  return createStickMeshMaterial(config, paletteIndex, color, envIntensity, stickOpacity, stickDimensions);
+  return createStickMeshMaterial(config, paletteIndex, color, envIntensity, stickOpacity, stickDimensions, options);
 }
 
 function createProceduralEquirectDataTexture(style: EnvironmentStyle): THREE.DataTexture {
@@ -832,8 +840,32 @@ export class PopsiclePreview {
     const safeStickOpacity = clamp(Number.isFinite(Number(effective.stickOpacity)) ? Number(effective.stickOpacity) : 1.0, 0, 1);
 
     const nColors = Math.max(1, effective.colors.length);
-    const stickDimensionsByPalette = Array.from({ length: nColors }, (_, pi) => {
-      const mult = getPopsicleGeometryMultipliers(effective, pi);
+
+    const getOv = (paletteIndex: number) => getEnabledPaletteOverride(effective, paletteIndex);
+    const hasOvByPalette = new Array(nColors).fill(false);
+    const freqByPalette = new Array(nColors).fill(1);
+    for (let pi = 0; pi < nColors; pi++) {
+      const ov = getOv(pi);
+      if (!ov) continue;
+      hasOvByPalette[pi] = true;
+      freqByPalette[pi] = clamp(Number(ov.frequency ?? 1), 0, 1);
+    }
+
+    const resolvedBase = Array.from({ length: nColors }, (_, pi) => resolvePaletteConfig(effective, pi, { applyOverrides: false }));
+    const resolvedOv = Array.from({ length: nColors }, (_, pi) => resolvePaletteConfig(effective, pi, { applyOverrides: true }));
+
+    const dimsBaseByPalette = Array.from({ length: nColors }, (_, pi) => {
+      const mult = resolvedBase[pi].multipliers.popsicle;
+      return getStickDimensions(
+        effective.width,
+        effective.height,
+        effective.stickThickness * mult.thicknessMult,
+        effective.stickSize * mult.sizeMult,
+        effective.stickRatio * mult.ratioMult
+      );
+    });
+    const dimsOvByPalette = Array.from({ length: nColors }, (_, pi) => {
+      const mult = resolvedOv[pi].multipliers.popsicle;
       return getStickDimensions(
         effective.width,
         effective.height,
@@ -843,18 +875,30 @@ export class PopsiclePreview {
       );
     });
 
-    const outlineScaleForBounds = effective.facades.outline.enabled
-      ? 1 + Math.max(0, Math.min(0.2, Number(effective.facades.outline.thickness) || 0))
-      : 1;
+    const dimsForBoundsByPalette = Array.from({ length: nColors }, (_, pi) => ({
+      width: Math.max(dimsBaseByPalette[pi].width, dimsOvByPalette[pi].width),
+      height: Math.max(dimsBaseByPalette[pi].height, dimsOvByPalette[pi].height),
+      depth: Math.max(dimsBaseByPalette[pi].depth, dimsOvByPalette[pi].depth)
+    }));
+
+    let maxOutlineThickness = 0;
+    for (let pi = 0; pi < nColors; pi++) {
+      for (const st of [resolvedBase[pi], resolvedOv[pi]]) {
+        const oc = st.facades.outline;
+        if (!oc?.enabled) continue;
+        const thickness = Math.max(0, Math.min(0.2, Number(oc.thickness) || 0));
+        if (thickness > maxOutlineThickness) maxOutlineThickness = thickness;
+      }
+    }
 
     const bounds = computeBoundsPerStick({
       stickCount: effective.stickCount,
-      getStickDimensions: (i) => stickDimensionsByPalette[((i % nColors) + nColors) % nColors],
+      getStickDimensions: (i) => dimsForBoundsByPalette[((i % nColors) + nColors) % nColors],
       stickOverhang: effective.stickOverhang,
       rotationCenterOffsetX: effective.rotationCenterOffsetX,
       rotationCenterOffsetY: effective.rotationCenterOffsetY,
       stickGap: effective.stickGap,
-      outlineScale: outlineScaleForBounds
+      outlineScale: 1 + maxOutlineThickness
     });
 
     // Auto-fit camera before placing meshes (bounds are centered at origin by construction).
@@ -865,42 +909,48 @@ export class PopsiclePreview {
       // Ignore.
     }
 
-    const geometriesByPalette: THREE.BufferGeometry[] = new Array(nColors);
+    const geometriesByPalette: Array<{ base: THREE.BufferGeometry; ov: THREE.BufferGeometry }> = new Array(nColors);
     const usedGeoKeys = new Set<string>();
 
     for (let pi = 0; pi < nColors; pi++) {
-      const dims = stickDimensionsByPalette[pi];
-      const geoKey = [
-        dims.width.toFixed(4),
-        dims.height.toFixed(4),
-        dims.depth.toFixed(4),
-        String(effective.stickEndProfile),
-        effective.stickRoundness.toFixed(4),
-        effective.stickChipAmount.toFixed(4),
-        effective.stickChipJaggedness.toFixed(4),
-        effective.stickBevel.toFixed(4),
-        effective.geometry.quality.toFixed(3),
-        String(effective.seed)
-      ].join(':');
+      const makeGeo = (dims: { width: number; height: number; depth: number }) => {
+        const geoKey = [
+          dims.width.toFixed(4),
+          dims.height.toFixed(4),
+          dims.depth.toFixed(4),
+          String(effective.stickEndProfile),
+          effective.stickRoundness.toFixed(4),
+          effective.stickChipAmount.toFixed(4),
+          effective.stickChipJaggedness.toFixed(4),
+          effective.stickBevel.toFixed(4),
+          effective.geometry.quality.toFixed(3),
+          String(effective.seed)
+        ].join(':');
 
-      usedGeoKeys.add(geoKey);
-      let geo = this.stickGeometryCache.get(geoKey);
-      if (!geo) {
-        geo = createRoundedBox(
-          dims.width,
-          dims.height,
-          dims.depth,
-          effective.stickEndProfile,
-          effective.stickRoundness,
-          effective.stickChipAmount,
-          effective.stickChipJaggedness,
-          effective.stickBevel,
-          effective.geometry.quality,
-          effective.seed
-        );
-        this.stickGeometryCache.set(geoKey, geo);
-      }
-      geometriesByPalette[pi] = geo;
+        usedGeoKeys.add(geoKey);
+        let geo = this.stickGeometryCache.get(geoKey);
+        if (!geo) {
+          geo = createRoundedBox(
+            dims.width,
+            dims.height,
+            dims.depth,
+            effective.stickEndProfile,
+            effective.stickRoundness,
+            effective.stickChipAmount,
+            effective.stickChipJaggedness,
+            effective.stickBevel,
+            effective.geometry.quality,
+            effective.seed
+          );
+          this.stickGeometryCache.set(geoKey, geo);
+        }
+        return geo;
+      };
+
+      geometriesByPalette[pi] = {
+        base: makeGeo(dimsBaseByPalette[pi]),
+        ov: makeGeo(dimsOvByPalette[pi])
+      };
     }
 
     for (const [k, g] of this.stickGeometryCache.entries()) {
@@ -914,6 +964,7 @@ export class PopsiclePreview {
     const edgeKey = JSON.stringify(effective.edge);
     const emissionKey = JSON.stringify(effective.emission);
     const bubblesKey = JSON.stringify((effective as any).bubbles ?? null);
+    const paletteOverridesKey = JSON.stringify((effective as any).palette?.overrides ?? []);
     const matBaseKey = [
       effective.texture,
       textureParamsKey(effective),
@@ -921,13 +972,20 @@ export class PopsiclePreview {
       edgeKey,
       emissionKey,
       bubblesKey,
+      paletteOverridesKey,
       envIntensity.toFixed(3),
       safeStickOpacity.toFixed(3),
       String(effective.seed)
     ].join(':');
-    const getMaterial = (paletteIndex: number, hex: string, stickDimensions: { width: number; height: number; depth: number }) => {
+    const getMaterial = (
+      paletteIndex: number,
+      hex: string,
+      stickDimensions: { width: number; height: number; depth: number },
+      applyOverrides: boolean
+    ) => {
       const k = [
         matBaseKey,
+        applyOverrides ? '1' : '0',
         String(paletteIndex),
         hex,
         stickDimensions.width.toFixed(4),
@@ -936,100 +994,158 @@ export class PopsiclePreview {
       ].join(':');
       const existing = this.stickMaterialCache.get(k);
       if (existing) return existing;
-      const m = createMaterialForColor(effective, paletteIndex, hex, envIntensity, safeStickOpacity, stickDimensions);
+      const m = createMaterialForColor(effective, paletteIndex, hex, envIntensity, safeStickOpacity, stickDimensions, { applyOverrides });
       this.stickMaterialCache.set(k, m);
       return m;
     };
 
     const collisionPaletteCount = Math.max(1, effective.colors.length);
     const collisionBuckets: THREE.Mesh[][] = Array.from({ length: collisionPaletteCount }, () => []);
-    const collisionPaletteMaterials: Array<THREE.Material | THREE.Material[]> = new Array(collisionPaletteCount);
+    const collisionPaletteMaterials: Array<Set<THREE.Material | THREE.Material[]>> = Array.from({ length: collisionPaletteCount }, () => new Set());
 
     // Ensure mesh pool
     while (this.stickMeshes.length < effective.stickCount) {
-      const dims0 = stickDimensionsByPalette[0];
-      const mesh = new THREE.Mesh(geometriesByPalette[0], getMaterial(0, '#ffffff', dims0));
+      const dims0 = dimsBaseByPalette[0];
+      const mesh = new THREE.Mesh(geometriesByPalette[0].base, getMaterial(0, '#ffffff', dims0, false));
       this.sticksGroup.add(mesh);
       this.stickMeshes.push(mesh);
     }
 
-    const safeStickGap = Number.isFinite(Number(effective.stickGap)) ? Number(effective.stickGap) : 0;
-    let zCursor = 0;
-    let prevDepth = 0;
+    const sticksByPalette: number[][] = Array.from({ length: nColors }, () => []);
+    const approxPos: Array<THREE.Vector3 | null> = new Array(effective.stickCount).fill(null);
 
-    for (let i = 0; i < this.stickMeshes.length; i++) {
-      const mesh = this.stickMeshes[i];
-      if (i >= effective.stickCount) {
-        mesh.visible = false;
-        continue;
+    // Pass A: approximate positions using base geometry only.
+    {
+      const safeStickGap = Number.isFinite(Number(effective.stickGap)) ? Number(effective.stickGap) : 0;
+      let zCursor = 0;
+      let prevDepth = 0;
+
+      for (let i = 0; i < effective.stickCount; i++) {
+        const paletteIndex = ((i % nColors) + nColors) % nColors;
+        sticksByPalette[paletteIndex].push(i);
+
+        const dims = dimsBaseByPalette[paletteIndex];
+        if (i === 0) {
+          zCursor = 0;
+        } else {
+          zCursor += prevDepth * 0.5 + dims.depth * 0.5 + safeStickGap;
+        }
+        prevDepth = dims.depth;
+
+        const o = getStackingOffset(
+          i,
+          dims,
+          effective.stickOverhang,
+          effective.rotationCenterOffsetX,
+          effective.rotationCenterOffsetY,
+          safeStickGap,
+          zCursor
+        );
+
+        approxPos[i] = new THREE.Vector3(o.x - bounds.center.x, o.y - bounds.center.y, o.z - bounds.center.z);
       }
-
-      mesh.visible = true;
-      const paletteIndex = ((i % nColors) + nColors) % nColors;
-      const hex = effective.colors[paletteIndex] ?? '#ffffff';
-      const dims = stickDimensionsByPalette[paletteIndex];
-      mesh.geometry = geometriesByPalette[paletteIndex];
-      mesh.material = getMaterial(paletteIndex, hex, dims);
-      collisionBuckets[paletteIndex % collisionPaletteCount].push(mesh);
-      if (!collisionPaletteMaterials[paletteIndex % collisionPaletteCount]) collisionPaletteMaterials[paletteIndex % collisionPaletteCount] = mesh.material as any;
-      mesh.castShadow = useShadows;
-      mesh.receiveShadow = useShadows;
-
-      if (i === 0) {
-        zCursor = 0;
-      } else {
-        zCursor += prevDepth * 0.5 + dims.depth * 0.5 + safeStickGap;
-      }
-      prevDepth = dims.depth;
-
-      const o = getStackingOffset(
-        i,
-        dims,
-        effective.stickOverhang,
-        effective.rotationCenterOffsetX,
-        effective.rotationCenterOffsetY,
-        safeStickGap,
-        zCursor
-      );
-
-      mesh.position.set(o.x - bounds.center.x, o.y - bounds.center.y, o.z - bounds.center.z);
-      mesh.rotation.set(0, 0, o.rotationZ);
     }
 
-    // Outline (inverted hull)
-    const outlineEnabled = effective.facades.outline.enabled;
-    this.outlineGroup.visible = outlineEnabled;
-    if (outlineEnabled) {
-      const oc = effective.facades.outline;
-      const opacity = clamp(Number(oc.opacity) || 1, 0, 1);
-      const thickness = Math.max(0, Math.min(0.2, Number(oc.thickness) || 0));
-      const colorHex = new THREE.Color(oc.color).getHex();
-
-      const needsNewMat =
-        !this.outlineMaterial ||
-        this.outlineMaterial.color.getHex() !== colorHex ||
-        this.outlineMaterial.opacity !== opacity ||
-        this.outlineMaterial.transparent !== (opacity < 1);
-
-      if (needsNewMat) {
-        this.outlineMaterial?.dispose();
-        this.outlineMaterial = new THREE.MeshBasicMaterial({
-          color: new THREE.Color(oc.color),
-          side: THREE.BackSide,
-          transparent: opacity < 1,
-          opacity,
-          depthWrite: false
-        });
+    const closestStickByPalette = new Array(nColors).fill(-1);
+    for (let pi = 0; pi < nColors; pi++) {
+      if (!hasOvByPalette[pi]) continue;
+      const freq = freqByPalette[pi] ?? 1;
+      if (freq > 0) continue;
+      let bestI = -1;
+      let bestD = Infinity;
+      for (const idx of sticksByPalette[pi]) {
+        const p = approxPos[idx];
+        if (!p) continue;
+        const d = this.camera.position.distanceToSquared(p);
+        if (d < bestD) {
+          bestD = d;
+          bestI = idx;
+        }
       }
+      closestStickByPalette[pi] = bestI;
+    }
+
+    const applyOverrideByStick = new Array(effective.stickCount).fill(false);
+    for (let pi = 0; pi < nColors; pi++) {
+      if (!hasOvByPalette[pi]) continue;
+      const freq = freqByPalette[pi] ?? 1;
+      if (freq >= 0.999) {
+        for (const idx of sticksByPalette[pi]) applyOverrideByStick[idx] = true;
+        continue;
+      }
+      if (freq <= 0.000001) {
+        const idx = closestStickByPalette[pi];
+        if (idx >= 0) applyOverrideByStick[idx] = true;
+        continue;
+      }
+      for (const idx of sticksByPalette[pi]) {
+        if (hash01(effective.seed, pi, idx) < freq) applyOverrideByStick[idx] = true;
+      }
+    }
+
+    // Pass B: assign meshes with selected overrides.
+    {
+      const safeStickGap = Number.isFinite(Number(effective.stickGap)) ? Number(effective.stickGap) : 0;
+      let zCursor = 0;
+      let prevDepth = 0;
+
+      for (let i = 0; i < this.stickMeshes.length; i++) {
+        const mesh = this.stickMeshes[i];
+        if (i >= effective.stickCount) {
+          mesh.visible = false;
+          continue;
+        }
+
+        mesh.visible = true;
+        const paletteIndex = ((i % nColors) + nColors) % nColors;
+        const applyOverrides = !!applyOverrideByStick[i];
+        const dims = applyOverrides ? dimsOvByPalette[paletteIndex] : dimsBaseByPalette[paletteIndex];
+        const geo = applyOverrides ? geometriesByPalette[paletteIndex].ov : geometriesByPalette[paletteIndex].base;
+        const hex = effective.colors[paletteIndex] ?? '#ffffff';
+
+        mesh.geometry = geo;
+        mesh.material = getMaterial(paletteIndex, hex, dims, applyOverrides);
+
+        collisionBuckets[paletteIndex % collisionPaletteCount].push(mesh);
+        collisionPaletteMaterials[paletteIndex % collisionPaletteCount].add(mesh.material as any);
+
+        mesh.castShadow = useShadows;
+        mesh.receiveShadow = useShadows;
+
+        if (i === 0) {
+          zCursor = 0;
+        } else {
+          zCursor += prevDepth * 0.5 + dims.depth * 0.5 + safeStickGap;
+        }
+        prevDepth = dims.depth;
+
+        const o = getStackingOffset(
+          i,
+          dims,
+          effective.stickOverhang,
+          effective.rotationCenterOffsetX,
+          effective.rotationCenterOffsetY,
+          safeStickGap,
+          zCursor
+        );
+        mesh.position.set(o.x - bounds.center.x, o.y - bounds.center.y, o.z - bounds.center.z);
+        mesh.rotation.set(0, 0, o.rotationZ);
+      }
+    }
+
+    // Outline (inverted hull): supports per-color overrides.
+    {
+      const outlineMats = new Map<string, THREE.MeshBasicMaterial>();
 
       while (this.outlineMeshes.length < effective.stickCount) {
-        const om = new THREE.Mesh(geometriesByPalette[0], this.outlineMaterial!);
+        const om = new THREE.Mesh(geometriesByPalette[0].base, new THREE.MeshBasicMaterial({ color: 0x000000 }));
         om.castShadow = false;
         om.receiveShadow = false;
         this.outlineGroup.add(om);
         this.outlineMeshes.push(om);
       }
 
+      let anyOutline = false;
       for (let i = 0; i < this.outlineMeshes.length; i++) {
         const om = this.outlineMeshes[i];
         if (i >= effective.stickCount) {
@@ -1038,16 +1154,52 @@ export class PopsiclePreview {
         }
 
         const sm = this.stickMeshes[i];
-        om.visible = sm.visible;
+        if (!sm.visible) {
+          om.visible = false;
+          continue;
+        }
+
+        const paletteIndex = ((i % nColors) + nColors) % nColors;
+        const applyOverrides = !!applyOverrideByStick[i];
+        const resolved = applyOverrides ? resolvedOv[paletteIndex] : resolvedBase[paletteIndex];
+        const oc = resolved.facades.outline;
+        const opacity = clamp(Number(oc?.opacity) || 1, 0, 1);
+        const thickness = Math.max(0, Math.min(0.2, Number(oc?.thickness) || 0));
+        const enabled = !!oc?.enabled && thickness > 0 && opacity > 0;
+
+        if (!enabled) {
+          om.visible = false;
+          continue;
+        }
+
+        anyOutline = true;
+        const matKey = `${String(oc.color)}:${opacity.toFixed(4)}`;
+        let mat = outlineMats.get(matKey);
+        if (!mat) {
+          mat = new THREE.MeshBasicMaterial({
+            color: new THREE.Color(oc.color),
+            side: THREE.BackSide,
+            transparent: opacity < 1,
+            opacity,
+            depthWrite: false
+          });
+          outlineMats.set(matKey, mat);
+        }
+
+        om.visible = true;
         om.geometry = sm.geometry;
-        om.material = this.outlineMaterial!;
+        om.material = mat;
         om.position.copy(sm.position);
         om.rotation.copy(sm.rotation);
         om.scale.setScalar(1 + thickness);
       }
+
+      this.outlineGroup.visible = anyOutline;
     }
 
-    this.applyCollisionMaskingRaster(effective, previewWidth, previewHeight, collisionBuckets, collisionPaletteMaterials);
+    const collisionMaterials = collisionPaletteMaterials.map((s) => Array.from(s));
+
+    this.applyCollisionMaskingRaster(effective, previewWidth, previewHeight, collisionBuckets, collisionMaterials);
 
     // Shadow camera + catcher
     if (useShadows && this.keyLight.visible) {
@@ -1100,7 +1252,7 @@ export class PopsiclePreview {
     previewWidth: number,
     previewHeight: number,
     meshesByPalette: THREE.Mesh[][],
-    paletteMaterials: Array<THREE.Material | THREE.Material[]>
+    paletteMaterials: Array<Array<THREE.Material | THREE.Material[]>>
   ): void {
     const nColors = Math.max(1, config.colors.length);
     if (meshesByPalette.length !== nColors) return;
@@ -1108,12 +1260,14 @@ export class PopsiclePreview {
     const enabled = config.collisions.mode === 'carve' && nColors <= 8 && this.mode === 'raster';
     if (!enabled) {
       // Leave any injected shader code in-place; it no-ops when otherDepthCount=0.
-      for (const m of paletteMaterials) {
-        if (!m) continue;
-        const mats = Array.isArray(m) ? m : [m];
-        for (const mm of mats) {
-          const sh = (mm.userData as any).__wmCollisionShader;
-          if (sh?.uniforms?.wmOtherDepthCount) sh.uniforms.wmOtherDepthCount.value = 0;
+      for (const list of paletteMaterials) {
+        for (const m of list ?? []) {
+          if (!m) continue;
+          const mats = Array.isArray(m) ? m : [m];
+          for (const mm of mats) {
+            const sh = (mm.userData as any).__wmCollisionShader;
+            if (sh?.uniforms?.wmOtherDepthCount) sh.uniforms.wmOtherDepthCount.value = 0;
+          }
         }
       }
       return;
@@ -1325,10 +1479,12 @@ void wmApplyCollisionMask(inout vec4 col) {
     };
 
     for (let pi = 0; pi < nColors; pi++) {
-      const m = paletteMaterials[pi];
-      if (!m) continue;
-      const mats = Array.isArray(m) ? m : [m];
-      for (const mm of mats) patchMaterial(mm, pi);
+      const list = paletteMaterials[pi] ?? [];
+      for (const entry of list) {
+        if (!entry) continue;
+        const mats = Array.isArray(entry) ? entry : [entry];
+        for (const mm of mats) patchMaterial(mm, pi);
+      }
     }
 
     // Render per-palette depth maps.
