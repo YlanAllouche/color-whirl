@@ -339,6 +339,7 @@ export function createSvg3DScene(
   const count = Math.max(1, Math.round(Number(config.svg.count) || 0));
   const spread = Math.max(0, Number(config.svg.spread) || 0);
   const depth = Math.max(0, Number(config.svg.depth) || 0);
+  const tiltRad = degToRad(clamp(Number(config.svg.tiltDeg) || 0, 0, 80));
   const sizeMin = Math.max(0.0001, Number(config.svg.sizeMin) || 0.0001);
   const sizeMax = Math.max(sizeMin, Number(config.svg.sizeMax) || sizeMin);
   const opacity = clamp01(Number(config.svg.opacity) || 1);
@@ -378,6 +379,8 @@ export function createSvg3DScene(
     const y = (rng() - 0.5) * 2 * spread;
     const z = (rng() - 0.5) * depth;
     const theta = rng() * Math.PI * 2;
+    const tiltX = tiltRad > 0 ? (rng() - 0.5) * 2 * tiltRad : 0;
+    const tiltY = tiltRad > 0 ? (rng() - 0.5) * 2 * tiltRad : 0;
 
     const pi = pickIndex(i);
     const bucket = perColor[pi] ?? perColor[0];
@@ -386,7 +389,7 @@ export function createSvg3DScene(
     const extrudeMult = extrudeMultByIndex[pi] ?? 1;
 
     tmpPos.set(x, y, z);
-    tmpEuler.set(0, 0, theta);
+    tmpEuler.set(tiltX, tiltY, theta);
     tmpQuat.setFromEuler(tmpEuler);
     tmpScale.set(size * sizeMult, size * sizeMult, extrudeMult);
     tmpMat.compose(tmpPos, tmpQuat, tmpScale);

@@ -650,6 +650,8 @@ export interface Svg3DConfig extends BaseWallpaperConfig {
     spread: number;
     /** Scene units: Z spread */
     depth: number;
+    /** 0..80: per-instance random tilt range (degrees); 0 = upright */
+    tiltDeg: number;
     /** Scene units: overall XY size */
     sizeMin: number;
     /** Scene units: overall XY size */
@@ -1004,6 +1006,7 @@ export const DEFAULT_SVG3D_CONFIG: Svg3DConfig = {
     count: 160,
     spread: 4.4,
     depth: 4.0,
+    tiltDeg: 0,
     sizeMin: 0.14,
     sizeMax: 0.5,
     extrudeDepth: 0.22,
@@ -1243,6 +1246,12 @@ export function normalizeWallpaperConfig(input: any): WallpaperConfig {
         const depth = Number(sAny.depth);
         sAny.spread = Number.isFinite(spread) ? Math.max(0, spread) : Math.max(0, Number(baseSvg?.spread) || 0);
         sAny.depth = Number.isFinite(depth) ? Math.max(0, depth) : Math.max(0, Number(baseSvg?.depth) || 0);
+
+        const tilt = Number(sAny.tiltDeg);
+        sAny.tiltDeg = Number.isFinite(tilt)
+          ? clamp(tilt, 0, 80)
+          : clamp(Number(baseSvg?.tiltDeg) || 0, 0, 80);
+
         const sMin = Number(sAny.sizeMin);
         const sMax = Number(sAny.sizeMax);
         sAny.sizeMin = Number.isFinite(sMin) ? Math.max(0.0001, sMin) : Math.max(0.0001, Number(baseSvg?.sizeMin) || 0.0001);
@@ -1879,6 +1888,7 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
           count: chance(0.15) ? 1 : skewCountLow(2, DEFAULT_SVG3D_CONFIG.svg.count, 360, 1500, 0.03),
           spread: randomWeighted(rng, 0.8, 6.5, DEFAULT_SVG3D_CONFIG.svg.spread),
           depth: randomWeighted(rng, 0.5, 7.0, DEFAULT_SVG3D_CONFIG.svg.depth),
+          tiltDeg: chance(0.75) ? 0 : Math.round(clamp(randomWeighted(rng, 0, 45, 8), 0, 80)),
           sizeMin: randomWeighted(rng, 0.05, 0.32, DEFAULT_SVG3D_CONFIG.svg.sizeMin),
           sizeMax: randomWeighted(rng, 0.14, 0.9, DEFAULT_SVG3D_CONFIG.svg.sizeMax),
           extrudeDepth: randomWeighted(rng, 0.02, 0.6, DEFAULT_SVG3D_CONFIG.svg.extrudeDepth),

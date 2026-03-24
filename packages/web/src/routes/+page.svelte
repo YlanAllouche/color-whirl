@@ -4242,19 +4242,24 @@
              <input type="range" bind:value={(config as any).svg.spread} min="0" max="8" step="0.05" />
            </label>
 
-           <label class="control-row slider">
-             <button type="button" class="setting-title" class:locked={isLocked('svg.depth')} onclick={() => toggleLock('svg.depth')} title="Click to lock/unlock for randomize">Depth: {Number((config as any).svg.depth).toFixed(2)}</button>
-             <input type="range" bind:value={(config as any).svg.depth} min="0" max="8" step="0.05" />
-           </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('svg.depth')} onclick={() => toggleLock('svg.depth')} title="Click to lock/unlock for randomize">Depth: {Number((config as any).svg.depth).toFixed(2)}</button>
+              <input type="range" bind:value={(config as any).svg.depth} min="0" max="8" step="0.05" />
+            </label>
 
-           <label class="control-row slider">
-             <button type="button" class="setting-title" class:locked={isLocked('svg.sizeMin')} onclick={() => toggleLock('svg.sizeMin')} title="Click to lock/unlock for randomize">Size min: {Number((config as any).svg.sizeMin).toFixed(3)}</button>
-             <input type="range" bind:value={(config as any).svg.sizeMin} min="0.02" max="1.0" step="0.005" />
-           </label>
-           <label class="control-row slider">
-             <button type="button" class="setting-title" class:locked={isLocked('svg.sizeMax')} onclick={() => toggleLock('svg.sizeMax')} title="Click to lock/unlock for randomize">Size max: {Number((config as any).svg.sizeMax).toFixed(3)}</button>
-             <input type="range" bind:value={(config as any).svg.sizeMax} min="0.02" max="1.4" step="0.005" />
-           </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('svg.tiltDeg')} onclick={() => toggleLock('svg.tiltDeg')} title="Click to lock/unlock for randomize">Tilt: {Math.round(Number((config as any).svg.tiltDeg) || 0)}deg</button>
+              <input type="range" bind:value={(config as any).svg.tiltDeg} min="0" max="80" step="1" />
+            </label>
+
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('svg.sizeMin')} onclick={() => toggleLock('svg.sizeMin')} title="Click to lock/unlock for randomize">Size min: {Number((config as any).svg.sizeMin).toFixed(3)}</button>
+              <input type="range" bind:value={(config as any).svg.sizeMin} min="0.02" max="1.0" step="0.005" />
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('svg.sizeMax')} onclick={() => toggleLock('svg.sizeMax')} title="Click to lock/unlock for randomize">Size max: {Number((config as any).svg.sizeMax).toFixed(3)}</button>
+              <input type="range" bind:value={(config as any).svg.sizeMax} min="0.02" max="1.4" step="0.005" />
+            </label>
 
            <label class="control-row slider">
              <button type="button" class="setting-title" class:locked={isLocked('svg.extrudeDepth')} onclick={() => toggleLock('svg.extrudeDepth')} title="Click to lock/unlock for randomize">Extrude depth: {Number((config as any).svg.extrudeDepth).toFixed(3)}</button>
