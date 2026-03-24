@@ -913,12 +913,14 @@ export class PopsiclePreview {
     const facadesKey = JSON.stringify(effective.facades);
     const edgeKey = JSON.stringify(effective.edge);
     const emissionKey = JSON.stringify(effective.emission);
+    const bubblesKey = JSON.stringify((effective as any).bubbles ?? null);
     const matBaseKey = [
       effective.texture,
       textureParamsKey(effective),
       facadesKey,
       edgeKey,
       emissionKey,
+      bubblesKey,
       envIntensity.toFixed(3),
       safeStickOpacity.toFixed(3),
       String(effective.seed)
@@ -1681,6 +1683,7 @@ void wmApplyCollisionMask(inout vec4 col) {
         JSON.stringify(config.facades),
         JSON.stringify(config.edge),
         JSON.stringify(config.emission),
+        JSON.stringify((config as any).bubbles ?? null),
         String(paletteIndex),
         hex,
         dims.width.toFixed(4),
@@ -1854,6 +1857,7 @@ export async function renderRasterToCanvas(config: PopsicleConfig): Promise<HTML
       JSON.stringify(config.facades),
       JSON.stringify(config.edge),
       JSON.stringify(config.emission),
+      JSON.stringify((config as any).bubbles ?? null),
       String(paletteIndex),
       hex,
       envIntensity.toFixed(3),
