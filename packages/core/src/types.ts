@@ -123,6 +123,10 @@ export interface EdgeConfig {
 
 export interface BubblesConfig {
   enabled: boolean;
+  interior: {
+    /** Whether to render approximated interior surfaces for carved cavities */
+    enabled: boolean;
+  };
   /** Cell density in world units. Higher = more cavities. */
   frequency: number;
   /** Variation range for the density (0..1). */
@@ -757,6 +761,7 @@ export const DEFAULT_POPSICLE_CONFIG: PopsicleConfig = {
   },
   bubbles: {
     enabled: false,
+    interior: { enabled: true },
     frequency: 1.8,
     frequencyVariance: 0.22,
     count: 8,
@@ -1146,6 +1151,10 @@ export function normalizeWallpaperConfig(input: any): WallpaperConfig {
     (merged as any).bubbles = cloneJson(baseBubbles);
   } else {
     gAny.enabled = typeof gAny.enabled === 'boolean' ? gAny.enabled : !!gAny.enabled;
+
+    if (!gAny.interior || typeof gAny.interior !== 'object') gAny.interior = cloneJson(baseBubbles.interior);
+    gAny.interior.enabled = typeof gAny.interior.enabled === 'boolean' ? gAny.interior.enabled : !!gAny.interior.enabled;
+
     const freq = Number(gAny.frequency);
     gAny.frequency = Number.isFinite(freq) ? clamp(freq, 0, 20) : Number(baseBubbles.frequency) || 0;
     const variance = Number(gAny.frequencyVariance);
@@ -1566,6 +1575,7 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
     },
     bubbles: {
       enabled: bubblesEnabled,
+      interior: { enabled: true },
       // frequency controls density; count is the sample budget in shader.
       frequency: bubblesEnabled ? clamp(tri(1.1, 1.8, 3.2), 0.1, 20) : DEFAULT_POPSICLE_CONFIG.bubbles.frequency,
       frequencyVariance: bubblesEnabled ? clamp(tri(0.0, 0.22, 0.4), 0, 1) : DEFAULT_POPSICLE_CONFIG.bubbles.frequencyVariance,

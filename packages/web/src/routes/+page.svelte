@@ -571,7 +571,7 @@
               outline: { ...DEFAULT_CONFIG.facades.outline }
             },
             edge: { ...DEFAULT_CONFIG.edge, seam: { ...DEFAULT_CONFIG.edge.seam }, band: { ...DEFAULT_CONFIG.edge.band } },
-             bubbles: { ...(DEFAULT_CONFIG as any).bubbles },
+             bubbles: { ...(DEFAULT_CONFIG as any).bubbles, interior: { ...((DEFAULT_CONFIG as any).bubbles?.interior ?? { enabled: true }) } },
             emission: { ...DEFAULT_CONFIG.emission },
             bloom: { ...DEFAULT_CONFIG.bloom },
             collisions: { ...DEFAULT_CONFIG.collisions, carve: { ...DEFAULT_CONFIG.collisions.carve } },
@@ -615,7 +615,7 @@
         outline: { ...next.facades.outline }
       },
       edge: { ...next.edge, seam: { ...next.edge.seam }, band: { ...next.edge.band } },
-       bubbles: { ...(next as any).bubbles },
+       bubbles: { ...(next as any).bubbles, interior: { ...((next as any).bubbles?.interior ?? { enabled: true }) } },
       emission: { ...next.emission },
       bloom: { ...next.bloom },
       collisions: { ...next.collisions, carve: { ...next.collisions.carve } },
@@ -1083,7 +1083,7 @@
       outline: { ...current.facades.outline }
     };
     next.edge = { ...current.edge, seam: { ...current.edge.seam }, band: { ...current.edge.band } };
-    (next as any).bubbles = { ...(current as any).bubbles };
+    (next as any).bubbles = { ...(current as any).bubbles, interior: { ...((current as any).bubbles?.interior ?? { enabled: true }) } };
     next.emission = { ...current.emission };
     next.bloom = { ...current.bloom };
     next.collisions = { ...current.collisions, carve: { ...current.collisions.carve } };
@@ -1429,6 +1429,7 @@
     void (c as any).bubbles?.softness;
     void (c as any).bubbles?.wallThickness;
     void (c as any).bubbles?.seedOffset;
+    void (c as any).bubbles?.interior?.enabled;
     if (c.type === 'popsicle') {
       void c.stickCount;
       void c.stickOverhang;
@@ -3237,6 +3238,22 @@
               title="Click to lock/unlock for randomize"
             >
               Enable
+            </button>
+          </label>
+
+          <label class="control-row checkbox">
+            <input type="checkbox" bind:checked={(config as any).bubbles.interior.enabled} disabled={!(config as any).bubbles.enabled} />
+            <button
+              type="button"
+              class="setting-title"
+              class:locked={isLocked('bubbles.interior.enabled')}
+              onclick={(e) => {
+                e.preventDefault();
+                toggleLock('bubbles.interior.enabled');
+              }}
+              title="Click to lock/unlock for randomize"
+            >
+              Interior surfaces
             </button>
           </label>
 

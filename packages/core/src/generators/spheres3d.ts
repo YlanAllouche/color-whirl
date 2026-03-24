@@ -664,6 +664,9 @@ void wmApplyCollisionMask(inout vec4 col) {
   const tmpQuat = new THREE.Quaternion();
   const tmpScale = new THREE.Vector3();
 
+  // Used to filter interior surfaces so they only appear when intersecting a sphere volume.
+  const spheresForInterior: Array<{ x: number; y: number; z: number; r: number }> = new Array(count);
+
   const distribution = config.spheres.distribution;
   const layers = Math.max(1, Math.round(config.spheres.layers));
 
@@ -704,6 +707,8 @@ void wmApplyCollisionMask(inout vec4 col) {
     tmpScale.setScalar(p.rad * rm);
     tmpMat.compose(tmpPos, tmpQuat, tmpScale);
     perColor[pi].inst.setMatrixAt(slot, tmpMat);
+
+    spheresForInterior[i] = { x: p.x, y: p.y, z: p.z, r: p.rad * rm };
   }
   for (let pi = 0; pi < nColors; pi++) {
     perColor[pi].inst.instanceMatrix.needsUpdate = true;
@@ -754,16 +759,30 @@ void wmApplyCollisionMask(inout vec4 col) {
   scene.updateWorldMatrix(true, true);
   const preCenterBounds = new THREE.Box3().setFromObject(scene);
   const bubblesConfig = (config as any).bubbles as BubblesConfig | undefined;
-  if (bubblesConfig?.enabled && bubblesConfig.wallThickness > 0 && !preCenterBounds.isEmpty()) {
+  if (bubblesConfig?.enabled && bubblesConfig.wallThickness > 0 && bubblesConfig.interior.enabled && !preCenterBounds.isEmpty()) {
     const seedBase = buildBubblesSeed(config.seed, bubblesConfig.seedOffset);
     const bubbles = buildBubbles(bubblesConfig, new THREE.Vector3(1, 1, 1), seedBase, { maxBubbles: 48, bounds: preCenterBounds });
     if (bubbles.length > 0) {
       const radiusMax = Math.max(0, Number(bubblesConfig.radiusMax) || 0);
       const expanded = preCenterBounds.clone().expandByScalar(radiusMax + 0.15);
       const filtered = bubbles.filter((b) => expanded.containsPoint(b.center));
-      if (filtered.length > 0) {
+      const intersecting = filtered.filter((b) => {
+        const bx = b.center.x;
+        const by = b.center.y;
+        const bz = b.center.z;
+        for (let i = 0; i < spheresForInterior.length; i++) {
+          const s = spheresForInterior[i];
+          const dx = bx - s.x;
+          const dy = by - s.y;
+          const dz = bz - s.z;
+          if (dx * dx + dy * dy + dz * dz <= s.r * s.r) return true;
+        }
+        return false;
+      });
+
+      if (intersecting.length > 0) {
         const walls = buildBubblesInteriorWalls({
-          bubbles: filtered,
+          bubbles: intersecting,
           palette: colors,
           wallThickness: bubblesConfig.wallThickness,
           maxMeshes: 32,
