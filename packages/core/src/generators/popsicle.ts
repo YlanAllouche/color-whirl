@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import type { PopsicleConfig, EnvironmentStyle, GruyereConfig } from '../types.js';
-import { buildGruyereHoles, buildGruyereSeed, buildGruyereInteriorWalls } from '../gruyere.js';
+import type { PopsicleConfig, EnvironmentStyle, BubblesConfig } from '../types.js';
+import { buildBubbles, buildBubblesSeed, buildBubblesInteriorWalls } from '../bubbles.js';
 import { createStickMeshMaterial } from '../materials.js';
 import { resolvePaletteConfig } from '../palette.js';
 import { renderWithOptionalBloom } from './postprocessing.js';
@@ -483,7 +483,7 @@ export function createPopsicleScene(
 
   const group = new THREE.Group();
   const materialCache = new Map<string, THREE.Material | THREE.Material[]>();
-  const materialParamsKey = JSON.stringify({ t: config.textureParams, f: config.facades, ed: config.edge, g: (config as any).gruyere, em: config.emission, p: (config as any).palette });
+  const materialParamsKey = JSON.stringify({ t: config.textureParams, f: config.facades, ed: config.edge, b: (config as any).bubbles, em: config.emission, p: (config as any).palette });
   const getMat = (paletteIndex: number, hex: string, stickDimensions: StickDimensions) => {
     const key = [
       texture,
@@ -585,20 +585,20 @@ export function createPopsicleScene(
   group.position.sub(center);
 
   const finalBounds = new THREE.Box3().setFromObject(group);
-  const gruyereConfig = (config as any).gruyere as GruyereConfig | undefined;
-  if (gruyereConfig?.enabled && gruyereConfig.wallThickness > 0) {
-    const seedBase = buildGruyereSeed(config.seed, gruyereConfig.seedOffset);
-    const holes = buildGruyereHoles(gruyereConfig, new THREE.Vector3(1, 1, 1), seedBase, 48);
+  const bubblesConfig = (config as any).bubbles as BubblesConfig | undefined;
+  if (bubblesConfig?.enabled && bubblesConfig.wallThickness > 0) {
+    const seedBase = buildBubblesSeed(config.seed, bubblesConfig.seedOffset);
+    const bubbles = buildBubbles(bubblesConfig, new THREE.Vector3(1, 1, 1), seedBase, { maxBubbles: 48, bounds: finalBounds });
     const hasBounds = !finalBounds.isEmpty();
-    if (holes.length > 0 && hasBounds) {
-      const radiusMax = Math.max(0, Number(gruyereConfig.radiusMax) || 0);
+    if (bubbles.length > 0 && hasBounds) {
+      const radiusMax = Math.max(0, Number(bubblesConfig.radiusMax) || 0);
       const expanded = finalBounds.clone().expandByScalar(radiusMax + 0.15);
-      const filtered = holes.filter((hole) => expanded.containsPoint(hole.center));
+      const filtered = bubbles.filter((b) => expanded.containsPoint(b.center));
       if (filtered.length > 0) {
-        const walls = buildGruyereInteriorWalls({
-          holes: filtered,
+        const walls = buildBubblesInteriorWalls({
+          bubbles: filtered,
           palette: colors,
-          wallThickness: gruyereConfig.wallThickness,
+          wallThickness: bubblesConfig.wallThickness,
           maxMeshes: 20,
           tintStrength: 0.35,
           opacity: 0.92

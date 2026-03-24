@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import type { Spheres3DConfig, EnvironmentStyle, PaletteAssignMode, GruyereConfig } from '../types.js';
-import { buildGruyereHoles, buildGruyereSeed, buildGruyereInteriorWalls } from '../gruyere.js';
+import type { Spheres3DConfig, EnvironmentStyle, PaletteAssignMode, BubblesConfig } from '../types.js';
+import { buildBubbles, buildBubblesSeed, buildBubblesInteriorWalls } from '../bubbles.js';
 import { createSurfaceMaterial } from '../materials.js';
 import { createRng } from '../types.js';
 import { resolvePaletteConfig } from '../palette.js';
@@ -753,19 +753,19 @@ void wmApplyCollisionMask(inout vec4 col) {
 
   scene.updateWorldMatrix(true, true);
   const preCenterBounds = new THREE.Box3().setFromObject(scene);
-  const gruyereConfig = (config as any).gruyere as GruyereConfig | undefined;
-  if (gruyereConfig?.enabled && gruyereConfig.wallThickness > 0 && !preCenterBounds.isEmpty()) {
-    const seedBase = buildGruyereSeed(config.seed, gruyereConfig.seedOffset);
-    const holes = buildGruyereHoles(gruyereConfig, new THREE.Vector3(1, 1, 1), seedBase, 48);
-    if (holes.length > 0) {
-      const radiusMax = Math.max(0, Number(gruyereConfig.radiusMax) || 0);
+  const bubblesConfig = (config as any).bubbles as BubblesConfig | undefined;
+  if (bubblesConfig?.enabled && bubblesConfig.wallThickness > 0 && !preCenterBounds.isEmpty()) {
+    const seedBase = buildBubblesSeed(config.seed, bubblesConfig.seedOffset);
+    const bubbles = buildBubbles(bubblesConfig, new THREE.Vector3(1, 1, 1), seedBase, { maxBubbles: 48, bounds: preCenterBounds });
+    if (bubbles.length > 0) {
+      const radiusMax = Math.max(0, Number(bubblesConfig.radiusMax) || 0);
       const expanded = preCenterBounds.clone().expandByScalar(radiusMax + 0.15);
-      const filtered = holes.filter((hole) => expanded.containsPoint(hole.center));
+      const filtered = bubbles.filter((b) => expanded.containsPoint(b.center));
       if (filtered.length > 0) {
-        const walls = buildGruyereInteriorWalls({
-          holes: filtered,
+        const walls = buildBubblesInteriorWalls({
+          bubbles: filtered,
           palette: colors,
-          wallThickness: gruyereConfig.wallThickness,
+          wallThickness: bubblesConfig.wallThickness,
           maxMeshes: 32,
           tintStrength: 0.35,
           opacity: 0.92

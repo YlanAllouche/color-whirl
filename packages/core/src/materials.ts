@@ -6,7 +6,7 @@ import type {
   TextureType,
   GlassStyle,
   WallpaperConfig,
-  GruyereConfig
+  BubblesConfig
 } from './types.js';
 import { createRng } from './types.js';
 import { resolvePaletteConfig } from './palette.js';
@@ -236,8 +236,8 @@ uniform int wmGrazingMode;
   );
 }
 
-export function applyGruyere(material: THREE.Material, config: WallpaperConfig, objectScale?: THREE.Vector3 | number): void {
-  const g = (config as any)?.gruyere as GruyereConfig | undefined;
+export function applyBubbles(material: THREE.Material, config: WallpaperConfig, objectScale?: THREE.Vector3 | number): void {
+  const g = (config as any)?.bubbles as BubblesConfig | undefined;
   if (!g?.enabled) return;
 
   const enabled = !!g.enabled;
@@ -270,7 +270,7 @@ export function applyGruyere(material: THREE.Material, config: WallpaperConfig, 
   const seedBase = ((Number(config.seed) >>> 0) % 100000) * 0.001 + seedOffset;
 
   const key =
-    `gruyere-v2:${enabled ? 1 : 0}:` +
+    `bubbles-v2:${enabled ? 1 : 0}:` +
     `${frequency.toFixed(4)}:${variance.toFixed(4)}:${count}:` +
     `${radiusMin.toFixed(4)}:${radiusMax.toFixed(4)}:` +
     `${softness.toFixed(4)}:${wallThickness.toFixed(4)}:` +
@@ -280,48 +280,48 @@ export function applyGruyere(material: THREE.Material, config: WallpaperConfig, 
   chainOnBeforeCompile(
     material,
     (shader) => {
-      shader.uniforms.wmGruyereEnabled = { value: enabled ? 1 : 0 };
-      shader.uniforms.wmGruyereFrequency = { value: frequency };
-      shader.uniforms.wmGruyereFrequencyVariance = { value: variance };
-      shader.uniforms.wmGruyereCount = { value: count };
-      shader.uniforms.wmGruyereRadiusMin = { value: radiusMin };
-      shader.uniforms.wmGruyereRadiusMax = { value: radiusMax };
-      shader.uniforms.wmGruyereSoftness = { value: softness };
-      shader.uniforms.wmGruyereWallThickness = { value: wallThickness };
-      shader.uniforms.wmGruyereSeed = { value: seedBase };
-      shader.uniforms.wmGruyereScale = { value: scaleVec };
+      shader.uniforms.wmBubblesEnabled = { value: enabled ? 1 : 0 };
+      shader.uniforms.wmBubblesFrequency = { value: frequency };
+      shader.uniforms.wmBubblesFrequencyVariance = { value: variance };
+      shader.uniforms.wmBubblesCount = { value: count };
+      shader.uniforms.wmBubblesRadiusMin = { value: radiusMin };
+      shader.uniforms.wmBubblesRadiusMax = { value: radiusMax };
+      shader.uniforms.wmBubblesSoftness = { value: softness };
+      shader.uniforms.wmBubblesWallThickness = { value: wallThickness };
+      shader.uniforms.wmBubblesSeed = { value: seedBase };
+      shader.uniforms.wmBubblesScale = { value: scaleVec };
 
-      const vtxHeader = `\nvarying vec3 wmGruyereWorldPos;\n`;
+      const vtxHeader = `\nvarying vec3 wmBubblesWorldPos;\n`;
       if (shader.vertexShader.includes('#include <common>')) {
         shader.vertexShader = shader.vertexShader.replace('#include <common>', `#include <common>${vtxHeader}`);
-      } else if (!shader.vertexShader.includes('varying vec3 wmGruyereWorldPos')) {
+      } else if (!shader.vertexShader.includes('varying vec3 wmBubblesWorldPos')) {
         shader.vertexShader = vtxHeader + shader.vertexShader;
       }
 
       if (shader.vertexShader.includes('#include <worldpos_vertex>')) {
         shader.vertexShader = shader.vertexShader.replace(
           '#include <worldpos_vertex>',
-          `#include <worldpos_vertex>\nwmGruyereWorldPos = worldPosition.xyz;`
+          `#include <worldpos_vertex>\nwmBubblesWorldPos = worldPosition.xyz;`
         );
       } else if (shader.vertexShader.includes('#include <begin_vertex>')) {
         shader.vertexShader = shader.vertexShader.replace(
           '#include <begin_vertex>',
-          `#include <begin_vertex>\n#ifdef USE_INSTANCING\nvec4 wmWP = modelMatrix * instanceMatrix * vec4(position, 1.0);\n#else\nvec4 wmWP = modelMatrix * vec4(position, 1.0);\n#endif\nwmGruyereWorldPos = wmWP.xyz;`
+          `#include <begin_vertex>\n#ifdef USE_INSTANCING\nvec4 wmWP = modelMatrix * instanceMatrix * vec4(position, 1.0);\n#else\nvec4 wmWP = modelMatrix * vec4(position, 1.0);\n#endif\nwmBubblesWorldPos = wmWP.xyz;`
         );
       }
 
       const fragHeader = `
-uniform int wmGruyereEnabled;
-uniform float wmGruyereFrequency;
-uniform float wmGruyereFrequencyVariance;
-uniform int wmGruyereCount;
-uniform float wmGruyereRadiusMin;
-uniform float wmGruyereRadiusMax;
-uniform float wmGruyereSoftness;
-uniform float wmGruyereWallThickness;
-uniform float wmGruyereSeed;
-uniform vec3 wmGruyereScale;
-varying vec3 wmGruyereWorldPos;
+ uniform int wmBubblesEnabled;
+ uniform float wmBubblesFrequency;
+ uniform float wmBubblesFrequencyVariance;
+ uniform int wmBubblesCount;
+ uniform float wmBubblesRadiusMin;
+ uniform float wmBubblesRadiusMax;
+ uniform float wmBubblesSoftness;
+ uniform float wmBubblesWallThickness;
+ uniform float wmBubblesSeed;
+ uniform vec3 wmBubblesScale;
+ varying vec3 wmBubblesWorldPos;
 
 float wmHash1(vec3 p) {
   return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453123);
@@ -335,24 +335,24 @@ vec3 wmHash3(vec3 p) {
   );
 }
 
-float wmGruyereEffectiveFrequency() {
-  float baseFreq = max(1e-6, wmGruyereFrequency);
-  float variance = clamp(wmGruyereFrequencyVariance, 0.0, 1.0);
-  float bias = wmHash1(vec3(wmGruyereSeed, wmGruyereSeed + 3.1, wmGruyereSeed + 7.2));
-  return baseFreq * (1.0 + (bias - 0.5) * 2.0 * variance);
-}
+ float wmBubblesEffectiveFrequency() {
+   float baseFreq = max(1e-6, wmBubblesFrequency);
+   float variance = clamp(wmBubblesFrequencyVariance, 0.0, 1.0);
+   float bias = wmHash1(vec3(wmBubblesSeed, wmBubblesSeed + 3.1, wmBubblesSeed + 7.2));
+   return baseFreq * (1.0 + (bias - 0.5) * 2.0 * variance);
+ }
 
-float wmCavitySdf(vec3 cell, vec3 p, float invFreq) {
-  vec3 seed = vec3(wmGruyereSeed);
-  vec3 jitter = wmHash3(cell + seed);
-  vec3 center = (cell + jitter) * invFreq;
-  float rr = mix(wmGruyereRadiusMin, wmGruyereRadiusMax, wmHash1(cell + seed + vec3(13.37, 9.91, 2.17)));
-  return length(p - center) - rr;
-}
+ float wmCavitySdf(vec3 cell, vec3 p, float invFreq) {
+   vec3 seed = vec3(wmBubblesSeed);
+   vec3 jitter = wmHash3(cell + seed);
+   vec3 center = (cell + jitter) * invFreq;
+   float rr = mix(wmBubblesRadiusMin, wmBubblesRadiusMax, wmHash1(cell + seed + vec3(13.37, 9.91, 2.17)));
+   return length(p - center) - rr;
+ }
 
-float wmGruyereMinSdf(vec3 p) {
-  float freq = wmGruyereEffectiveFrequency();
-  float invF = 1.0 / freq;
+ float wmBubblesMinSdf(vec3 p) {
+   float freq = wmBubblesEffectiveFrequency();
+   float invF = 1.0 / freq;
   vec3 gp = p * freq;
   vec3 i = floor(gp);
   vec3 fracP = fract(gp);
@@ -361,29 +361,29 @@ float wmGruyereMinSdf(vec3 p) {
 
   float dMin = 1e9;
 
-  if (wmGruyereCount > 0) dMin = min(dMin, wmCavitySdf(base + vec3( 0.0,  0.0,  0.0), p, invF));
-  if (wmGruyereCount > 1) dMin = min(dMin, wmCavitySdf(base + vec3(-1.0,  0.0,  0.0), p, invF));
-  if (wmGruyereCount > 2) dMin = min(dMin, wmCavitySdf(base + vec3( 0.0, -1.0,  0.0), p, invF));
-  if (wmGruyereCount > 3) dMin = min(dMin, wmCavitySdf(base + vec3(-1.0, -1.0,  0.0), p, invF));
-  if (wmGruyereCount > 4) dMin = min(dMin, wmCavitySdf(base + vec3( 0.0,  0.0, -1.0), p, invF));
-  if (wmGruyereCount > 5) dMin = min(dMin, wmCavitySdf(base + vec3(-1.0,  0.0, -1.0), p, invF));
-  if (wmGruyereCount > 6) dMin = min(dMin, wmCavitySdf(base + vec3( 0.0, -1.0, -1.0), p, invF));
-  if (wmGruyereCount > 7) dMin = min(dMin, wmCavitySdf(base + vec3(-1.0, -1.0, -1.0), p, invF));
+   if (wmBubblesCount > 0) dMin = min(dMin, wmCavitySdf(base + vec3( 0.0,  0.0,  0.0), p, invF));
+   if (wmBubblesCount > 1) dMin = min(dMin, wmCavitySdf(base + vec3(-1.0,  0.0,  0.0), p, invF));
+   if (wmBubblesCount > 2) dMin = min(dMin, wmCavitySdf(base + vec3( 0.0, -1.0,  0.0), p, invF));
+   if (wmBubblesCount > 3) dMin = min(dMin, wmCavitySdf(base + vec3(-1.0, -1.0,  0.0), p, invF));
+   if (wmBubblesCount > 4) dMin = min(dMin, wmCavitySdf(base + vec3( 0.0,  0.0, -1.0), p, invF));
+   if (wmBubblesCount > 5) dMin = min(dMin, wmCavitySdf(base + vec3(-1.0,  0.0, -1.0), p, invF));
+   if (wmBubblesCount > 6) dMin = min(dMin, wmCavitySdf(base + vec3( 0.0, -1.0, -1.0), p, invF));
+   if (wmBubblesCount > 7) dMin = min(dMin, wmCavitySdf(base + vec3(-1.0, -1.0, -1.0), p, invF));
 
   return dMin;
 }
 
-void wmApplyGruyere(inout vec4 col) {
-  if (wmGruyereEnabled == 0) return;
+ void wmApplyBubbles(inout vec4 col) {
+   if (wmBubblesEnabled == 0) return;
 
-  vec3 p = wmGruyereWorldPos / max(wmGruyereScale, vec3(1e-6));
+   vec3 p = wmBubblesWorldPos / max(wmBubblesScale, vec3(1e-6));
 
-  float sdf = wmGruyereMinSdf(p);
+   float sdf = wmBubblesMinSdf(p);
   if (sdf >= 0.0) return;
 
   float depth = -sdf;
-  float softness = max(0.0, wmGruyereSoftness);
-  float thickness = max(0.0, wmGruyereWallThickness);
+   float softness = max(0.0, wmBubblesSoftness);
+   float thickness = max(0.0, wmBubblesWallThickness);
 
   float fade;
   if (softness <= 1e-6) {
@@ -410,13 +410,13 @@ void wmApplyGruyere(inout vec4 col) {
 
       if (shader.fragmentShader.includes('#include <common>')) {
         shader.fragmentShader = shader.fragmentShader.replace('#include <common>', `#include <common>\n${fragHeader}`);
-      } else if (!shader.fragmentShader.includes('wmApplyGruyere')) {
+      } else if (!shader.fragmentShader.includes('wmApplyBubbles')) {
         shader.fragmentShader = fragHeader + '\n' + shader.fragmentShader;
       }
 
       shader.fragmentShader = shader.fragmentShader.replace(
         '#include <dithering_fragment>',
-        `wmApplyGruyere(gl_FragColor);\n#include <dithering_fragment>`
+        `wmApplyBubbles(gl_FragColor);\n#include <dithering_fragment>`
       );
     },
     key
@@ -603,7 +603,7 @@ varying vec3 wmObjPos;
   const needsSplitMaterial = wantsHollow || needsSideOverrides || (grazing?.enabled && grazing.mode === 'mix') || edgeEnabled;
 
   if (!needsSplitMaterial) {
-    applyGruyere(face, config);
+    applyBubbles(face, config);
     applyEdgeFx(face, 'cap');
     return face;
   }
@@ -640,8 +640,8 @@ varying vec3 wmObjPos;
 
   // Apply edge effects late so they exist on both cap and side materials.
   // (Material.clone() does not reliably preserve onBeforeCompile/customProgramCacheKey across runtimes.)
-  applyGruyere(cap, config);
-  applyGruyere(side, config);
+  applyBubbles(cap, config);
+  applyBubbles(side, config);
   applyEdgeFx(cap, 'cap');
   applyEdgeFx(side, 'side');
 
@@ -670,7 +670,7 @@ export function createSurfaceMaterial(
     emissive
   });
   if (resolved.facades?.grazing?.enabled) applyGrazing(m, resolved.facades.grazing);
-  applyGruyere(m, config);
+  applyBubbles(m, config);
   return m;
 }
 

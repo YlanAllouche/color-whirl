@@ -571,7 +571,7 @@
               outline: { ...DEFAULT_CONFIG.facades.outline }
             },
             edge: { ...DEFAULT_CONFIG.edge, seam: { ...DEFAULT_CONFIG.edge.seam }, band: { ...DEFAULT_CONFIG.edge.band } },
-            gruyere: { ...(DEFAULT_CONFIG as any).gruyere },
+             bubbles: { ...(DEFAULT_CONFIG as any).bubbles },
             emission: { ...DEFAULT_CONFIG.emission },
             bloom: { ...DEFAULT_CONFIG.bloom },
             collisions: { ...DEFAULT_CONFIG.collisions, carve: { ...DEFAULT_CONFIG.collisions.carve } },
@@ -615,7 +615,7 @@
         outline: { ...next.facades.outline }
       },
       edge: { ...next.edge, seam: { ...next.edge.seam }, band: { ...next.edge.band } },
-      gruyere: { ...(next as any).gruyere },
+       bubbles: { ...(next as any).bubbles },
       emission: { ...next.emission },
       bloom: { ...next.bloom },
       collisions: { ...next.collisions, carve: { ...next.collisions.carve } },
@@ -718,7 +718,7 @@
             outline: { ...src.facades.outline }
           },
           edge: { ...src.edge, seam: { ...src.edge.seam }, band: { ...src.edge.band } },
-          gruyere: { ...(src as any).gruyere },
+          bubbles: { ...(src as any).bubbles },
           emission: { ...src.emission },
           bloom: { ...src.bloom },
           collisions: { ...src.collisions, carve: { ...src.collisions.carve } },
@@ -748,7 +748,7 @@
             outline: { ...src.facades.outline }
           },
           edge: { ...src.edge, seam: { ...src.edge.seam }, band: { ...src.edge.band } },
-          gruyere: { ...(src as any).gruyere },
+          bubbles: { ...(src as any).bubbles },
           emission: { ...src.emission },
           bloom: { ...src.bloom },
           collisions: { ...src.collisions, carve: { ...src.collisions.carve } },
@@ -779,7 +779,7 @@
             outline: { ...src.facades.outline }
           },
           edge: { ...src.edge, seam: { ...src.edge.seam }, band: { ...src.edge.band } },
-          gruyere: { ...(src as any).gruyere },
+          bubbles: { ...(src as any).bubbles },
           emission: { ...src.emission },
           bloom: { ...src.bloom },
           collisions: { ...src.collisions, carve: { ...src.collisions.carve } },
@@ -815,7 +815,7 @@
             outline: { ...src.facades.outline }
           },
           edge: { ...src.edge, seam: { ...src.edge.seam }, band: { ...src.edge.band } },
-          gruyere: { ...(src as any).gruyere },
+          bubbles: { ...(src as any).bubbles },
           emission: { ...src.emission },
           bloom: { ...src.bloom },
           collisions: { ...src.collisions, carve: { ...src.collisions.carve } },
@@ -850,7 +850,7 @@
             outline: { ...src.facades.outline }
           },
           edge: { ...src.edge, seam: { ...src.edge.seam }, band: { ...src.edge.band } },
-          gruyere: { ...(src as any).gruyere },
+          bubbles: { ...(src as any).bubbles },
           emission: { ...src.emission },
           bloom: { ...src.bloom },
           collisions: { ...src.collisions, carve: { ...src.collisions.carve } },
@@ -886,7 +886,7 @@
             outline: { ...src.facades.outline }
           },
           edge: { ...src.edge, seam: { ...src.edge.seam }, band: { ...src.edge.band } },
-          gruyere: { ...(src as any).gruyere },
+          bubbles: { ...(src as any).bubbles },
           emission: { ...src.emission },
           bloom: { ...src.bloom },
           collisions: { ...src.collisions, carve: { ...src.collisions.carve } },
@@ -917,7 +917,7 @@
             outline: { ...src.facades.outline }
           },
           edge: { ...src.edge, seam: { ...src.edge.seam }, band: { ...src.edge.band } },
-          gruyere: { ...(src as any).gruyere },
+          bubbles: { ...(src as any).bubbles },
           emission: { ...src.emission },
           bloom: { ...src.bloom },
           collisions: { ...src.collisions, carve: { ...src.collisions.carve } },
@@ -955,7 +955,7 @@
             outline: { ...src.facades.outline }
           },
           edge: { ...src.edge, seam: { ...src.edge.seam }, band: { ...src.edge.band } },
-          gruyere: { ...(src as any).gruyere },
+          bubbles: { ...(src as any).bubbles },
           emission: { ...src.emission },
           bloom: { ...src.bloom },
           collisions: { ...src.collisions, carve: { ...src.collisions.carve } },
@@ -990,7 +990,7 @@
             outline: { ...src.facades.outline }
           },
           edge: { ...src.edge, seam: { ...src.edge.seam }, band: { ...src.edge.band } },
-          gruyere: { ...(src as any).gruyere },
+          bubbles: { ...(src as any).bubbles },
           emission: { ...src.emission },
           bloom: { ...src.bloom },
           collisions: { ...src.collisions, carve: { ...src.collisions.carve } },
@@ -1025,7 +1025,7 @@
             outline: { ...src.facades.outline }
           },
           edge: { ...src.edge, seam: { ...src.edge.seam }, band: { ...src.edge.band } },
-          gruyere: { ...(src as any).gruyere },
+          bubbles: { ...(src as any).bubbles },
           emission: { ...src.emission },
           bloom: { ...src.bloom },
           collisions: { ...src.collisions, carve: { ...src.collisions.carve } },
@@ -1083,7 +1083,7 @@
       outline: { ...current.facades.outline }
     };
     next.edge = { ...current.edge, seam: { ...current.edge.seam }, band: { ...current.edge.band } };
-    (next as any).gruyere = { ...(current as any).gruyere };
+    (next as any).bubbles = { ...(current as any).bubbles };
     next.emission = { ...current.emission };
     next.bloom = { ...current.bloom };
     next.collisions = { ...current.collisions, carve: { ...current.collisions.carve } };
@@ -1420,15 +1420,15 @@
     void c.collisions.carve.marginPx;
     void c.collisions.carve.edge;
     void c.collisions.carve.featherPx;
-    void (c as any).gruyere?.enabled;
-    void (c as any).gruyere?.frequency;
-    void (c as any).gruyere?.frequencyVariance;
-    void (c as any).gruyere?.count;
-    void (c as any).gruyere?.radiusMin;
-    void (c as any).gruyere?.radiusMax;
-    void (c as any).gruyere?.softness;
-    void (c as any).gruyere?.wallThickness;
-    void (c as any).gruyere?.seedOffset;
+    void (c as any).bubbles?.enabled;
+    void (c as any).bubbles?.frequency;
+    void (c as any).bubbles?.frequencyVariance;
+    void (c as any).bubbles?.count;
+    void (c as any).bubbles?.radiusMin;
+    void (c as any).bubbles?.radiusMax;
+    void (c as any).bubbles?.softness;
+    void (c as any).bubbles?.wallThickness;
+    void (c as any).bubbles?.seedOffset;
     if (c.type === 'popsicle') {
       void c.stickCount;
       void c.stickOverhang;
@@ -3222,17 +3222,17 @@
 
       {#if config.type === 'popsicle' || config.type === 'spheres3d'}
         <section class="control-section">
-          <h3>Gruyere</h3>
+          <h3>Bubbles</h3>
 
           <label class="control-row checkbox">
-            <input type="checkbox" bind:checked={(config as any).gruyere.enabled} />
+            <input type="checkbox" bind:checked={(config as any).bubbles.enabled} />
             <button
               type="button"
               class="setting-title"
-              class:locked={isLocked('gruyere.enabled')}
+              class:locked={isLocked('bubbles.enabled')}
               onclick={(e) => {
                 e.preventDefault();
-                toggleLock('gruyere.enabled');
+                toggleLock('bubbles.enabled');
               }}
               title="Click to lock/unlock for randomize"
             >
@@ -3241,43 +3241,43 @@
           </label>
 
           <label class="control-row slider">
-            <button type="button" class="setting-title" class:locked={isLocked('gruyere.count')} onclick={() => toggleLock('gruyere.count')} title="Click to lock/unlock for randomize">Samples: {Math.round((config as any).gruyere.count)}</button>
-            <input type="range" bind:value={(config as any).gruyere.count} min="1" max="8" step="1" disabled={!(config as any).gruyere.enabled} />
+            <button type="button" class="setting-title" class:locked={isLocked('bubbles.count')} onclick={() => toggleLock('bubbles.count')} title="Click to lock/unlock for randomize">Samples: {Math.round((config as any).bubbles.count)}</button>
+            <input type="range" bind:value={(config as any).bubbles.count} min="1" max="8" step="1" disabled={!(config as any).bubbles.enabled} />
           </label>
 
           <label class="control-row slider">
-            <button type="button" class="setting-title" class:locked={isLocked('gruyere.frequency')} onclick={() => toggleLock('gruyere.frequency')} title="Click to lock/unlock for randomize">Frequency: {(config as any).gruyere.frequency.toFixed(2)}</button>
-            <input type="range" bind:value={(config as any).gruyere.frequency} min="0.2" max="8" step="0.01" disabled={!(config as any).gruyere.enabled} />
+            <button type="button" class="setting-title" class:locked={isLocked('bubbles.frequency')} onclick={() => toggleLock('bubbles.frequency')} title="Click to lock/unlock for randomize">Frequency: {(config as any).bubbles.frequency.toFixed(2)}</button>
+            <input type="range" bind:value={(config as any).bubbles.frequency} min="0.2" max="8" step="0.01" disabled={!(config as any).bubbles.enabled} />
           </label>
 
           <label class="control-row slider">
-            <button type="button" class="setting-title" class:locked={isLocked('gruyere.frequencyVariance')} onclick={() => toggleLock('gruyere.frequencyVariance')} title="Click to lock/unlock for randomize">Variance: {(config as any).gruyere.frequencyVariance.toFixed(2)}</button>
-            <input type="range" bind:value={(config as any).gruyere.frequencyVariance} min="0" max="1" step="0.01" disabled={!(config as any).gruyere.enabled} />
+            <button type="button" class="setting-title" class:locked={isLocked('bubbles.frequencyVariance')} onclick={() => toggleLock('bubbles.frequencyVariance')} title="Click to lock/unlock for randomize">Variance: {(config as any).bubbles.frequencyVariance.toFixed(2)}</button>
+            <input type="range" bind:value={(config as any).bubbles.frequencyVariance} min="0" max="1" step="0.01" disabled={!(config as any).bubbles.enabled} />
           </label>
 
           <label class="control-row slider">
-            <button type="button" class="setting-title" class:locked={isLocked('gruyere.radiusMin')} onclick={() => toggleLock('gruyere.radiusMin')} title="Click to lock/unlock for randomize">Radius min: {(config as any).gruyere.radiusMin.toFixed(2)}</button>
-            <input type="range" bind:value={(config as any).gruyere.radiusMin} min="0" max="1.5" step="0.01" disabled={!(config as any).gruyere.enabled} />
+            <button type="button" class="setting-title" class:locked={isLocked('bubbles.radiusMin')} onclick={() => toggleLock('bubbles.radiusMin')} title="Click to lock/unlock for randomize">Radius min: {(config as any).bubbles.radiusMin.toFixed(2)}</button>
+            <input type="range" bind:value={(config as any).bubbles.radiusMin} min="0" max="1.5" step="0.01" disabled={!(config as any).bubbles.enabled} />
           </label>
 
           <label class="control-row slider">
-            <button type="button" class="setting-title" class:locked={isLocked('gruyere.radiusMax')} onclick={() => toggleLock('gruyere.radiusMax')} title="Click to lock/unlock for randomize">Radius max: {(config as any).gruyere.radiusMax.toFixed(2)}</button>
-            <input type="range" bind:value={(config as any).gruyere.radiusMax} min="0" max="2.5" step="0.01" disabled={!(config as any).gruyere.enabled} />
+            <button type="button" class="setting-title" class:locked={isLocked('bubbles.radiusMax')} onclick={() => toggleLock('bubbles.radiusMax')} title="Click to lock/unlock for randomize">Radius max: {(config as any).bubbles.radiusMax.toFixed(2)}</button>
+            <input type="range" bind:value={(config as any).bubbles.radiusMax} min="0" max="2.5" step="0.01" disabled={!(config as any).bubbles.enabled} />
           </label>
 
           <label class="control-row slider">
-            <button type="button" class="setting-title" class:locked={isLocked('gruyere.softness')} onclick={() => toggleLock('gruyere.softness')} title="Click to lock/unlock for randomize">Softness: {(config as any).gruyere.softness.toFixed(2)}</button>
-            <input type="range" bind:value={(config as any).gruyere.softness} min="0" max="0.5" step="0.01" disabled={!(config as any).gruyere.enabled} />
+            <button type="button" class="setting-title" class:locked={isLocked('bubbles.softness')} onclick={() => toggleLock('bubbles.softness')} title="Click to lock/unlock for randomize">Softness: {(config as any).bubbles.softness.toFixed(2)}</button>
+            <input type="range" bind:value={(config as any).bubbles.softness} min="0" max="0.5" step="0.01" disabled={!(config as any).bubbles.enabled} />
           </label>
 
           <label class="control-row slider">
-            <button type="button" class="setting-title" class:locked={isLocked('gruyere.wallThickness')} onclick={() => toggleLock('gruyere.wallThickness')} title="Click to lock/unlock for randomize">Wall thickness: {(config as any).gruyere.wallThickness.toFixed(2)}</button>
-            <input type="range" bind:value={(config as any).gruyere.wallThickness} min="0" max="1" step="0.01" disabled={!(config as any).gruyere.enabled} />
+            <button type="button" class="setting-title" class:locked={isLocked('bubbles.wallThickness')} onclick={() => toggleLock('bubbles.wallThickness')} title="Click to lock/unlock for randomize">Wall thickness: {(config as any).bubbles.wallThickness.toFixed(2)}</button>
+            <input type="range" bind:value={(config as any).bubbles.wallThickness} min="0" max="1" step="0.01" disabled={!(config as any).bubbles.enabled} />
           </label>
 
           <label class="control-row slider">
-            <button type="button" class="setting-title" class:locked={isLocked('gruyere.seedOffset')} onclick={() => toggleLock('gruyere.seedOffset')} title="Click to lock/unlock for randomize">Seed offset: {Math.round((config as any).gruyere.seedOffset)}</button>
-            <input type="range" bind:value={(config as any).gruyere.seedOffset} min="-200" max="200" step="1" disabled={!(config as any).gruyere.enabled} />
+            <button type="button" class="setting-title" class:locked={isLocked('bubbles.seedOffset')} onclick={() => toggleLock('bubbles.seedOffset')} title="Click to lock/unlock for randomize">Seed offset: {Math.round((config as any).bubbles.seedOffset)}</button>
+            <input type="range" bind:value={(config as any).bubbles.seedOffset} min="-200" max="200" step="1" disabled={!(config as any).bubbles.enabled} />
           </label>
         </section>
       {/if}
