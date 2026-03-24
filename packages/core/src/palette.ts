@@ -1,6 +1,7 @@
 import type {
   WallpaperConfig,
   PaletteOverride,
+  BubblesConfig,
   TextureParams,
   TextureType,
   FacadesConfig,
@@ -13,6 +14,7 @@ export type ResolvedPaletteConfig = {
   textureParams: TextureParams;
   facades: FacadesConfig;
   edge: EdgeConfig;
+  bubbles: BubblesConfig;
   multipliers: {
     popsicle: { sizeMult: number; ratioMult: number; thicknessMult: number };
     spheres3d: { radiusMult: number };
@@ -67,13 +69,19 @@ export function getPaletteOverride(config: WallpaperConfig, paletteIndex: number
   return v as PaletteOverride;
 }
 
-export function resolvePaletteConfig(config: WallpaperConfig, paletteIndex: number): ResolvedPaletteConfig {
-  const ov = getPaletteOverride(config, paletteIndex);
+export function resolvePaletteConfig(
+  config: WallpaperConfig,
+  paletteIndex: number,
+  options?: { applyOverrides?: boolean }
+): ResolvedPaletteConfig {
+  const applyOverrides = options?.applyOverrides !== false;
+  const ov = applyOverrides ? getPaletteOverride(config, paletteIndex) : null;
 
   const texture: TextureType = (ov as any)?.texture?.type ?? config.texture;
   const textureParams: TextureParams = ov?.texture?.params ? deepMerge(config.textureParams, ov.texture.params) : config.textureParams;
   const facades: FacadesConfig = ov?.facades ? deepMerge(config.facades, ov.facades) : config.facades;
   const edge: EdgeConfig = ov?.edge ? deepMerge(config.edge, ov.edge) : config.edge;
+  const bubbles: BubblesConfig = ov?.bubbles ? deepMerge((config as any).bubbles, ov.bubbles) : (config as any).bubbles;
 
   const baseEnabled =
     !!config.emission?.enabled &&
@@ -109,6 +117,7 @@ export function resolvePaletteConfig(config: WallpaperConfig, paletteIndex: numb
     textureParams,
     facades,
     edge,
+    bubbles,
     multipliers: {
       popsicle: { sizeMult: popsicleSizeMult, ratioMult: popsicleRatioMult, thicknessMult: popsicleThicknessMult },
       spheres3d: { radiusMult: spheresRadiusMult },

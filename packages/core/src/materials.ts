@@ -236,8 +236,13 @@ uniform int wmGrazingMode;
   );
 }
 
-export function applyBubbles(material: THREE.Material, config: WallpaperConfig, objectScale?: THREE.Vector3 | number): void {
-  const g = (config as any)?.bubbles as BubblesConfig | undefined;
+export function applyBubbles(
+  material: THREE.Material,
+  config: WallpaperConfig,
+  objectScale?: THREE.Vector3 | number,
+  bubbles?: BubblesConfig
+): void {
+  const g = (bubbles ?? ((config as any)?.bubbles as BubblesConfig | undefined)) as BubblesConfig | undefined;
   if (!g?.enabled) return;
 
   const enabled = !!g.enabled;
@@ -469,9 +474,10 @@ export function createStickMeshMaterial(
   color: string,
   envIntensity: number,
   stickOpacity: number,
-  stickDimensions?: { width: number; height: number; depth: number }
+  stickDimensions?: { width: number; height: number; depth: number },
+  options?: { applyOverrides?: boolean }
 ): StickMeshMaterial {
-  const resolved = resolvePaletteConfig(config, paletteIndex);
+  const resolved = resolvePaletteConfig(config, paletteIndex, { applyOverrides: options?.applyOverrides });
   const emissive = resolved.emission.enabled
     ? { enabled: true, intensity: resolved.emission.intensity, color }
     : { enabled: false, intensity: 0, color };
@@ -603,7 +609,7 @@ varying vec3 wmObjPos;
   const needsSplitMaterial = wantsHollow || needsSideOverrides || (grazing?.enabled && grazing.mode === 'mix') || edgeEnabled;
 
   if (!needsSplitMaterial) {
-    applyBubbles(face, config);
+    applyBubbles(face, config, undefined, resolved.bubbles);
     applyEdgeFx(face, 'cap');
     return face;
   }
@@ -640,8 +646,8 @@ varying vec3 wmObjPos;
 
   // Apply edge effects late so they exist on both cap and side materials.
   // (Material.clone() does not reliably preserve onBeforeCompile/customProgramCacheKey across runtimes.)
-  applyBubbles(cap, config);
-  applyBubbles(side, config);
+  applyBubbles(cap, config, undefined, resolved.bubbles);
+  applyBubbles(side, config, undefined, resolved.bubbles);
   applyEdgeFx(cap, 'cap');
   applyEdgeFx(side, 'side');
 
@@ -653,9 +659,10 @@ export function createSurfaceMaterial(
   paletteIndex: number,
   color: string,
   envIntensity: number,
-  opacity: number
+  opacity: number,
+  options?: { applyOverrides?: boolean }
 ): THREE.Material {
-  const resolved = resolvePaletteConfig(config, paletteIndex);
+  const resolved = resolvePaletteConfig(config, paletteIndex, { applyOverrides: options?.applyOverrides });
   const emissive = resolved.emission.enabled
     ? { enabled: true, intensity: resolved.emission.intensity, color }
     : { enabled: false, intensity: 0, color };
@@ -670,7 +677,7 @@ export function createSurfaceMaterial(
     emissive
   });
   if (resolved.facades?.grazing?.enabled) applyGrazing(m, resolved.facades.grazing);
-  applyBubbles(m, config);
+  applyBubbles(m, config, undefined, resolved.bubbles);
   return m;
 }
 

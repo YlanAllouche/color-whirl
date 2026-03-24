@@ -213,11 +213,18 @@ export interface PaletteGeometryOverride {
 export interface PaletteOverride {
   /** Whether overrides for this palette index are active */
   enabled: boolean;
+  /**
+   * 0..1: how often this override applies across occurrences of the palette color.
+   * - 1 (default): apply to every occurrence
+   * - 0: apply exactly once, picking the occurrence closest to the camera (3D types)
+   */
+  frequency?: number;
   emission?: PaletteEmissionOverride;
   texture?: PaletteTextureOverride;
   facades?: PaletteFacadesOverride;
   edge?: PaletteEdgeOverride;
   geometry?: PaletteGeometryOverride;
+  bubbles?: Partial<BubblesConfig>;
 }
 
 export interface PaletteConfig {
@@ -1195,7 +1202,9 @@ export function normalizeWallpaperConfig(input: any): WallpaperConfig {
       .map((v: any) => {
         if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
         const enabled = typeof v.enabled === 'boolean' ? v.enabled : !!v.enabled;
-        return { ...v, enabled };
+        const freqRaw = Number(v.frequency);
+        const frequency = Number.isFinite(freqRaw) ? clamp(freqRaw, 0, 1) : undefined;
+        return { ...v, enabled, frequency };
       })
       .filter((v: any) => v === null || (v && typeof v === 'object'));
   }
