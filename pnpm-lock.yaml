@@ -61,6 +61,9 @@ importers:
       three:
         specifier: ^0.180.0
         version: 0.180.0
+      three-bvh-csg:
+        specifier: ^0.0.17
+        version: 0.0.17(three-mesh-bvh@0.9.8)(three@0.180.0)
       three-gpu-pathtracer:
         specifier: ^0.0.24
         version: 0.0.24(three-mesh-bvh@0.9.8)(three@0.180.0)(xatlas-web@0.1.0)
@@ -2154,6 +2157,16 @@ packages:
       b4a: 1.8.0
     transitivePeerDependencies:
       - react-native-b4a
+    dev: false
+
+  /three-bvh-csg@0.0.17(three-mesh-bvh@0.9.8)(three@0.180.0):
+    resolution: {integrity: sha512-iEkHDF8GRfGM6593Cuw8SnF1vfENCp46gIAtRzuL4nGXGWPcR1sbTBwM9ptDONb5twqlZp5WkAKya5aBKe2qcA==}
+    peerDependencies:
+      three: '>=0.151.0'
+      three-mesh-bvh: '>=0.6.6'
+    dependencies:
+      three: 0.180.0
+      three-mesh-bvh: 0.9.8(three@0.180.0)
     dev: false
 
   /three-gpu-pathtracer@0.0.24(three-mesh-bvh@0.9.8)(three@0.180.0)(xatlas-web@0.1.0):
