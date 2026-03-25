@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { 
     DEFAULT_CONFIG, 
     DEFAULT_CONFIG_BY_TYPE,
@@ -77,6 +77,8 @@
   let iconPickError = $state<string | null>(null);
   let iconPreviewCache = $state<Record<string, string>>({});
   let iconPreviewLoading = $state<Record<string, boolean>>({});
+  let iconGalleryIndex = $state(0);
+  let iconGalleryButtons: Array<HTMLButtonElement | null> = [];
   const ICON_PICKER_LIMIT = 200;
 
   $effect(() => {
@@ -110,6 +112,12 @@
     return out;
   });
 
+  $effect(() => {
+    void filteredIconNames.length;
+    iconGalleryButtons = [];
+    iconGalleryIndex = filteredIconNames.length === 0 ? 0 : Math.min(iconGalleryIndex, filteredIconNames.length - 1);
+  });
+
   let selectedProviderMeta = $derived(getIconProviderMeta(iconProvider));
 
   $effect(() => {
@@ -138,6 +146,60 @@
 
   function getIconPreviewMarkup(providerId: IconProviderId, name: string): string | null {
     return iconPreviewCache[`${providerId}:${name}`] ?? null;
+  }
+
+  function setIconGalleryButton(index: number, node: HTMLButtonElement | null) {
+    iconGalleryButtons[index] = node;
+  }
+
+  function bindIconGalleryButton(node: HTMLButtonElement, index: number) {
+    setIconGalleryButton(index, node);
+
+    return {
+      update(nextIndex: number) {
+        if (nextIndex === index) return;
+        setIconGalleryButton(index, null);
+        index = nextIndex;
+        setIconGalleryButton(index, node);
+      },
+      destroy() {
+        setIconGalleryButton(index, null);
+      }
+    };
+  }
+
+  async function focusIconGalleryIndex(index: number) {
+    if (filteredIconNames.length === 0) return;
+    const nextIndex = Math.max(0, Math.min(filteredIconNames.length - 1, index));
+    iconGalleryIndex = nextIndex;
+    await tick();
+    const button = iconGalleryButtons[nextIndex];
+    button?.focus();
+    button?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }
+
+  function handleIconGalleryKeydown(event: KeyboardEvent, index: number) {
+    if (filteredIconNames.length === 0) return;
+
+    const key = event.key;
+    const columns = window.innerWidth <= 640 ? 3 : window.innerWidth <= 920 ? 4 : 5;
+    let nextIndex: number | null = null;
+
+    if (key === 'ArrowRight') nextIndex = index + 1;
+    else if (key === 'ArrowLeft') nextIndex = index - 1;
+    else if (key === 'ArrowDown') nextIndex = index + columns;
+    else if (key === 'ArrowUp') nextIndex = index - columns;
+    else if (key === 'Home') nextIndex = 0;
+    else if (key === 'End') nextIndex = filteredIconNames.length - 1;
+
+    if (nextIndex === null) return;
+
+    event.preventDefault();
+    void focusIconGalleryIndex(nextIndex);
+  }
+
+  function handleIconGalleryFocus(index: number) {
+    iconGalleryIndex = index;
   }
 
 
@@ -4518,14 +4580,26 @@
               {#if iconPickError}
                 <div class="error-box" style="margin-top:0.5rem;">{iconPickError}</div>
               {/if}
-              <div class="icon-picker-results">
+              <div class="icon-picker-results" role="listbox" aria-label={`${selectedProviderMeta.label} icon gallery`}>
                 {#if iconLoading}
                   <div class="mono icon-picker-status">Loading icons...</div>
                 {:else if filteredIconNames.length === 0}
                   <div class="mono icon-picker-status">No matches for "{iconSearch.trim()}".</div>
                 {:else}
-                  {#each filteredIconNames as name}
-                    <button type="button" class="icon-picker-item" onclick={() => pickIconFromProvider(name)}>
+                  {#each filteredIconNames as name, index}
+                    <button
+                      type="button"
+                      class="icon-picker-item"
+                      class:is-active={index === iconGalleryIndex}
+                      use:bindIconGalleryButton={index}
+                      tabindex={index === iconGalleryIndex ? 0 : -1}
+                      role="option"
+                      aria-selected={index === iconGalleryIndex}
+                      title={name}
+                      onfocus={() => handleIconGalleryFocus(index)}
+                      onkeydown={(event) => handleIconGalleryKeydown(event, index)}
+                      onclick={() => pickIconFromProvider(name)}
+                    >
                       <span class="icon-picker-preview" aria-hidden="true">
                         {@html getIconPreviewMarkup(iconProvider, name) ?? '<span class="icon-picker-preview-fallback"></span>'}
                       </span>
@@ -4537,7 +4611,7 @@
                   {/each}
                 {/if}
               </div>
-              <div class="mono icon-picker-meta">Showing {filteredIconNames.length} / {iconNames.length} (capped at {ICON_PICKER_LIMIT})</div>
+              <div class="mono icon-picker-meta">Showing {filteredIconNames.length} / {iconNames.length} (capped at {ICON_PICKER_LIMIT}) - Arrow keys, Home, and End move focus.</div>
             </details>
 
             <label class="control-row slider">
@@ -5086,14 +5160,26 @@
               {#if iconPickError}
                 <div class="error-box" style="margin-top:0.5rem;">{iconPickError}</div>
               {/if}
-              <div class="icon-picker-results">
+              <div class="icon-picker-results" role="listbox" aria-label={`${selectedProviderMeta.label} icon gallery`}>
                 {#if iconLoading}
                   <div class="mono icon-picker-status">Loading icons...</div>
                 {:else if filteredIconNames.length === 0}
                   <div class="mono icon-picker-status">No matches for "{iconSearch.trim()}".</div>
                 {:else}
-                  {#each filteredIconNames as name}
-                    <button type="button" class="icon-picker-item" onclick={() => pickIconFromProvider(name)}>
+                  {#each filteredIconNames as name, index}
+                    <button
+                      type="button"
+                      class="icon-picker-item"
+                      class:is-active={index === iconGalleryIndex}
+                      use:bindIconGalleryButton={index}
+                      tabindex={index === iconGalleryIndex ? 0 : -1}
+                      role="option"
+                      aria-selected={index === iconGalleryIndex}
+                      title={name}
+                      onfocus={() => handleIconGalleryFocus(index)}
+                      onkeydown={(event) => handleIconGalleryKeydown(event, index)}
+                      onclick={() => pickIconFromProvider(name)}
+                    >
                       <span class="icon-picker-preview" aria-hidden="true">
                         {@html getIconPreviewMarkup(iconProvider, name) ?? '<span class="icon-picker-preview-fallback"></span>'}
                       </span>
@@ -5105,7 +5191,7 @@
                   {/each}
                 {/if}
               </div>
-              <div class="mono icon-picker-meta">Showing {filteredIconNames.length} / {iconNames.length} (capped at {ICON_PICKER_LIMIT})</div>
+              <div class="mono icon-picker-meta">Showing {filteredIconNames.length} / {iconNames.length} (capped at {ICON_PICKER_LIMIT}) - Arrow keys, Home, and End move focus.</div>
             </details>
 
             <label class="control-row slider">
@@ -6402,6 +6488,7 @@
     background: #333;
     border-radius: 2px;
     outline: none;
+    appearance: none;
     -webkit-appearance: none;
   }
   
@@ -6516,11 +6603,12 @@
 
   .icon-picker-results {
     margin-top: 0.5rem;
-    max-height: 260px;
+    max-height: 320px;
     overflow: auto;
     display: grid;
-    grid-template-columns: 1fr;
-    gap: 0.45rem;
+    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+    gap: 0.55rem;
+    padding: 0.1rem;
   }
 
   .icon-picker-status {
@@ -6530,33 +6618,38 @@
 
   .icon-picker-item {
     width: 100%;
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 0.55rem 0.65rem;
-    border-radius: 8px;
+    min-height: 88px;
+    display: grid;
+    justify-items: center;
+    align-content: start;
+    gap: 0.55rem;
+    padding: 0.7rem 0.55rem 0.65rem;
+    border-radius: 12px;
     border: 1px solid #2b2b3a;
-    background: #141420;
+    background: linear-gradient(180deg, #141420 0%, #10101a 100%);
     color: #fff;
-    text-align: left;
+    text-align: center;
     cursor: pointer;
-    transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease;
+    transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease, box-shadow 0.16s ease;
   }
 
-  .icon-picker-item:hover {
+  .icon-picker-item:hover,
+  .icon-picker-item.is-active,
+  .icon-picker-item:focus-visible {
     border-color: #3b4f76;
     background: #191928;
     transform: translateY(-1px);
+    box-shadow: 0 0 0 1px rgba(88, 132, 219, 0.2), 0 10px 18px rgba(4, 7, 17, 0.32);
+    outline: none;
   }
 
   .icon-picker-preview {
-    width: 2rem;
-    height: 2rem;
-    flex: 0 0 2rem;
+    width: 2.65rem;
+    height: 2.65rem;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border-radius: 8px;
+    border-radius: 10px;
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
     border: 1px solid rgba(255, 255, 255, 0.08);
     color: #f8fafc;
@@ -6577,14 +6670,15 @@
 
   .icon-picker-copy {
     min-width: 0;
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.6rem;
+    width: 100%;
+    display: grid;
+    justify-items: center;
+    gap: 0.4rem;
   }
 
   .icon-picker-name {
+    display: block;
+    max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -6593,6 +6687,19 @@
   .icon-picker-meta {
     margin-top: 0.5rem;
     opacity: 0.7;
+    line-height: 1.45;
+  }
+
+  @media (max-width: 640px) {
+    .icon-picker-results {
+      grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+      max-height: 280px;
+    }
+
+    .icon-picker-item {
+      min-height: 82px;
+      padding-inline: 0.45rem;
+    }
   }
   
   .preview-area {
