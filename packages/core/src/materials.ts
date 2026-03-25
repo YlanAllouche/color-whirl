@@ -418,14 +418,38 @@ vec3 wmHash3(vec3 p) {
       col.rgb = mix(col.rgb, wallTone, mixAmt);
     }
   } else {
-    // cap (no see-through): keep alpha, just shade as cavity
-    float wallT = thickness > 1e-6 ? clamp(depth / thickness, 0.0, 1.0) : 1.0;
-    vec3 rimCol = col.rgb * 0.70;
-    vec3 innerCol = mix(vec3(0.03, 0.03, 0.05), col.rgb * 0.20, 0.25);
-    vec3 shaded = mix(rimCol, innerCol, wallT);
-    // Deep interior (beyond thickness) darkens further based on fade.
-    shaded = mix(shaded, innerCol, clamp(fade, 0.0, 1.0));
-    col.rgb = mix(col.rgb, shaded, clamp(0.35 + 0.55 * max(wallT, fade), 0.0, 1.0));
+    // cap (no see-through): keep alpha, shade like a cavity (AO + rim)
+    float t = max(1e-6, thickness);
+    float cavity = smoothstep(0.0, t, depth);
+    float deep = smoothstep(t, t + max(softness, t * 0.8), depth);
+    float rim = 1.0 - smoothstep(0.0, t * 0.22, depth);
+
+    // Estimate a stable normal from worldpos derivatives (works across materials).
+    vec3 n = normalize(cross(dFdx(wmBubblesWorldPos), dFdy(wmBubblesWorldPos)));
+    if (!gl_FrontFacing) n = -n;
+    vec3 v = normalize(cameraPosition - wmBubblesWorldPos);
+    float ndv = clamp(dot(n, v), 0.0, 1.0);
+    float fres = pow(1.0 - ndv, 3.0);
+
+    vec3 base = col.rgb;
+
+    // Base cavity darkening, but never to pure black.
+    float ao = mix(1.0, 0.62, cavity);
+    ao = mix(ao, 0.48, deep);
+    ao *= 1.0 - 0.22 * rim;
+    ao = clamp(ao, 0.34, 1.0);
+
+    vec3 shaded = base * ao;
+
+    // Slight cool tint deeper inside to read as depth.
+    vec3 cool = vec3(0.04, 0.05, 0.07);
+    shaded = mix(shaded, shaded * 0.85 + cool * 0.15, deep);
+
+    // Rim sheen to avoid "stain" look.
+    shaded += base * (0.18 * rim * fres);
+
+    float mixAmt = clamp(0.25 + 0.65 * cavity + 0.35 * rim, 0.0, 1.0);
+    col.rgb = mix(base, shaded, mixAmt);
   }
 }
 `;
