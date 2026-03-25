@@ -27,6 +27,8 @@
 
   import { COLOR_PRESETS, COLOR_PRESET_GROUPS, type ColorPreset } from '$lib/color-presets';
 
+  import { getIconProviderLabel, getProviderIconSvg, listProviderIcons, type IconProviderId } from '$lib/icons/iconify';
+
   
   // Reactive state using Svelte 5 runes
   let config = $state<WallpaperConfig>(cloneDefaultConfig());
@@ -57,6 +59,56 @@
   let urlSyncEnabled = $state(false);
   let cliCommand = $state('');
   let cliViewMode = $state<'bash' | 'json'>('bash');
+
+  // SVG icon picker (Iconify JSON providers)
+  let iconProvider = $state<IconProviderId>('lucide');
+  let iconSearch = $state('');
+  let iconNames = $state<string[]>([]);
+  let iconLoading = $state(false);
+  let iconLoadError = $state<string | null>(null);
+  let iconPickError = $state<string | null>(null);
+
+  $effect(() => {
+    const id = iconProvider;
+    iconLoading = true;
+    iconLoadError = null;
+    iconNames = [];
+    void listProviderIcons(id)
+      .then((names) => {
+        if (iconProvider !== id) return;
+        iconNames = names;
+      })
+      .catch((err: any) => {
+        if (iconProvider !== id) return;
+        iconLoadError = String(err?.message || err);
+      })
+      .finally(() => {
+        if (iconProvider !== id) return;
+        iconLoading = false;
+      });
+  });
+
+  let filteredIconNames = $derived.by(() => {
+    const q = iconSearch.trim().toLowerCase();
+    if (!q) return iconNames.slice(0, 200);
+    const out: string[] = [];
+    for (const n of iconNames) {
+      if (n.toLowerCase().includes(q)) out.push(n);
+      if (out.length >= 200) break;
+    }
+    return out;
+  });
+
+  async function pickIconFromProvider(name: string) {
+    iconPickError = null;
+    try {
+      const svg = await getProviderIconSvg(iconProvider, name);
+      (config as any).svg = { ...(config as any).svg, source: svg, renderMode: 'auto' };
+      schedulePreviewRender();
+    } catch (err: any) {
+      iconPickError = String(err?.message || err);
+    }
+  }
 
   function randomSeedU32(): number {
     try {
@@ -4046,15 +4098,49 @@
                 Source
               </button>
             </label>
-           <textarea
-             bind:value={(config as any).svg.source}
-             rows="6"
-             spellcheck="false"
-             style="width:100%; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size: 12px;"
-           ></textarea>
-           {#if renderError}
-             <div class="error-box" style="margin-top:0.5rem;">{renderError}</div>
-           {/if}
+            <textarea
+              bind:value={(config as any).svg.source}
+              rows="6"
+              spellcheck="false"
+              style="width:100%; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size: 12px;"
+            ></textarea>
+            {#if renderError}
+              <div class="error-box" style="margin-top:0.5rem;">{renderError}</div>
+            {/if}
+
+            <details class="control-details">
+              <summary class="control-details-summary">Icon picker</summary>
+              <label class="control-row">
+                <span class="setting-title">Provider</span>
+                <select bind:value={iconProvider}>
+                  <option value="lucide">{getIconProviderLabel('lucide')}</option>
+                  <option value="tabler">{getIconProviderLabel('tabler')}</option>
+                  <option value="ph">{getIconProviderLabel('ph')}</option>
+                  <option value="heroicons">{getIconProviderLabel('heroicons')}</option>
+                  <option value="oui">{getIconProviderLabel('oui')}</option>
+                </select>
+              </label>
+              <label class="control-row">
+                <span class="setting-title">Search</span>
+                <input type="text" bind:value={iconSearch} placeholder="e.g. arch" />
+              </label>
+              {#if iconLoadError}
+                <div class="error-box" style="margin-top:0.5rem;">{iconLoadError}</div>
+              {/if}
+              {#if iconPickError}
+                <div class="error-box" style="margin-top:0.5rem;">{iconPickError}</div>
+              {/if}
+              <div style="margin-top:0.5rem; max-height: 220px; overflow: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem;">
+                {#if iconLoading}
+                  <div class="mono" style="grid-column: 1 / -1; opacity: 0.75;">Loading icons…</div>
+                {:else}
+                  {#each filteredIconNames as name}
+                    <button type="button" class="mono" style="text-align:left;" onclick={() => pickIconFromProvider(name)}>{name}</button>
+                  {/each}
+                {/if}
+              </div>
+              <div class="mono" style="margin-top: 0.5rem; opacity: 0.7;">Showing {filteredIconNames.length} / {iconNames.length} (capped at 200)</div>
+            </details>
 
             <label class="control-row slider">
               <button type="button" class="setting-title" class:locked={isLocked('svg.count')} onclick={() => toggleLock('svg.count')} title="Click to lock/unlock for randomize">Count: {(config as any).svg.count}</button>
@@ -4566,15 +4652,49 @@
                 Source
               </button>
             </label>
-           <textarea
-             bind:value={(config as any).svg.source}
-             rows="6"
-             spellcheck="false"
-             style="width:100%; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size: 12px;"
-           ></textarea>
-           {#if renderError}
-             <div class="error-box" style="margin-top:0.5rem;">{renderError}</div>
-           {/if}
+            <textarea
+              bind:value={(config as any).svg.source}
+              rows="6"
+              spellcheck="false"
+              style="width:100%; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size: 12px;"
+            ></textarea>
+            {#if renderError}
+              <div class="error-box" style="margin-top:0.5rem;">{renderError}</div>
+            {/if}
+
+            <details class="control-details">
+              <summary class="control-details-summary">Icon picker</summary>
+              <label class="control-row">
+                <span class="setting-title">Provider</span>
+                <select bind:value={iconProvider}>
+                  <option value="lucide">{getIconProviderLabel('lucide')}</option>
+                  <option value="tabler">{getIconProviderLabel('tabler')}</option>
+                  <option value="ph">{getIconProviderLabel('ph')}</option>
+                  <option value="heroicons">{getIconProviderLabel('heroicons')}</option>
+                  <option value="oui">{getIconProviderLabel('oui')}</option>
+                </select>
+              </label>
+              <label class="control-row">
+                <span class="setting-title">Search</span>
+                <input type="text" bind:value={iconSearch} placeholder="e.g. arch" />
+              </label>
+              {#if iconLoadError}
+                <div class="error-box" style="margin-top:0.5rem;">{iconLoadError}</div>
+              {/if}
+              {#if iconPickError}
+                <div class="error-box" style="margin-top:0.5rem;">{iconPickError}</div>
+              {/if}
+              <div style="margin-top:0.5rem; max-height: 220px; overflow: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem;">
+                {#if iconLoading}
+                  <div class="mono" style="grid-column: 1 / -1; opacity: 0.75;">Loading icons…</div>
+                {:else}
+                  {#each filteredIconNames as name}
+                    <button type="button" class="mono" style="text-align:left;" onclick={() => pickIconFromProvider(name)}>{name}</button>
+                  {/each}
+                {/if}
+              </div>
+              <div class="mono" style="margin-top: 0.5rem; opacity: 0.7;">Showing {filteredIconNames.length} / {iconNames.length} (capped at 200)</div>
+            </details>
 
             <label class="control-row slider">
               <button type="button" class="setting-title" class:locked={isLocked('svg.count')} onclick={() => toggleLock('svg.count')} title="Click to lock/unlock for randomize">Count: {(config as any).svg.count}</button>
