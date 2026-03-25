@@ -793,17 +793,17 @@ export const DEFAULT_POPSICLE_CONFIG: PopsicleConfig = {
     enabled: false,
     space: 'world',
     kind: 'edges',
-    scale: 3.5,
+    scale: 4.8,
     seedOffset: 0,
-    amount: 0.65,
-    edgeWidth: 0.22,
-    softness: 0.55,
+    amount: 0.82,
+    edgeWidth: 0.16,
+    softness: 0.42,
     colorStrength: 0.25,
     colorMode: 'darken',
     tintColor: '#ffffff',
-    roughnessStrength: 0.28,
-    normalStrength: 0.18,
-    normalScale: 0.35
+    roughnessStrength: 0.42,
+    normalStrength: 0.34,
+    normalScale: 0.52
   },
   backgroundColor: '#1a1a2e',
   facades: {
@@ -1606,6 +1606,7 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
   const theme = generateRandomColorThemeFromSeed(seed ^ 0x9e3779b9, 5);
 
   const textures: TextureType[] = ['glossy', 'matte', 'metallic', 'drywall', 'glass', 'mirror', 'cel'];
+  const texture = textures[Math.floor(rng() * textures.length)];
 
   // Opacity distribution:
   // - Very likely fully opaque (1)
@@ -1668,7 +1669,7 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
     height: DEFAULT_POPSICLE_CONFIG.height,
     colors: [...theme.colors],
     palette: { overrides: [] },
-    texture: textures[Math.floor(rng() * textures.length)],
+    texture,
     textureParams: {
       drywall: {
         grainAmount: clamp(tri(0.0, DEFAULT_POPSICLE_CONFIG.textureParams.drywall.grainAmount, 1.0), 0, 1),
@@ -1684,22 +1685,32 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
     },
     voronoi: (() => {
       const enabled = is3DType && chance(0.22);
+      const textureBias =
+        texture === 'mirror'
+          ? { roughness: 0.52, normal: 0.42, amount: 0.86, scale: 5.4 }
+          : texture === 'metallic'
+            ? { roughness: 0.48, normal: 0.38, amount: 0.84, scale: 5.2 }
+            : texture === 'glossy'
+              ? { roughness: 0.46, normal: 0.36, amount: 0.82, scale: 4.9 }
+              : texture === 'glass'
+                ? { roughness: 0.34, normal: 0.28, amount: 0.74, scale: 4.4 }
+                : { roughness: DEFAULT_POPSICLE_CONFIG.voronoi.roughnessStrength, normal: DEFAULT_POPSICLE_CONFIG.voronoi.normalStrength, amount: DEFAULT_POPSICLE_CONFIG.voronoi.amount, scale: DEFAULT_POPSICLE_CONFIG.voronoi.scale };
       return {
         ...DEFAULT_POPSICLE_CONFIG.voronoi,
         enabled,
         space: chance(0.72) ? 'world' : 'object',
         kind: chance(0.68) ? 'edges' : 'cells',
-        scale: clamp(tri(0.5, DEFAULT_POPSICLE_CONFIG.voronoi.scale, 18), 0.1, 80),
+        scale: clamp(tri(0.8, textureBias.scale, 16), 0.1, 80),
         seedOffset: Math.round(tri(-50, 0, 50)),
-        amount: enabled ? clamp(tri(0.05, DEFAULT_POPSICLE_CONFIG.voronoi.amount, 1.0), 0, 1) : DEFAULT_POPSICLE_CONFIG.voronoi.amount,
-        edgeWidth: clamp(tri(0.02, DEFAULT_POPSICLE_CONFIG.voronoi.edgeWidth, 0.75), 0, 1),
-        softness: clamp(tri(0.0, DEFAULT_POPSICLE_CONFIG.voronoi.softness, 1.0), 0, 1),
+        amount: enabled ? clamp(tri(0.18, textureBias.amount, 0.96), 0, 1) : DEFAULT_POPSICLE_CONFIG.voronoi.amount,
+        edgeWidth: clamp(tri(0.01, DEFAULT_POPSICLE_CONFIG.voronoi.edgeWidth, 0.48), 0, 1),
+        softness: clamp(tri(0.0, DEFAULT_POPSICLE_CONFIG.voronoi.softness, 0.78), 0, 1),
         colorStrength: enabled ? clamp(tri(0.05, DEFAULT_POPSICLE_CONFIG.voronoi.colorStrength, 1.0), 0, 1) : DEFAULT_POPSICLE_CONFIG.voronoi.colorStrength,
         colorMode: (['darken', 'lighten', 'tint'] as const)[Math.floor(rng() * 3)],
         tintColor: '#ffffff',
-        roughnessStrength: enabled ? clamp(tri(0.0, DEFAULT_POPSICLE_CONFIG.voronoi.roughnessStrength, 0.9), 0, 1) : DEFAULT_POPSICLE_CONFIG.voronoi.roughnessStrength,
-        normalStrength: enabled ? clamp(tri(0.0, DEFAULT_POPSICLE_CONFIG.voronoi.normalStrength, 0.75), 0, 1) : DEFAULT_POPSICLE_CONFIG.voronoi.normalStrength,
-        normalScale: clamp(tri(0.05, DEFAULT_POPSICLE_CONFIG.voronoi.normalScale, 1.0), 0, 1)
+        roughnessStrength: enabled ? clamp(tri(0.08, textureBias.roughness, 0.78), 0, 1) : DEFAULT_POPSICLE_CONFIG.voronoi.roughnessStrength,
+        normalStrength: enabled ? clamp(tri(0.06, textureBias.normal, 0.68), 0, 1) : DEFAULT_POPSICLE_CONFIG.voronoi.normalStrength,
+        normalScale: clamp(tri(0.12, DEFAULT_POPSICLE_CONFIG.voronoi.normalScale, 0.88), 0, 1)
       };
     })(),
     backgroundColor: theme.backgroundColor,

@@ -254,14 +254,26 @@ function applyVoronoi(material: THREE.Material, cfg: VoronoiConfig | undefined):
   const modeRaw = String(cfg.colorMode ?? 'darken');
   const colorMode = modeRaw === 'lighten' ? 1 : modeRaw === 'tint' ? 2 : 0;
   const tint = new THREE.Color(typeof cfg.tintColor === 'string' ? cfg.tintColor : '#ffffff');
+  const anyMat: any = material as any;
+  const baseRoughness = typeof anyMat.roughness === 'number' ? clamp(anyMat.roughness, 0, 1) : 0.5;
+  const baseMetalness = typeof anyMat.metalness === 'number' ? clamp(anyMat.metalness, 0, 1) : 0;
+  const baseClearcoat = typeof anyMat.clearcoat === 'number' ? clamp(anyMat.clearcoat, 0, 1) : 0;
+  const reflectiveBoost = clamp(
+    1.0 + (1.0 - baseRoughness) * 0.7 + baseMetalness * 0.55 + baseClearcoat * 0.2,
+    1.0,
+    2.1
+  );
+  const tunedRoughnessStrength = clamp(roughnessStrength * reflectiveBoost, 0, 1);
+  const tunedNormalStrength = clamp(normalStrength * (0.9 + (reflectiveBoost - 1.0) * 0.85), 0, 1);
+  const tunedNormalScale = clamp(normalScale * (0.92 + (reflectiveBoost - 1.0) * 0.45), 0, 1);
 
-  if (!(scale > 0) || !(amount > 0) || !(colorStrength > 0 || roughnessStrength > 0 || normalStrength > 0)) return;
+  if (!(scale > 0) || !(amount > 0) || !(colorStrength > 0 || tunedRoughnessStrength > 0 || tunedNormalStrength > 0)) return;
 
   const key =
     `voronoi-v1:${space}:${kind}:` +
     `${scale.toFixed(4)}:${seedOffset.toFixed(4)}:` +
     `${amount.toFixed(4)}:${edgeWidth.toFixed(4)}:${softness.toFixed(4)}:` +
-    `${colorStrength.toFixed(4)}:${roughnessStrength.toFixed(4)}:${normalStrength.toFixed(4)}:${normalScale.toFixed(4)}:` +
+    `${colorStrength.toFixed(4)}:${tunedRoughnessStrength.toFixed(4)}:${tunedNormalStrength.toFixed(4)}:${tunedNormalScale.toFixed(4)}:` +
     `${colorMode}:${tint.getHexString()}`;
 
   chainOnBeforeCompile(
@@ -275,9 +287,9 @@ function applyVoronoi(material: THREE.Material, cfg: VoronoiConfig | undefined):
       shader.uniforms.wmVorEdgeWidth = { value: edgeWidth };
       shader.uniforms.wmVorSoftness = { value: softness };
       shader.uniforms.wmVorColorStrength = { value: colorStrength };
-      shader.uniforms.wmVorRoughnessStrength = { value: roughnessStrength };
-      shader.uniforms.wmVorNormalStrength = { value: normalStrength };
-      shader.uniforms.wmVorNormalScale = { value: normalScale };
+      shader.uniforms.wmVorRoughnessStrength = { value: tunedRoughnessStrength };
+      shader.uniforms.wmVorNormalStrength = { value: tunedNormalStrength };
+      shader.uniforms.wmVorNormalScale = { value: tunedNormalScale };
       shader.uniforms.wmVorColorMode = { value: colorMode };
       shader.uniforms.wmVorTint = { value: tint };
 
@@ -401,11 +413,11 @@ float wmVorMaterialMask() {
 vec3 wmVorNormalPerturb(vec3 baseNormal) {
   vec3 p3 = wmVorSpace == 0 ? wmVorWorldPos : wmVorObjPos;
   vec2 p = wmVorCoords(p3);
-  float stepSize = max(0.0005, mix(0.004, 0.08, wmVorNormalScale)) / max(wmVorScale, 0.25);
+  float stepSize = max(0.00035, mix(0.0025, 0.055, wmVorNormalScale)) / max(wmVorScale, 0.35);
   float center = wmVorMaterialMask();
   float dx = wmVorMaskAt(p + vec2(stepSize, 0.0)) - center;
   float dy = wmVorMaskAt(p + vec2(0.0, stepSize)) - center;
-  vec3 bumped = normalize(baseNormal + vec3(-dx, -dy, 0.0) * (wmVorNormalStrength * 3.0));
+  vec3 bumped = normalize(baseNormal + vec3(-dx, -dy, 0.0) * (wmVorNormalStrength * 4.6));
   return bumped;
 }
 `;
@@ -426,12 +438,12 @@ vec3 wmVorNormalPerturb(vec3 baseNormal) {
       if (shader.fragmentShader.includes('#include <roughnessmap_fragment>')) {
         shader.fragmentShader = shader.fragmentShader.replace(
           '#include <roughnessmap_fragment>',
-          `#include <roughnessmap_fragment>\nroughnessFactor = clamp(roughnessFactor + (wmVorMaterialMask() - 0.5) * wmVorRoughnessStrength, 0.0, 1.0);`
+          `#include <roughnessmap_fragment>\nfloat wmVorMask = wmVorMaterialMask();\nfloat wmVorCentered = (wmVorMask - 0.5) * 2.0;\nroughnessFactor = clamp(roughnessFactor + wmVorCentered * wmVorRoughnessStrength, 0.0, 1.0);`
         );
       } else if (shader.fragmentShader.includes('float roughnessFactor = roughness;')) {
         shader.fragmentShader = shader.fragmentShader.replace(
           'float roughnessFactor = roughness;',
-          `float roughnessFactor = clamp(roughness + (wmVorMaterialMask() - 0.5) * wmVorRoughnessStrength, 0.0, 1.0);`
+          `float wmVorMask = wmVorMaterialMask();\nfloat wmVorCentered = (wmVorMask - 0.5) * 2.0;\nfloat roughnessFactor = clamp(roughness + wmVorCentered * wmVorRoughnessStrength, 0.0, 1.0);`
         );
       }
 
