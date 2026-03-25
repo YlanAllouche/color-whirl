@@ -542,7 +542,7 @@
     });
   }
 
-  function togglePaletteBlock(paletteIndex: number, block: 'emission' | 'texture' | 'grazing' | 'side' | 'outline' | 'edge' | 'geometry' | 'bubbles') {
+  function togglePaletteBlock(paletteIndex: number, block: 'emission' | 'texture' | 'grazing' | 'side' | 'outline' | 'edge' | 'geometry' | 'bubbles' | 'voronoi') {
     updatePaletteOverride(paletteIndex, (cur) => {
       const base = cur ?? { enabled: true };
       const enabled = typeof (base as any).enabled === 'boolean' ? (base as any).enabled : true;
@@ -608,6 +608,14 @@
           delete next.bubbles;
         } else {
           next.bubbles = { ...(config as any).bubbles };
+        }
+      }
+
+      if (block === 'voronoi') {
+        if (next.voronoi) {
+          delete next.voronoi;
+        } else {
+          next.voronoi = { ...(config as any).voronoi };
         }
       }
 
@@ -1436,6 +1444,17 @@
     void c.textureParams.glass.style;
     void c.textureParams.cel.bands;
     void c.textureParams.cel.halftone;
+    void (c as any).voronoi?.enabled;
+    void (c as any).voronoi?.space;
+    void (c as any).voronoi?.kind;
+    void (c as any).voronoi?.scale;
+    void (c as any).voronoi?.seedOffset;
+    void (c as any).voronoi?.amount;
+    void (c as any).voronoi?.edgeWidth;
+    void (c as any).voronoi?.softness;
+    void (c as any).voronoi?.colorStrength;
+    void (c as any).voronoi?.colorMode;
+    void (c as any).voronoi?.tintColor;
     void c.backgroundColor;
     void c.facades.side.enabled;
     void c.facades.side.tintColor;
@@ -2568,6 +2587,191 @@
 
                   {#if is3DType}
                     <details class="control-details">
+                      <summary class="control-details-summary">Voronoi</summary>
+                      <label class="control-row checkbox">
+                        <input type="checkbox" checked={!!ov?.voronoi} oninput={() => togglePaletteBlock(i, 'voronoi')} />
+                        <span class="setting-title">Override voronoi</span>
+                      </label>
+
+                      {#if ov?.voronoi}
+                        <label class="control-row checkbox">
+                          <input
+                            type="checkbox"
+                            checked={!!(ov.voronoi.enabled ?? (config as any).voronoi.enabled)}
+                            oninput={(e) => {
+                              const checked = (e.currentTarget as HTMLInputElement).checked;
+                              updatePaletteOverride(i, (cur) => ({
+                                ...(cur ?? { enabled: true }),
+                                enabled: true,
+                                voronoi: { ...(cur?.voronoi ?? {}), enabled: checked }
+                              }));
+                            }}
+                          />
+                          <span class="setting-title">Enable</span>
+                        </label>
+                        <label class="control-row">
+                          <span class="setting-title">Kind</span>
+                          <select
+                            value={ov.voronoi.kind ?? (config as any).voronoi.kind}
+                            oninput={(e) => {
+                              const v = (e.currentTarget as HTMLSelectElement).value;
+                              updatePaletteOverride(i, (cur) => ({
+                                ...(cur ?? { enabled: true }),
+                                enabled: true,
+                                voronoi: { ...(cur?.voronoi ?? {}), kind: v }
+                              }));
+                            }}
+                          >
+                            <option value="edges">Edges</option>
+                            <option value="cells">Cells</option>
+                          </select>
+                        </label>
+                        <label class="control-row">
+                          <span class="setting-title">Space</span>
+                          <select
+                            value={ov.voronoi.space ?? (config as any).voronoi.space}
+                            oninput={(e) => {
+                              const v = (e.currentTarget as HTMLSelectElement).value;
+                              updatePaletteOverride(i, (cur) => ({
+                                ...(cur ?? { enabled: true }),
+                                enabled: true,
+                                voronoi: { ...(cur?.voronoi ?? {}), space: v }
+                              }));
+                            }}
+                          >
+                            <option value="world">World</option>
+                            <option value="object">Object</option>
+                          </select>
+                        </label>
+                        <label class="control-row slider">
+                          <span class="setting-title">Scale: {Number(ov.voronoi.scale ?? (config as any).voronoi.scale).toFixed(2)}</span>
+                          <input
+                            type="range"
+                            value={Number(ov.voronoi.scale ?? (config as any).voronoi.scale)}
+                            min="0.1"
+                            max="30"
+                            step="0.1"
+                            oninput={(e) => {
+                              const v = Number((e.currentTarget as HTMLInputElement).value);
+                              updatePaletteOverride(i, (cur) => ({
+                                ...(cur ?? { enabled: true }),
+                                enabled: true,
+                                voronoi: { ...(cur?.voronoi ?? {}), scale: v }
+                              }));
+                            }}
+                          />
+                        </label>
+                        <label class="control-row slider">
+                          <span class="setting-title">Amount: {Number(ov.voronoi.amount ?? (config as any).voronoi.amount).toFixed(2)}</span>
+                          <input
+                            type="range"
+                            value={Number(ov.voronoi.amount ?? (config as any).voronoi.amount)}
+                            min="0"
+                            max="1"
+                            step="0.01"
+                            oninput={(e) => {
+                              const v = Number((e.currentTarget as HTMLInputElement).value);
+                              updatePaletteOverride(i, (cur) => ({
+                                ...(cur ?? { enabled: true }),
+                                enabled: true,
+                                voronoi: { ...(cur?.voronoi ?? {}), amount: v }
+                              }));
+                            }}
+                          />
+                        </label>
+                        <label class="control-row slider">
+                          <span class="setting-title">Edge width: {Number(ov.voronoi.edgeWidth ?? (config as any).voronoi.edgeWidth).toFixed(2)}</span>
+                          <input
+                            type="range"
+                            value={Number(ov.voronoi.edgeWidth ?? (config as any).voronoi.edgeWidth)}
+                            min="0"
+                            max="1"
+                            step="0.01"
+                            oninput={(e) => {
+                              const v = Number((e.currentTarget as HTMLInputElement).value);
+                              updatePaletteOverride(i, (cur) => ({
+                                ...(cur ?? { enabled: true }),
+                                enabled: true,
+                                voronoi: { ...(cur?.voronoi ?? {}), edgeWidth: v }
+                              }));
+                            }}
+                          />
+                        </label>
+                        <label class="control-row slider">
+                          <span class="setting-title">Softness: {Number(ov.voronoi.softness ?? (config as any).voronoi.softness).toFixed(2)}</span>
+                          <input
+                            type="range"
+                            value={Number(ov.voronoi.softness ?? (config as any).voronoi.softness)}
+                            min="0"
+                            max="1"
+                            step="0.01"
+                            oninput={(e) => {
+                              const v = Number((e.currentTarget as HTMLInputElement).value);
+                              updatePaletteOverride(i, (cur) => ({
+                                ...(cur ?? { enabled: true }),
+                                enabled: true,
+                                voronoi: { ...(cur?.voronoi ?? {}), softness: v }
+                              }));
+                            }}
+                          />
+                        </label>
+                        <label class="control-row slider">
+                          <span class="setting-title">Color strength: {Number(ov.voronoi.colorStrength ?? (config as any).voronoi.colorStrength).toFixed(2)}</span>
+                          <input
+                            type="range"
+                            value={Number(ov.voronoi.colorStrength ?? (config as any).voronoi.colorStrength)}
+                            min="0"
+                            max="1"
+                            step="0.01"
+                            oninput={(e) => {
+                              const v = Number((e.currentTarget as HTMLInputElement).value);
+                              updatePaletteOverride(i, (cur) => ({
+                                ...(cur ?? { enabled: true }),
+                                enabled: true,
+                                voronoi: { ...(cur?.voronoi ?? {}), colorStrength: v }
+                              }));
+                            }}
+                          />
+                        </label>
+                        <label class="control-row">
+                          <span class="setting-title">Color mode</span>
+                          <select
+                            value={ov.voronoi.colorMode ?? (config as any).voronoi.colorMode}
+                            oninput={(e) => {
+                              const v = (e.currentTarget as HTMLSelectElement).value;
+                              updatePaletteOverride(i, (cur) => ({
+                                ...(cur ?? { enabled: true }),
+                                enabled: true,
+                                voronoi: { ...(cur?.voronoi ?? {}), colorMode: v }
+                              }));
+                            }}
+                          >
+                            <option value="darken">Darken</option>
+                            <option value="lighten">Lighten</option>
+                            <option value="tint">Tint</option>
+                          </select>
+                        </label>
+                        <label class="control-row">
+                          <span class="setting-title">Tint</span>
+                          <input
+                            type="color"
+                            value={ov.voronoi.tintColor ?? (config as any).voronoi.tintColor}
+                            oninput={(e) => {
+                              const v = (e.currentTarget as HTMLInputElement).value;
+                              updatePaletteOverride(i, (cur) => ({
+                                ...(cur ?? { enabled: true }),
+                                enabled: true,
+                                voronoi: { ...(cur?.voronoi ?? {}), tintColor: v }
+                              }));
+                            }}
+                          />
+                        </label>
+                      {/if}
+                    </details>
+                  {/if}
+
+                  {#if is3DType}
+                    <details class="control-details">
                       <summary class="control-details-summary">Facades</summary>
 
                       <label class="control-row checkbox">
@@ -3243,11 +3447,80 @@
               </button>
             </label>
           {/if}
+
+          <details class="control-details">
+            <summary class="control-details-summary">Voronoi</summary>
+            <label class="control-row checkbox">
+              <input type="checkbox" bind:checked={(config as any).voronoi.enabled} />
+              <button
+                type="button"
+                class="setting-title"
+                class:locked={isLocked('voronoi.enabled')}
+                onclick={(e) => {
+                  e.preventDefault();
+                  toggleLock('voronoi.enabled');
+                }}
+                title="Click to lock/unlock for randomize"
+              >
+                Enable
+              </button>
+            </label>
+            <label class="control-row">
+              <button type="button" class="setting-title" class:locked={isLocked('voronoi.space')} onclick={() => toggleLock('voronoi.space')} title="Click to lock/unlock for randomize">Space</button>
+              <select bind:value={(config as any).voronoi.space} disabled={!((config as any).voronoi.enabled)}>
+                <option value="world">World</option>
+                <option value="object">Object</option>
+              </select>
+            </label>
+            <label class="control-row">
+              <button type="button" class="setting-title" class:locked={isLocked('voronoi.kind')} onclick={() => toggleLock('voronoi.kind')} title="Click to lock/unlock for randomize">Kind</button>
+              <select bind:value={(config as any).voronoi.kind} disabled={!((config as any).voronoi.enabled)}>
+                <option value="edges">Edges</option>
+                <option value="cells">Cells</option>
+              </select>
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('voronoi.scale')} onclick={() => toggleLock('voronoi.scale')} title="Click to lock/unlock for randomize">Scale: {Number((config as any).voronoi.scale).toFixed(2)}</button>
+              <input type="range" bind:value={(config as any).voronoi.scale} min="0.1" max="30" step="0.1" disabled={!((config as any).voronoi.enabled)} />
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('voronoi.seedOffset')} onclick={() => toggleLock('voronoi.seedOffset')} title="Click to lock/unlock for randomize">Seed offset: {Math.round(Number((config as any).voronoi.seedOffset) || 0)}</button>
+              <input type="range" bind:value={(config as any).voronoi.seedOffset} min="-200" max="200" step="1" disabled={!((config as any).voronoi.enabled)} />
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('voronoi.amount')} onclick={() => toggleLock('voronoi.amount')} title="Click to lock/unlock for randomize">Amount: {Number((config as any).voronoi.amount).toFixed(2)}</button>
+              <input type="range" bind:value={(config as any).voronoi.amount} min="0" max="1" step="0.01" disabled={!((config as any).voronoi.enabled)} />
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('voronoi.edgeWidth')} onclick={() => toggleLock('voronoi.edgeWidth')} title="Click to lock/unlock for randomize">Edge width: {Number((config as any).voronoi.edgeWidth).toFixed(2)}</button>
+              <input type="range" bind:value={(config as any).voronoi.edgeWidth} min="0" max="1" step="0.01" disabled={!((config as any).voronoi.enabled) || (config as any).voronoi.kind !== 'edges'} />
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('voronoi.softness')} onclick={() => toggleLock('voronoi.softness')} title="Click to lock/unlock for randomize">Softness: {Number((config as any).voronoi.softness).toFixed(2)}</button>
+              <input type="range" bind:value={(config as any).voronoi.softness} min="0" max="1" step="0.01" disabled={!((config as any).voronoi.enabled)} />
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('voronoi.colorStrength')} onclick={() => toggleLock('voronoi.colorStrength')} title="Click to lock/unlock for randomize">Color strength: {Number((config as any).voronoi.colorStrength).toFixed(2)}</button>
+              <input type="range" bind:value={(config as any).voronoi.colorStrength} min="0" max="1" step="0.01" disabled={!((config as any).voronoi.enabled)} />
+            </label>
+            <label class="control-row">
+              <button type="button" class="setting-title" class:locked={isLocked('voronoi.colorMode')} onclick={() => toggleLock('voronoi.colorMode')} title="Click to lock/unlock for randomize">Color mode</button>
+              <select bind:value={(config as any).voronoi.colorMode} disabled={!((config as any).voronoi.enabled)}>
+                <option value="darken">Darken</option>
+                <option value="lighten">Lighten</option>
+                <option value="tint">Tint</option>
+              </select>
+            </label>
+            <label class="control-row">
+              <button type="button" class="setting-title" class:locked={isLocked('voronoi.tintColor')} onclick={() => toggleLock('voronoi.tintColor')} title="Click to lock/unlock for randomize">Tint</button>
+              <input type="color" bind:value={(config as any).voronoi.tintColor} disabled={!((config as any).voronoi.enabled) || (config as any).voronoi.colorMode !== 'tint'} />
+            </label>
+          </details>
         {/if}
-         <label class="control-row">
-           <button type="button" class="setting-title" class:locked={isLocked('backgroundColor')} onclick={() => toggleLock('backgroundColor')} title="Click to lock/unlock for randomize">Background</button>
-           <input type="color" bind:value={config.backgroundColor} />
-         </label>
+          <label class="control-row">
+            <button type="button" class="setting-title" class:locked={isLocked('backgroundColor')} onclick={() => toggleLock('backgroundColor')} title="Click to lock/unlock for randomize">Background</button>
+            <input type="color" bind:value={config.backgroundColor} />
+          </label>
        </section>
 
       <!-- Emission -->

@@ -6,7 +6,8 @@ import type {
   TextureType,
   GlassStyle,
   WallpaperConfig,
-  BubblesConfig
+  BubblesConfig,
+  VoronoiConfig
 } from './types.js';
 import { createRng } from './types.js';
 import { resolvePaletteConfig } from './palette.js';
@@ -233,6 +234,157 @@ uniform int wmGrazingMode;
       );
     },
     `grazing-v1:${mode}:${color.getHexString()}:${strength.toFixed(3)}:${power.toFixed(3)}:${width.toFixed(3)}:${noise.toFixed(3)}`
+  );
+}
+
+function applyVoronoi(material: THREE.Material, cfg: VoronoiConfig | undefined): void {
+  if (!cfg?.enabled) return;
+
+  const space = cfg.space === 'object' ? 1 : 0;
+  const kind = cfg.kind === 'cells' ? 0 : 1;
+  const scale = clamp(Number(cfg.scale) || 0, 0, 80);
+  const seedOffset = Number.isFinite(Number(cfg.seedOffset)) ? Number(cfg.seedOffset) : 0;
+  const amount = clamp(Number(cfg.amount) || 0, 0, 1);
+  const edgeWidth = clamp(Number(cfg.edgeWidth) || 0, 0, 1);
+  const softness = clamp(Number(cfg.softness) || 0, 0, 1);
+  const colorStrength = clamp(Number(cfg.colorStrength) || 0, 0, 1);
+  const modeRaw = String(cfg.colorMode ?? 'darken');
+  const colorMode = modeRaw === 'lighten' ? 1 : modeRaw === 'tint' ? 2 : 0;
+  const tint = new THREE.Color(typeof cfg.tintColor === 'string' ? cfg.tintColor : '#ffffff');
+
+  if (!(scale > 0) || !(amount > 0) || !(colorStrength > 0)) return;
+
+  const key =
+    `voronoi-v1:${space}:${kind}:` +
+    `${scale.toFixed(4)}:${seedOffset.toFixed(4)}:` +
+    `${amount.toFixed(4)}:${edgeWidth.toFixed(4)}:${softness.toFixed(4)}:` +
+    `${colorStrength.toFixed(4)}:${colorMode}:${tint.getHexString()}`;
+
+  chainOnBeforeCompile(
+    material,
+    (shader) => {
+      shader.uniforms.wmVorSpace = { value: space };
+      shader.uniforms.wmVorKind = { value: kind };
+      shader.uniforms.wmVorScale = { value: scale };
+      shader.uniforms.wmVorSeed = { value: seedOffset };
+      shader.uniforms.wmVorAmount = { value: amount };
+      shader.uniforms.wmVorEdgeWidth = { value: edgeWidth };
+      shader.uniforms.wmVorSoftness = { value: softness };
+      shader.uniforms.wmVorColorStrength = { value: colorStrength };
+      shader.uniforms.wmVorColorMode = { value: colorMode };
+      shader.uniforms.wmVorTint = { value: tint };
+
+      const vtxHeader = `\nvarying vec3 wmVorWorldPos;\nvarying vec3 wmVorObjPos;\n`;
+      if (shader.vertexShader.includes('#include <common>')) {
+        shader.vertexShader = shader.vertexShader.replace('#include <common>', `#include <common>${vtxHeader}`);
+      } else if (!shader.vertexShader.includes('varying vec3 wmVorWorldPos')) {
+        shader.vertexShader = vtxHeader + shader.vertexShader;
+      }
+
+      if (shader.vertexShader.includes('#include <begin_vertex>')) {
+        shader.vertexShader = shader.vertexShader.replace(
+          '#include <begin_vertex>',
+          `#include <begin_vertex>\nwmVorObjPos = position;`
+        );
+      }
+
+      if (shader.vertexShader.includes('#include <worldpos_vertex>')) {
+        shader.vertexShader = shader.vertexShader.replace(
+          '#include <worldpos_vertex>',
+          `#include <worldpos_vertex>\nwmVorWorldPos = worldPosition.xyz;`
+        );
+      } else if (!shader.vertexShader.includes('wmVorWorldPos')) {
+        // Fallback: approximate from model matrix.
+        shader.vertexShader = shader.vertexShader.replace(
+          'void main() {',
+          `void main() {\n#ifdef USE_INSTANCING\nvec4 wmVorWP = modelMatrix * instanceMatrix * vec4(position, 1.0);\n#else\nvec4 wmVorWP = modelMatrix * vec4(position, 1.0);\n#endif\nwmVorWorldPos = wmVorWP.xyz;\nwmVorObjPos = position;`
+        );
+      }
+
+      const fragUniforms = `
+uniform int wmVorSpace;
+uniform int wmVorKind;
+uniform float wmVorScale;
+uniform float wmVorSeed;
+uniform float wmVorAmount;
+uniform float wmVorEdgeWidth;
+uniform float wmVorSoftness;
+uniform float wmVorColorStrength;
+uniform int wmVorColorMode;
+uniform vec3 wmVorTint;
+varying vec3 wmVorWorldPos;
+varying vec3 wmVorObjPos;
+
+float wmVorHash1(vec2 p) {
+  return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+
+vec2 wmVorHash2(vec2 p) {
+  return vec2(
+    wmVorHash1(p + vec2(0.0, 0.0)),
+    wmVorHash1(p + vec2(17.0, 13.0))
+  );
+}
+
+void wmApplyVoronoi(inout vec4 col) {
+  vec3 p3 = wmVorSpace == 0 ? wmVorWorldPos : wmVorObjPos;
+  vec2 p = p3.xy * wmVorScale + vec2(wmVorSeed, wmVorSeed * 1.37);
+  vec2 g = floor(p);
+  vec2 f = fract(p);
+  float d1 = 1e9;
+  float d2 = 1e9;
+  for (int y = -1; y <= 1; y++) {
+    for (int x = -1; x <= 1; x++) {
+      vec2 o = vec2(float(x), float(y));
+      vec2 r = o + wmVorHash2(g + o) - f;
+      float d = dot(r, r);
+      if (d < d1) {
+        d2 = d1;
+        d1 = d;
+      } else if (d < d2) {
+        d2 = d;
+      }
+    }
+  }
+  float f1 = sqrt(max(0.0, d1));
+  float f2 = sqrt(max(0.0, d2));
+  float v = wmVorKind == 0 ? f1 : (f2 - f1);
+
+  float w = max(1e-6, wmVorEdgeWidth);
+  float s = max(1e-6, wmVorSoftness);
+  float mask;
+  if (wmVorKind == 0) {
+    // cells
+    mask = 1.0 - smoothstep(0.15, 0.15 + s * 0.9, v);
+  } else {
+    // edges
+    mask = 1.0 - smoothstep(w, w + s, v);
+  }
+
+  float a = clamp(wmVorAmount * mask, 0.0, 1.0);
+  float cs = clamp(wmVorColorStrength, 0.0, 1.0);
+  if (wmVorColorMode == 0) {
+    col.rgb *= mix(1.0, 1.0 - cs, a);
+  } else if (wmVorColorMode == 1) {
+    col.rgb = mix(col.rgb, vec3(1.0), a * cs);
+  } else {
+    col.rgb = mix(col.rgb, wmVorTint, a * cs);
+  }
+}
+`;
+
+      if (shader.fragmentShader.includes('#include <common>')) {
+        shader.fragmentShader = shader.fragmentShader.replace('#include <common>', `#include <common>\n${fragUniforms}`);
+      } else if (!shader.fragmentShader.includes('wmApplyVoronoi')) {
+        shader.fragmentShader = fragUniforms + '\n' + shader.fragmentShader;
+      }
+
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <dithering_fragment>',
+        `wmApplyVoronoi(gl_FragColor);\n#include <dithering_fragment>`
+      );
+    },
+    key
   );
 }
 
@@ -650,6 +802,7 @@ varying vec3 wmObjPos;
   const needsSplitMaterial = wantsHollow || needsSideOverrides || (grazing?.enabled && grazing.mode === 'mix') || edgeEnabled;
 
   if (!needsSplitMaterial) {
+    applyVoronoi(face, resolved.voronoi);
     applyBubbles(face, config, undefined, resolved.bubbles);
     applyEdgeFx(face, 'cap');
     return face;
@@ -687,6 +840,8 @@ varying vec3 wmObjPos;
 
   // Apply edge effects late so they exist on both cap and side materials.
   // (Material.clone() does not reliably preserve onBeforeCompile/customProgramCacheKey across runtimes.)
+  applyVoronoi(cap, resolved.voronoi);
+  applyVoronoi(side, resolved.voronoi);
   applyBubbles(cap, config, undefined, resolved.bubbles);
   applyBubbles(side, config, undefined, resolved.bubbles);
   applyEdgeFx(cap, 'cap');
@@ -718,6 +873,7 @@ export function createSurfaceMaterial(
     emissive
   });
   if (resolved.facades?.grazing?.enabled) applyGrazing(m, resolved.facades.grazing);
+  applyVoronoi(m, resolved.voronoi);
   applyBubbles(m, config, undefined, resolved.bubbles);
   return m;
 }

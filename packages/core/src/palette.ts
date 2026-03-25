@@ -5,7 +5,8 @@ import type {
   TextureParams,
   TextureType,
   FacadesConfig,
-  EdgeConfig
+  EdgeConfig,
+  VoronoiConfig
 } from './types.js';
 
 export type ResolvedPaletteConfig = {
@@ -15,6 +16,7 @@ export type ResolvedPaletteConfig = {
   facades: FacadesConfig;
   edge: EdgeConfig;
   bubbles: BubblesConfig;
+  voronoi: VoronoiConfig;
   multipliers: {
     popsicle: { sizeMult: number; ratioMult: number; thicknessMult: number };
     spheres3d: { radiusMult: number };
@@ -82,6 +84,7 @@ export function resolvePaletteConfig(
   const facades: FacadesConfig = ov?.facades ? deepMerge(config.facades, ov.facades) : config.facades;
   const edge: EdgeConfig = ov?.edge ? deepMerge(config.edge, ov.edge) : config.edge;
   const bubbles: BubblesConfig = ov?.bubbles ? deepMerge((config as any).bubbles, ov.bubbles) : (config as any).bubbles;
+  const voronoi: VoronoiConfig = (ov as any)?.voronoi ? deepMerge((config as any).voronoi, (ov as any).voronoi) : (config as any).voronoi;
 
   const baseEnabled =
     !!config.emission?.enabled &&
@@ -118,6 +121,7 @@ export function resolvePaletteConfig(
     facades,
     edge,
     bubbles,
+    voronoi,
     multipliers: {
       popsicle: { sizeMult: popsicleSizeMult, ratioMult: popsicleRatioMult, thicknessMult: popsicleThicknessMult },
       spheres3d: { radiusMult: spheresRadiusMult },

@@ -230,6 +230,7 @@ export interface PaletteOverride {
   edge?: PaletteEdgeOverride;
   geometry?: PaletteGeometryOverride;
   bubbles?: Partial<BubblesConfig>;
+  voronoi?: Partial<VoronoiConfig>;
 }
 
 export interface PaletteConfig {
@@ -242,6 +243,31 @@ export interface BloomConfig {
   strength: number;
   radius: number;
   threshold: number;
+}
+
+export type VoronoiKind = 'cells' | 'edges';
+export type VoronoiSpace = 'world' | 'object';
+export type VoronoiColorMode = 'darken' | 'lighten' | 'tint';
+
+export interface VoronoiConfig {
+  enabled: boolean;
+  space: VoronoiSpace;
+  kind: VoronoiKind;
+  /** Cell density. Higher = smaller cells. */
+  scale: number;
+  seedOffset: number;
+
+  /** 0..1 */
+  amount: number;
+  /** 0..1: only used for kind='edges' */
+  edgeWidth: number;
+  /** 0..1 */
+  softness: number;
+
+  /** 0..1 */
+  colorStrength: number;
+  colorMode: VoronoiColorMode;
+  tintColor: string;
 }
 
 export type CollisionsMode = 'none' | 'carve';
@@ -337,6 +363,7 @@ export interface BaseWallpaperConfig {
   palette: PaletteConfig;
   texture: TextureType;
   textureParams: TextureParams;
+  voronoi: VoronoiConfig;
   backgroundColor: string;
   facades: FacadesConfig;
   edge: EdgeConfig;
@@ -754,6 +781,19 @@ export const DEFAULT_POPSICLE_CONFIG: PopsicleConfig = {
     drywall: { grainAmount: 0.65, grainScale: 2.5 },
     glass: { style: 'simple' },
     cel: { bands: 4, halftone: false }
+  },
+  voronoi: {
+    enabled: false,
+    space: 'world',
+    kind: 'edges',
+    scale: 3.5,
+    seedOffset: 0,
+    amount: 0.65,
+    edgeWidth: 0.22,
+    softness: 0.55,
+    colorStrength: 0.25,
+    colorMode: 'darken',
+    tintColor: '#ffffff'
   },
   backgroundColor: '#1a1a2e',
   facades: {
@@ -1226,6 +1266,32 @@ export function normalizeWallpaperConfig(input: any): WallpaperConfig {
     gAny.seedOffset = Number.isFinite(so) ? so : Number(baseBubbles.seedOffset) || 0;
   }
 
+  // Voronoi config validation.
+  const baseVor: any = (base as any).voronoi;
+  const vAny: any = (merged as any).voronoi;
+  if (!vAny || typeof vAny !== 'object') {
+    (merged as any).voronoi = cloneJson(baseVor);
+  } else {
+    vAny.enabled = typeof vAny.enabled === 'boolean' ? vAny.enabled : !!vAny.enabled;
+    vAny.space = vAny.space === 'object' ? 'object' : 'world';
+    vAny.kind = vAny.kind === 'cells' ? 'cells' : 'edges';
+    const sc = Number(vAny.scale);
+    vAny.scale = Number.isFinite(sc) ? clamp(sc, 0, 80) : clamp(Number(baseVor?.scale) || 0, 0, 80);
+    const so = Number(vAny.seedOffset);
+    vAny.seedOffset = Number.isFinite(so) ? so : Number(baseVor?.seedOffset) || 0;
+    const amt = Number(vAny.amount);
+    vAny.amount = Number.isFinite(amt) ? clamp(amt, 0, 1) : clamp(Number(baseVor?.amount) || 0, 0, 1);
+    const ew = Number(vAny.edgeWidth);
+    vAny.edgeWidth = Number.isFinite(ew) ? clamp(ew, 0, 1) : clamp(Number(baseVor?.edgeWidth) || 0, 0, 1);
+    const sf = Number(vAny.softness);
+    vAny.softness = Number.isFinite(sf) ? clamp(sf, 0, 1) : clamp(Number(baseVor?.softness) || 0, 0, 1);
+    const cs = Number(vAny.colorStrength);
+    vAny.colorStrength = Number.isFinite(cs) ? clamp(cs, 0, 1) : clamp(Number(baseVor?.colorStrength) || 0, 0, 1);
+    const cm = String(vAny.colorMode ?? baseVor?.colorMode ?? 'darken');
+    vAny.colorMode = cm === 'lighten' ? 'lighten' : cm === 'tint' ? 'tint' : 'darken';
+    if (typeof vAny.tintColor !== 'string') vAny.tintColor = String(vAny.tintColor ?? baseVor?.tintColor ?? '#ffffff');
+  }
+
   const edgeObj: any = (merged as any).edge;
   if (!edgeObj || typeof edgeObj !== 'object') {
     (merged as any).edge = cloneJson((base as any).edge);
@@ -1600,6 +1666,23 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
         halftone: chance(0.25)
       }
     },
+    voronoi: (() => {
+      const enabled = is3DType && chance(0.22);
+      return {
+        ...DEFAULT_POPSICLE_CONFIG.voronoi,
+        enabled,
+        space: chance(0.72) ? 'world' : 'object',
+        kind: chance(0.68) ? 'edges' : 'cells',
+        scale: clamp(tri(0.5, DEFAULT_POPSICLE_CONFIG.voronoi.scale, 18), 0.1, 80),
+        seedOffset: Math.round(tri(-50, 0, 50)),
+        amount: enabled ? clamp(tri(0.05, DEFAULT_POPSICLE_CONFIG.voronoi.amount, 1.0), 0, 1) : DEFAULT_POPSICLE_CONFIG.voronoi.amount,
+        edgeWidth: clamp(tri(0.02, DEFAULT_POPSICLE_CONFIG.voronoi.edgeWidth, 0.75), 0, 1),
+        softness: clamp(tri(0.0, DEFAULT_POPSICLE_CONFIG.voronoi.softness, 1.0), 0, 1),
+        colorStrength: enabled ? clamp(tri(0.05, DEFAULT_POPSICLE_CONFIG.voronoi.colorStrength, 1.0), 0, 1) : DEFAULT_POPSICLE_CONFIG.voronoi.colorStrength,
+        colorMode: (['darken', 'lighten', 'tint'] as const)[Math.floor(rng() * 3)],
+        tintColor: '#ffffff'
+      };
+    })(),
     backgroundColor: theme.backgroundColor,
     facades: (() => {
       const tintEnabled = chance(0.18);
@@ -1800,6 +1883,22 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
       } else if (type === 'svg3d') {
         setOverride(idx, { geometry: { svg: { sizeMult: mult(), extrudeMult: mult() } } });
       }
+    }
+
+    // Rare: per-color voronoi override (accent texture).
+    if (is3DType && chance(0.16)) {
+      const idx = Math.floor(rng() * paletteCount);
+      setOverride(idx, {
+        voronoi: {
+          enabled: true,
+          amount: clamp(tri(0.05, 0.65, 1.0), 0, 1),
+          scale: clamp(tri(0.6, 3.5, 18), 0.1, 80),
+          kind: rng() < 0.7 ? 'edges' : 'cells',
+          colorStrength: clamp(tri(0.05, 0.25, 1.0), 0, 1),
+          colorMode: rng() < 0.6 ? 'darken' : rng() < 0.5 ? 'lighten' : 'tint',
+          tintColor: '#ffffff'
+        }
+      });
     }
   }
 
