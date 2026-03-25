@@ -2,7 +2,7 @@ import * as THREE from 'three';
 
 import { SVGLoader } from 'three/examples/jsm/loaders/SVGLoader.js';
 
-import { validateSvgSource } from './svg-utils.js';
+import { extractSvgRootAttributes, validateSvgSource } from './svg-utils.js';
 
 type Point = { x: number; y: number };
 
@@ -31,6 +31,22 @@ type ParsedPath = {
   bounds: Bounds | null;
   area: number;
 };
+
+type GradientStop = {
+  offset: number;
+  color: string;
+  opacity: number;
+};
+
+type GradientDefinition = {
+  kind: 'linear' | 'radial';
+  id: string;
+  href: string | null;
+  stops: GradientStop[];
+  attrs: Record<string, string>;
+};
+
+type GradientPalette = Map<string, number[]>;
 
 type ToneBucket = {
   score: number;
@@ -96,6 +112,175 @@ function toneFromColor(input: unknown): number | null {
   const hsl = rgbToHsl(r, g, b);
   const chromaWeight = 0.12 * hsl.s * Math.cos((hsl.h * Math.PI) / 180);
   return clamp01(lum + chromaWeight);
+}
+
+function parseStyleDeclarations(input: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const part of String(input || '').split(';')) {
+    const idx = part.indexOf(':');
+    if (idx <= 0) continue;
+    const key = part.slice(0, idx).trim().toLowerCase();
+    const value = part.slice(idx + 1).trim();
+    if (!key || !value) continue;
+    out[key] = value;
+  }
+  return out;
+}
+
+function parseTagAttributes(input: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  const re = /([:\w-]+)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(input))) {
+    const key = String(m[1] ?? '').trim().toLowerCase();
+    const raw = String(m[2] ?? '').trim();
+    if (!key || !raw) continue;
+    out[key] = raw.replace(/^['"]|['"]$/g, '');
+  }
+  return out;
+}
+
+function parseOpacity(input: unknown, fallback = 1): number {
+  const n = Number.parseFloat(String(input ?? ''));
+  return Number.isFinite(n) ? clamp01(n) : fallback;
+}
+
+function parseStopOffset(input: unknown): number | null {
+  const raw = String(input ?? '').trim();
+  if (!raw) return null;
+  if (raw.endsWith('%')) {
+    const n = Number.parseFloat(raw.slice(0, -1));
+    return Number.isFinite(n) ? clamp01(n / 100) : null;
+  }
+  const n = Number.parseFloat(raw);
+  return Number.isFinite(n) ? clamp01(n) : null;
+}
+
+function parseGradientPaintId(input: unknown): string | null {
+  const raw = String(input ?? '').trim();
+  const m = /^url\(\s*#([^)\s]+)\s*\)$/i.exec(raw);
+  return m?.[1] ?? null;
+}
+
+function ensureGradientOffsets(stops: GradientStop[]): GradientStop[] {
+  if (stops.length === 0) return [];
+  const next = stops
+    .map((stop, i) => ({ ...stop, offset: Number.isFinite(stop.offset) ? clamp01(stop.offset) : (i === 0 ? 0 : 1) }))
+    .sort((a, b) => a.offset - b.offset);
+  if (next.length === 1) return [{ ...next[0], offset: 0 }, { ...next[0], offset: 1 }];
+  next[0].offset = 0;
+  next[next.length - 1].offset = 1;
+  for (let i = 1; i < next.length - 1; i++) {
+    if (next[i].offset < next[i - 1].offset) next[i].offset = next[i - 1].offset;
+    if (next[i].offset > next[i + 1].offset) next[i].offset = next[i + 1].offset;
+  }
+  return next;
+}
+
+function resolveGradientDefinitions(svgSource: string): GradientPalette {
+  const { inner } = extractSvgRootAttributes(svgSource);
+  const gradients = new Map<string, GradientDefinition>();
+  const gradientRe = /<(linearGradient|radialGradient)\b([^>]*)>([\s\S]*?)<\/\1>/gi;
+  let gradientMatch: RegExpExecArray | null;
+
+  while ((gradientMatch = gradientRe.exec(inner))) {
+    const kind = gradientMatch[1] === 'radialGradient' ? 'radial' : 'linear';
+    const attrs = parseTagAttributes(gradientMatch[2] ?? '');
+    const id = String(attrs.id ?? '').trim();
+    if (!id) continue;
+    const href = attrs.href ?? attrs['xlink:href'] ?? null;
+    const body = gradientMatch[3] ?? '';
+    const stopRe = /<stop\b([^>]*)\/?>(?:<\/stop>)?/gi;
+    const stops: GradientStop[] = [];
+    let stopMatch: RegExpExecArray | null;
+    while ((stopMatch = stopRe.exec(body))) {
+      const stopAttrs = parseTagAttributes(stopMatch[1] ?? '');
+      const style = parseStyleDeclarations(stopAttrs.style ?? '');
+      const offset = parseStopOffset(stopAttrs.offset);
+      const color = stopAttrs['stop-color'] ?? style['stop-color'] ?? '';
+      if (offset == null || !color) continue;
+      const stopOpacity = parseOpacity(stopAttrs['stop-opacity'] ?? style['stop-opacity'], 1);
+      stops.push({ offset, color, opacity: stopOpacity });
+    }
+    gradients.set(id, { kind, id, href, stops: ensureGradientOffsets(stops), attrs });
+  }
+
+  const cache = new Map<string, number[]>();
+  const visit = (id: string, stack: Set<string>): number[] => {
+    const cached = cache.get(id);
+    if (cached) return cached;
+    const def = gradients.get(id);
+    if (!def || stack.has(id)) return [];
+    stack.add(id);
+    const inheritedId = def.href ? parseGradientPaintId(def.href) ?? String(def.href).replace(/^#/, '') : null;
+    const inherited = inheritedId ? visit(inheritedId, stack) : [];
+    const tones = def.stops.length > 0 ? gradientStopsToTones(def.stops, def.kind) : inherited;
+    const normalized = mergeCloseTones(tones.map((tone, i) => ({ tone, weight: 1 + i * 0.001 })), Math.max(2, Math.min(8, tones.length || inherited.length || 2)));
+    cache.set(id, normalized);
+    stack.delete(id);
+    return normalized;
+  };
+
+  const palette: GradientPalette = new Map();
+  for (const id of gradients.keys()) {
+    const tones = visit(id, new Set<string>());
+    if (tones.length > 0) palette.set(id, tones);
+  }
+  return palette;
+}
+
+function mixToneSequence(stops: GradientStop[], kind: 'linear' | 'radial', samples: number): number[] {
+  const normalized = ensureGradientOffsets(stops);
+  if (normalized.length === 0) return [];
+  if (normalized.length === 1) {
+    const tone = toneFromColor(normalized[0].color);
+    return tone == null ? [] : [tone];
+  }
+
+  const tones = normalized.map((stop) => ({
+    offset: stop.offset,
+    tone: toneFromColor(stop.color),
+    opacity: stop.opacity
+  })).filter((stop) => stop.tone != null && stop.opacity > 0) as Array<{ offset: number; tone: number; opacity: number }>;
+  if (tones.length === 0) return [];
+  if (tones.length === 1) return [tones[0].tone];
+
+  const out: Array<{ tone: number; weight: number }> = [];
+  for (let i = 0; i < samples; i++) {
+    const t = samples === 1 ? 0.5 : i / (samples - 1);
+    let a = tones[0];
+    let b = tones[tones.length - 1];
+    for (let j = 0; j < tones.length - 1; j++) {
+      if (t >= tones[j].offset && t <= tones[j + 1].offset) {
+        a = tones[j];
+        b = tones[j + 1];
+        break;
+      }
+    }
+    const span = Math.max(1e-6, b.offset - a.offset);
+    const lt = clamp01((t - a.offset) / span);
+    const tone = a.tone + (b.tone - a.tone) * lt;
+    const opacity = a.opacity + (b.opacity - a.opacity) * lt;
+    const radialWeight = kind === 'radial' ? Math.max(0.2, t) : 1;
+    out.push({ tone, weight: Math.max(0.01, opacity * radialWeight) });
+  }
+  return mergeCloseTones(out, Math.max(2, Math.min(8, normalized.length + 2)));
+}
+
+function gradientStopsToTones(stops: GradientStop[], kind: 'linear' | 'radial'): number[] {
+  const direct: Array<{ tone: number; weight: number }> = [];
+  for (const stop of ensureGradientOffsets(stops)) {
+    const tone = toneFromColor(stop.color);
+    if (tone == null || stop.opacity <= 0) continue;
+    const radialWeight = kind === 'radial' ? Math.max(0.35, stop.offset) : 1;
+    direct.push({ tone, weight: Math.max(0.01, stop.opacity * radialWeight) });
+  }
+  const mergedDirect = mergeCloseTones(direct, Math.max(2, Math.min(8, direct.length || 2)));
+  const sampled = mixToneSequence(stops, kind, Math.max(5, Math.min(13, stops.length * 3 + 1)));
+  return mergeCloseTones(
+    [...mergedDirect, ...sampled].map((tone, i) => ({ tone, weight: i < mergedDirect.length ? 1.5 : 1 })),
+    Math.max(2, Math.min(8, Math.max(mergedDirect.length, sampled.length, 2)))
+  );
 }
 
 function createEmptyBounds(): Bounds {
@@ -209,6 +394,7 @@ function nearestToneIndex(tone: number, centers: number[]): number {
 
 function parseSvgPaths(svgSource: string): { paths: ParsedPath[]; bounds: Bounds } {
   const source = validateSvgSource(svgSource);
+  const gradientPalette = resolveGradientDefinitions(source);
   let data: any;
   try {
     const loader = new SVGLoader();
@@ -222,8 +408,12 @@ function parseSvgPaths(svgSource: string): { paths: ParsedPath[]; bounds: Bounds
 
   for (const p of data?.paths ?? []) {
     const style = (p as any)?.userData?.style ?? {};
-    const fillTone = toneFromColor(style.fill);
-    const strokeTone = toneFromColor(style.stroke);
+    const fillGradientId = parseGradientPaintId(style.fill);
+    const strokeGradientId = parseGradientPaintId(style.stroke);
+    const fillTones = fillGradientId ? gradientPalette.get(fillGradientId) ?? [] : [];
+    const strokeTones = strokeGradientId ? gradientPalette.get(strokeGradientId) ?? [] : [];
+    const fillTone = fillTones[0] ?? toneFromColor(style.fill);
+    const strokeTone = strokeTones[0] ?? toneFromColor(style.stroke);
 
     const subPaths = (p as any)?.subPaths ?? [];
     const points: Point[][] = [];
@@ -273,6 +463,36 @@ function parseSvgPaths(svgSource: string): { paths: ParsedPath[]; bounds: Bounds
       bounds,
       area
     });
+
+    if (fillTones.length > 1) {
+      const areaWeight = Math.max(1, area / Math.max(1, fillTones.length));
+      for (let i = 1; i < fillTones.length; i++) {
+        parsed.push({
+          fillTone: fillTones[i],
+          strokeTone: strokeTone ?? fillTones[i],
+          points: [],
+          closedPoints: [],
+          shapes: [...shapes],
+          bounds,
+          area: areaWeight
+        });
+      }
+    }
+
+    if (strokeTones.length > 1) {
+      const strokeWeight = Math.max(1, area / Math.max(1, strokeTones.length));
+      for (let i = 1; i < strokeTones.length; i++) {
+        parsed.push({
+          fillTone: fillTone ?? strokeTones[i],
+          strokeTone: strokeTones[i],
+          points: points.map((pts) => pts.slice()),
+          closedPoints: [],
+          shapes: [],
+          bounds,
+          area: strokeWeight
+        });
+      }
+    }
   }
 
   if (!isFiniteBounds(globalBounds) || parsed.length === 0) {
