@@ -2,6 +2,13 @@ import { iconToSVG, replaceIDs } from '@iconify/utils';
 
 export type IconProviderId = 'lucide' | 'tabler' | 'ph' | 'heroicons' | 'oui';
 
+export type IconProviderMeta = {
+  id: IconProviderId;
+  label: string;
+  shortLabel: string;
+  badgeTone: 'blue' | 'teal' | 'green' | 'amber' | 'rose';
+};
+
 type IconifyIconsJson = {
   prefix?: string;
   width?: number;
@@ -17,19 +24,22 @@ type LoadedProvider = {
 
 const cache = new Map<IconProviderId, LoadedProvider>();
 
+const PROVIDER_META: Record<IconProviderId, IconProviderMeta> = {
+  lucide: { id: 'lucide', label: 'Lucide', shortLabel: 'LUC', badgeTone: 'blue' },
+  tabler: { id: 'tabler', label: 'Tabler', shortLabel: 'TAB', badgeTone: 'teal' },
+  ph: { id: 'ph', label: 'Phosphor', shortLabel: 'PH', badgeTone: 'green' },
+  heroicons: { id: 'heroicons', label: 'Heroicons', shortLabel: 'HRO', badgeTone: 'amber' },
+  oui: { id: 'oui', label: 'OUI', shortLabel: 'OUI', badgeTone: 'rose' }
+};
+
+export const ICON_PROVIDER_IDS = Object.keys(PROVIDER_META) as IconProviderId[];
+
+export function getIconProviderMeta(id: IconProviderId): IconProviderMeta {
+  return PROVIDER_META[id];
+}
+
 export function getIconProviderLabel(id: IconProviderId): string {
-  switch (id) {
-    case 'lucide':
-      return 'Lucide';
-    case 'tabler':
-      return 'Tabler';
-    case 'ph':
-      return 'Phosphor';
-    case 'heroicons':
-      return 'Heroicons';
-    case 'oui':
-      return 'OUI';
-  }
+  return getIconProviderMeta(id).label;
 }
 
 async function importIconsJson(id: IconProviderId): Promise<IconifyIconsJson> {
@@ -93,4 +103,14 @@ export async function getProviderIconSvg(id: IconProviderId, name: string): Prom
     .join(' ');
 
   return `<svg ${attrStr}>${body}</svg>`;
+}
+
+export async function getProviderIconPreviewSvg(id: IconProviderId, name: string, size = 20): Promise<string> {
+  const svg = await getProviderIconSvg(id, name);
+  const normalizedSize = Number.isFinite(size) ? Math.max(12, Math.min(48, Math.round(size))) : 20;
+
+  return svg
+    .replace(/\swidth="[^"]*"/i, '')
+    .replace(/\sheight="[^"]*"/i, '')
+    .replace('<svg ', `<svg width="${normalizedSize}" height="${normalizedSize}" aria-hidden="true" focusable="false" `);
 }

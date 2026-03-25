@@ -27,7 +27,15 @@
 
   import { COLOR_PRESETS, COLOR_PRESET_GROUPS, type ColorPreset } from '$lib/color-presets';
 
-  import { getIconProviderLabel, getProviderIconSvg, listProviderIcons, type IconProviderId } from '$lib/icons/iconify';
+  import {
+    ICON_PROVIDER_IDS,
+    getIconProviderLabel,
+    getIconProviderMeta,
+    getProviderIconPreviewSvg,
+    getProviderIconSvg,
+    listProviderIcons,
+    type IconProviderId
+  } from '$lib/icons/iconify';
 
   
   // Reactive state using Svelte 5 runes
@@ -67,6 +75,9 @@
   let iconLoading = $state(false);
   let iconLoadError = $state<string | null>(null);
   let iconPickError = $state<string | null>(null);
+  let iconPreviewCache = $state<Record<string, string>>({});
+  let iconPreviewLoading = $state<Record<string, boolean>>({});
+  const ICON_PICKER_LIMIT = 200;
 
   $effect(() => {
     const id = iconProvider;
@@ -90,14 +101,45 @@
 
   let filteredIconNames = $derived.by(() => {
     const q = iconSearch.trim().toLowerCase();
-    if (!q) return iconNames.slice(0, 200);
+    if (!q) return iconNames.slice(0, ICON_PICKER_LIMIT);
     const out: string[] = [];
     for (const n of iconNames) {
       if (n.toLowerCase().includes(q)) out.push(n);
-      if (out.length >= 200) break;
+      if (out.length >= ICON_PICKER_LIMIT) break;
     }
     return out;
   });
+
+  let selectedProviderMeta = $derived(getIconProviderMeta(iconProvider));
+
+  $effect(() => {
+    const providerId = iconProvider;
+    const names = filteredIconNames.slice(0, 48);
+
+    for (const name of names) {
+      const cacheKey = `${providerId}:${name}`;
+      if (iconPreviewCache[cacheKey] || iconPreviewLoading[cacheKey]) continue;
+
+      iconPreviewLoading = { ...iconPreviewLoading, [cacheKey]: true };
+      void getProviderIconPreviewSvg(providerId, name, 18)
+        .then((svg) => {
+          iconPreviewCache = { ...iconPreviewCache, [cacheKey]: svg };
+        })
+        .catch(() => {
+          // Ignore preview failures; picking still uses the full SVG path.
+        })
+        .finally(() => {
+          const next = { ...iconPreviewLoading };
+          delete next[cacheKey];
+          iconPreviewLoading = next;
+        });
+    }
+  });
+
+  function getIconPreviewMarkup(providerId: IconProviderId, name: string): string | null {
+    return iconPreviewCache[`${providerId}:${name}`] ?? null;
+  }
+
 
   async function pickIconFromProvider(name: string) {
     iconPickError = null;
@@ -1455,6 +1497,9 @@
     void (c as any).voronoi?.colorStrength;
     void (c as any).voronoi?.colorMode;
     void (c as any).voronoi?.tintColor;
+    void (c as any).voronoi?.roughnessStrength;
+    void (c as any).voronoi?.normalStrength;
+    void (c as any).voronoi?.normalScale;
     void c.backgroundColor;
     void c.facades.side.enabled;
     void c.facades.side.tintColor;
@@ -2733,6 +2778,60 @@
                             }}
                           />
                         </label>
+                        <label class="control-row slider">
+                          <span class="setting-title">Roughness feel: {Number(ov.voronoi.roughnessStrength ?? (config as any).voronoi.roughnessStrength).toFixed(2)}</span>
+                          <input
+                            type="range"
+                            value={Number(ov.voronoi.roughnessStrength ?? (config as any).voronoi.roughnessStrength)}
+                            min="0"
+                            max="1"
+                            step="0.01"
+                            oninput={(e) => {
+                              const v = Number((e.currentTarget as HTMLInputElement).value);
+                              updatePaletteOverride(i, (cur) => ({
+                                ...(cur ?? { enabled: true }),
+                                enabled: true,
+                                voronoi: { ...(cur?.voronoi ?? {}), roughnessStrength: v }
+                              }));
+                            }}
+                          />
+                        </label>
+                        <label class="control-row slider">
+                          <span class="setting-title">Normal feel: {Number(ov.voronoi.normalStrength ?? (config as any).voronoi.normalStrength).toFixed(2)}</span>
+                          <input
+                            type="range"
+                            value={Number(ov.voronoi.normalStrength ?? (config as any).voronoi.normalStrength)}
+                            min="0"
+                            max="1"
+                            step="0.01"
+                            oninput={(e) => {
+                              const v = Number((e.currentTarget as HTMLInputElement).value);
+                              updatePaletteOverride(i, (cur) => ({
+                                ...(cur ?? { enabled: true }),
+                                enabled: true,
+                                voronoi: { ...(cur?.voronoi ?? {}), normalStrength: v }
+                              }));
+                            }}
+                          />
+                        </label>
+                        <label class="control-row slider">
+                          <span class="setting-title">Normal scale: {Number(ov.voronoi.normalScale ?? (config as any).voronoi.normalScale).toFixed(2)}</span>
+                          <input
+                            type="range"
+                            value={Number(ov.voronoi.normalScale ?? (config as any).voronoi.normalScale)}
+                            min="0"
+                            max="1"
+                            step="0.01"
+                            oninput={(e) => {
+                              const v = Number((e.currentTarget as HTMLInputElement).value);
+                              updatePaletteOverride(i, (cur) => ({
+                                ...(cur ?? { enabled: true }),
+                                enabled: true,
+                                voronoi: { ...(cur?.voronoi ?? {}), normalScale: v }
+                              }));
+                            }}
+                          />
+                        </label>
                         <label class="control-row">
                           <span class="setting-title">Color mode</span>
                           <select
@@ -3502,6 +3601,18 @@
             <label class="control-row slider">
               <button type="button" class="setting-title" class:locked={isLocked('voronoi.colorStrength')} onclick={() => toggleLock('voronoi.colorStrength')} title="Click to lock/unlock for randomize">Color strength: {Number((config as any).voronoi.colorStrength).toFixed(2)}</button>
               <input type="range" bind:value={(config as any).voronoi.colorStrength} min="0" max="1" step="0.01" disabled={!((config as any).voronoi.enabled)} />
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('voronoi.roughnessStrength')} onclick={() => toggleLock('voronoi.roughnessStrength')} title="Click to lock/unlock for randomize">Roughness feel: {Number((config as any).voronoi.roughnessStrength).toFixed(2)}</button>
+              <input type="range" bind:value={(config as any).voronoi.roughnessStrength} min="0" max="1" step="0.01" disabled={!((config as any).voronoi.enabled)} />
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('voronoi.normalStrength')} onclick={() => toggleLock('voronoi.normalStrength')} title="Click to lock/unlock for randomize">Normal feel: {Number((config as any).voronoi.normalStrength).toFixed(2)}</button>
+              <input type="range" bind:value={(config as any).voronoi.normalStrength} min="0" max="1" step="0.01" disabled={!((config as any).voronoi.enabled)} />
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('voronoi.normalScale')} onclick={() => toggleLock('voronoi.normalScale')} title="Click to lock/unlock for randomize">Normal scale: {Number((config as any).voronoi.normalScale).toFixed(2)}</button>
+              <input type="range" bind:value={(config as any).voronoi.normalScale} min="0" max="1" step="0.01" disabled={!((config as any).voronoi.enabled)} />
             </label>
             <label class="control-row">
               <button type="button" class="setting-title" class:locked={isLocked('voronoi.colorMode')} onclick={() => toggleLock('voronoi.colorMode')} title="Click to lock/unlock for randomize">Color mode</button>
@@ -4383,16 +4494,20 @@
 
             <details class="control-details">
               <summary class="control-details-summary">Icon picker</summary>
-              <label class="control-row">
-                <span class="setting-title">Provider</span>
-                <select bind:value={iconProvider}>
-                  <option value="lucide">{getIconProviderLabel('lucide')}</option>
-                  <option value="tabler">{getIconProviderLabel('tabler')}</option>
-                  <option value="ph">{getIconProviderLabel('ph')}</option>
-                  <option value="heroicons">{getIconProviderLabel('heroicons')}</option>
-                  <option value="oui">{getIconProviderLabel('oui')}</option>
-                </select>
-              </label>
+              <div class="icon-picker-head">
+                <label class="control-row icon-provider-row">
+                  <span class="setting-title">Provider</span>
+                  <select bind:value={iconProvider}>
+                    {#each ICON_PROVIDER_IDS as providerId}
+                      <option value={providerId}>{getIconProviderLabel(providerId)}</option>
+                    {/each}
+                  </select>
+                </label>
+                <div class="icon-picker-provider-note">
+                  <span class={`icon-provider-badge tone-${selectedProviderMeta.badgeTone}`}>{selectedProviderMeta.shortLabel}</span>
+                  <span>{selectedProviderMeta.label} set</span>
+                </div>
+              </div>
               <label class="control-row">
                 <span class="setting-title">Search</span>
                 <input type="text" bind:value={iconSearch} placeholder="e.g. arch" />
@@ -4403,16 +4518,26 @@
               {#if iconPickError}
                 <div class="error-box" style="margin-top:0.5rem;">{iconPickError}</div>
               {/if}
-              <div style="margin-top:0.5rem; max-height: 220px; overflow: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem;">
+              <div class="icon-picker-results">
                 {#if iconLoading}
-                  <div class="mono" style="grid-column: 1 / -1; opacity: 0.75;">Loading icons…</div>
+                  <div class="mono icon-picker-status">Loading icons...</div>
+                {:else if filteredIconNames.length === 0}
+                  <div class="mono icon-picker-status">No matches for "{iconSearch.trim()}".</div>
                 {:else}
                   {#each filteredIconNames as name}
-                    <button type="button" class="mono" style="text-align:left;" onclick={() => pickIconFromProvider(name)}>{name}</button>
+                    <button type="button" class="icon-picker-item" onclick={() => pickIconFromProvider(name)}>
+                      <span class="icon-picker-preview" aria-hidden="true">
+                        {@html getIconPreviewMarkup(iconProvider, name) ?? '<span class="icon-picker-preview-fallback"></span>'}
+                      </span>
+                      <span class="icon-picker-copy">
+                        <span class="mono icon-picker-name">{name}</span>
+                        <span class="icon-provider-badge tone-subtle">{selectedProviderMeta.shortLabel}</span>
+                      </span>
+                    </button>
                   {/each}
                 {/if}
               </div>
-              <div class="mono" style="margin-top: 0.5rem; opacity: 0.7;">Showing {filteredIconNames.length} / {iconNames.length} (capped at 200)</div>
+              <div class="mono icon-picker-meta">Showing {filteredIconNames.length} / {iconNames.length} (capped at {ICON_PICKER_LIMIT})</div>
             </details>
 
             <label class="control-row slider">
@@ -4937,16 +5062,20 @@
 
             <details class="control-details">
               <summary class="control-details-summary">Icon picker</summary>
-              <label class="control-row">
-                <span class="setting-title">Provider</span>
-                <select bind:value={iconProvider}>
-                  <option value="lucide">{getIconProviderLabel('lucide')}</option>
-                  <option value="tabler">{getIconProviderLabel('tabler')}</option>
-                  <option value="ph">{getIconProviderLabel('ph')}</option>
-                  <option value="heroicons">{getIconProviderLabel('heroicons')}</option>
-                  <option value="oui">{getIconProviderLabel('oui')}</option>
-                </select>
-              </label>
+              <div class="icon-picker-head">
+                <label class="control-row icon-provider-row">
+                  <span class="setting-title">Provider</span>
+                  <select bind:value={iconProvider}>
+                    {#each ICON_PROVIDER_IDS as providerId}
+                      <option value={providerId}>{getIconProviderLabel(providerId)}</option>
+                    {/each}
+                  </select>
+                </label>
+                <div class="icon-picker-provider-note">
+                  <span class={`icon-provider-badge tone-${selectedProviderMeta.badgeTone}`}>{selectedProviderMeta.shortLabel}</span>
+                  <span>{selectedProviderMeta.label} set</span>
+                </div>
+              </div>
               <label class="control-row">
                 <span class="setting-title">Search</span>
                 <input type="text" bind:value={iconSearch} placeholder="e.g. arch" />
@@ -4957,16 +5086,26 @@
               {#if iconPickError}
                 <div class="error-box" style="margin-top:0.5rem;">{iconPickError}</div>
               {/if}
-              <div style="margin-top:0.5rem; max-height: 220px; overflow: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem;">
+              <div class="icon-picker-results">
                 {#if iconLoading}
-                  <div class="mono" style="grid-column: 1 / -1; opacity: 0.75;">Loading icons…</div>
+                  <div class="mono icon-picker-status">Loading icons...</div>
+                {:else if filteredIconNames.length === 0}
+                  <div class="mono icon-picker-status">No matches for "{iconSearch.trim()}".</div>
                 {:else}
                   {#each filteredIconNames as name}
-                    <button type="button" class="mono" style="text-align:left;" onclick={() => pickIconFromProvider(name)}>{name}</button>
+                    <button type="button" class="icon-picker-item" onclick={() => pickIconFromProvider(name)}>
+                      <span class="icon-picker-preview" aria-hidden="true">
+                        {@html getIconPreviewMarkup(iconProvider, name) ?? '<span class="icon-picker-preview-fallback"></span>'}
+                      </span>
+                      <span class="icon-picker-copy">
+                        <span class="mono icon-picker-name">{name}</span>
+                        <span class="icon-provider-badge tone-subtle">{selectedProviderMeta.shortLabel}</span>
+                      </span>
+                    </button>
                   {/each}
                 {/if}
               </div>
-              <div class="mono" style="margin-top: 0.5rem; opacity: 0.7;">Showing {filteredIconNames.length} / {iconNames.length} (capped at 200)</div>
+              <div class="mono icon-picker-meta">Showing {filteredIconNames.length} / {iconNames.length} (capped at {ICON_PICKER_LIMIT})</div>
             </details>
 
             <label class="control-row slider">
@@ -6299,6 +6438,161 @@
   
   .control-row.checkbox .setting-title {
     min-width: auto;
+  }
+
+  .icon-picker-head {
+    display: grid;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .icon-provider-row {
+    margin-bottom: 0;
+  }
+
+  .icon-picker-provider-note {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.625rem;
+    border-radius: 8px;
+    background: #141420;
+    border: 1px solid #2a2a38;
+    color: #b6b6c6;
+    font-size: 0.78rem;
+  }
+
+  .icon-provider-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2.5rem;
+    padding: 0.22rem 0.45rem;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    line-height: 1;
+  }
+
+  .icon-provider-badge.tone-blue {
+    background: rgba(96, 165, 250, 0.14);
+    border-color: rgba(96, 165, 250, 0.35);
+    color: #bfdbfe;
+  }
+
+  .icon-provider-badge.tone-teal {
+    background: rgba(45, 212, 191, 0.14);
+    border-color: rgba(45, 212, 191, 0.35);
+    color: #99f6e4;
+  }
+
+  .icon-provider-badge.tone-green {
+    background: rgba(74, 222, 128, 0.14);
+    border-color: rgba(74, 222, 128, 0.35);
+    color: #bbf7d0;
+  }
+
+  .icon-provider-badge.tone-amber {
+    background: rgba(251, 191, 36, 0.14);
+    border-color: rgba(251, 191, 36, 0.35);
+    color: #fde68a;
+  }
+
+  .icon-provider-badge.tone-rose {
+    background: rgba(251, 113, 133, 0.14);
+    border-color: rgba(251, 113, 133, 0.35);
+    color: #fecdd3;
+  }
+
+  .icon-provider-badge.tone-subtle {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.08);
+    color: #a9a9b3;
+    min-width: 2.2rem;
+  }
+
+  .icon-picker-results {
+    margin-top: 0.5rem;
+    max-height: 260px;
+    overflow: auto;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.45rem;
+  }
+
+  .icon-picker-status {
+    opacity: 0.75;
+    padding: 0.35rem 0.1rem;
+  }
+
+  .icon-picker-item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.55rem 0.65rem;
+    border-radius: 8px;
+    border: 1px solid #2b2b3a;
+    background: #141420;
+    color: #fff;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease;
+  }
+
+  .icon-picker-item:hover {
+    border-color: #3b4f76;
+    background: #191928;
+    transform: translateY(-1px);
+  }
+
+  .icon-picker-preview {
+    width: 2rem;
+    height: 2rem;
+    flex: 0 0 2rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: #f8fafc;
+  }
+
+  .icon-picker-preview :global(svg) {
+    width: 18px;
+    height: 18px;
+    display: block;
+  }
+
+  .icon-picker-preview-fallback {
+    width: 0.85rem;
+    height: 0.85rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.18);
+  }
+
+  .icon-picker-copy {
+    min-width: 0;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+  }
+
+  .icon-picker-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .icon-picker-meta {
+    margin-top: 0.5rem;
+    opacity: 0.7;
   }
   
   .preview-area {
