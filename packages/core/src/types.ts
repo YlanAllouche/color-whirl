@@ -1592,6 +1592,7 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
     },
     bubbles: {
       enabled: bubblesEnabled,
+      // Keep random configs conservative: cap mode is experimental/heavy.
       mode: 'through',
       interior: { enabled: true },
       // frequency controls density; count is the sample budget in shader.
