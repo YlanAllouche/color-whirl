@@ -29,6 +29,142 @@ function clampMult(raw: unknown, min: number = 0.25, max: number = 4): number {
   return clamp(v, min, max);
 }
 
+function subdivideGeometry(geoIn: THREE.BufferGeometry, iterations: number): THREE.BufferGeometry {
+  let geo = geoIn.toNonIndexed();
+  const iters = Math.max(0, Math.min(3, Math.round(Number(iterations) || 0)));
+  for (let it = 0; it < iters; it++) {
+    const pos = geo.getAttribute('position') as THREE.BufferAttribute;
+    const nor = geo.getAttribute('normal') as THREE.BufferAttribute | undefined;
+    const uv = geo.getAttribute('uv') as THREE.BufferAttribute | undefined;
+
+    const nextPos: number[] = [];
+    const nextNor: number[] = [];
+    const nextUv: number[] = [];
+
+    const v0 = new THREE.Vector3();
+    const v1 = new THREE.Vector3();
+    const v2 = new THREE.Vector3();
+    const n0 = new THREE.Vector3();
+    const n1 = new THREE.Vector3();
+    const n2 = new THREE.Vector3();
+    const u0 = new THREE.Vector2();
+    const u1 = new THREE.Vector2();
+    const u2 = new THREE.Vector2();
+
+    const v01 = new THREE.Vector3();
+    const v12 = new THREE.Vector3();
+    const v20 = new THREE.Vector3();
+    const n01 = new THREE.Vector3();
+    const n12 = new THREE.Vector3();
+    const n20 = new THREE.Vector3();
+    const u01 = new THREE.Vector2();
+    const u12 = new THREE.Vector2();
+    const u20 = new THREE.Vector2();
+
+    const pushV = (v: THREE.Vector3) => {
+      nextPos.push(v.x, v.y, v.z);
+    };
+    const pushN = (n: THREE.Vector3) => {
+      nextNor.push(n.x, n.y, n.z);
+    };
+    const pushU = (u: THREE.Vector2) => {
+      nextUv.push(u.x, u.y);
+    };
+
+    for (let i = 0; i < pos.count; i += 3) {
+      v0.fromBufferAttribute(pos, i + 0);
+      v1.fromBufferAttribute(pos, i + 1);
+      v2.fromBufferAttribute(pos, i + 2);
+
+      if (nor) {
+        n0.fromBufferAttribute(nor, i + 0);
+        n1.fromBufferAttribute(nor, i + 1);
+        n2.fromBufferAttribute(nor, i + 2);
+      } else {
+        n0.set(0, 0, 1);
+        n1.set(0, 0, 1);
+        n2.set(0, 0, 1);
+      }
+
+      if (uv) {
+        u0.fromBufferAttribute(uv, i + 0);
+        u1.fromBufferAttribute(uv, i + 1);
+        u2.fromBufferAttribute(uv, i + 2);
+      } else {
+        u0.set(0, 0);
+        u1.set(0, 0);
+        u2.set(0, 0);
+      }
+
+      v01.copy(v0).add(v1).multiplyScalar(0.5);
+      v12.copy(v1).add(v2).multiplyScalar(0.5);
+      v20.copy(v2).add(v0).multiplyScalar(0.5);
+
+      n01.copy(n0).add(n1).normalize();
+      n12.copy(n1).add(n2).normalize();
+      n20.copy(n2).add(n0).normalize();
+
+      u01.copy(u0).add(u1).multiplyScalar(0.5);
+      u12.copy(u1).add(u2).multiplyScalar(0.5);
+      u20.copy(u2).add(u0).multiplyScalar(0.5);
+
+      // 4 sub-tris
+      // (v0, v01, v20)
+      pushV(v0);
+      pushV(v01);
+      pushV(v20);
+      pushN(n0);
+      pushN(n01);
+      pushN(n20);
+      pushU(u0);
+      pushU(u01);
+      pushU(u20);
+
+      // (v01, v1, v12)
+      pushV(v01);
+      pushV(v1);
+      pushV(v12);
+      pushN(n01);
+      pushN(n1);
+      pushN(n12);
+      pushU(u01);
+      pushU(u1);
+      pushU(u12);
+
+      // (v20, v12, v2)
+      pushV(v20);
+      pushV(v12);
+      pushV(v2);
+      pushN(n20);
+      pushN(n12);
+      pushN(n2);
+      pushU(u20);
+      pushU(u12);
+      pushU(u2);
+
+      // (v01, v12, v20)
+      pushV(v01);
+      pushV(v12);
+      pushV(v20);
+      pushN(n01);
+      pushN(n12);
+      pushN(n20);
+      pushU(u01);
+      pushU(u12);
+      pushU(u20);
+    }
+
+    const next = new THREE.BufferGeometry();
+    next.setAttribute('position', new THREE.Float32BufferAttribute(nextPos, 3));
+    if (nextNor.length > 0) next.setAttribute('normal', new THREE.Float32BufferAttribute(nextNor, 3));
+    if (nextUv.length > 0) next.setAttribute('uv', new THREE.Float32BufferAttribute(nextUv, 2));
+    geo.dispose();
+    geo = next;
+  }
+
+  return geo;
+}
+
 function hash01(seed: number, a: number, b: number): number {
   let x = (Number(seed) >>> 0) ^ (Math.imul(a | 0, 374761393) >>> 0) ^ (Math.imul(b | 0, 668265263) >>> 0);
   x = Math.imul(x ^ (x >>> 13), 1274126177);
@@ -1987,7 +2123,9 @@ void wmApplyCollisionMask(inout vec4 col) {
       wallThickness: number,
       softness: number
     ): THREE.BufferGeometry => {
-      const geo = geoIn.clone();
+      const base = geoIn.clone();
+      const capSubdiv = 1;
+      const geo = capSubdiv > 0 ? subdivideGeometry(base, capSubdiv) : base;
       if (!geo.getAttribute('normal')) geo.computeVertexNormals();
 
       const pos = geo.getAttribute('position') as THREE.BufferAttribute;
@@ -2009,18 +2147,23 @@ void wmApplyCollisionMask(inout vec4 col) {
         nWorld.copy(nLocal).transformDirection(world).normalize();
 
         let minSdf = Infinity;
+        let closestRadius = 0;
         for (let j = 0; j < bubbles.length; j++) {
           const b = bubbles[j];
           const dx = pWorld.x - b.center.x;
           const dy = pWorld.y - b.center.y;
           const dz = pWorld.z - b.center.z;
           const d = Math.sqrt(dx * dx + dy * dy + dz * dz) - b.radius;
-          if (d < minSdf) minSdf = d;
+          if (d < minSdf) {
+            minSdf = d;
+            closestRadius = b.radius;
+          }
         }
 
         if (minSdf < 0) {
           const depth = -minSdf;
-          const dent = t * smoothstep(0, t + s, depth);
+          const dentMax = Math.min(Math.max(t * 2.75, t + s), Math.max(0.001, closestRadius * 0.65));
+          const dent = dentMax * smoothstep(0, t + s, depth);
           pWorld.addScaledVector(nWorld, -dent);
           pLocal.copy(pWorld).applyMatrix4(inv);
           pos.setXYZ(i, pLocal.x, pLocal.y, pLocal.z);
