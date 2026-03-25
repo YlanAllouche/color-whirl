@@ -384,6 +384,8 @@ export type PaletteAssignMode = 'cycle' | 'weighted';
 
 export type SvgRenderMode = 'auto' | 'fill' | 'stroke' | 'fill+stroke';
 
+export type SvgColorMode = 'palette' | 'svg-to-palette';
+
 export type Spheres3DShapeKind = 'uvSphere' | 'spherifiedBox' | 'geodesicPoly';
 
 export interface Spheres3DShapeConfig {
@@ -640,6 +642,10 @@ export interface Svg2DConfig extends BaseWallpaperConfig {
     source: string;
     /** How to render the SVG paths. */
     renderMode: SvgRenderMode;
+    /** How to pick colors for the SVG. */
+    colorMode: SvgColorMode;
+    /** Maximum number of tones extracted when colorMode='svg-to-palette'. */
+    maxTones: number;
     count: number;
     rMinPx: number;
     rMaxPx: number;
@@ -667,6 +673,10 @@ export interface Svg3DConfig extends BaseWallpaperConfig {
     source: string;
     /** How to render the SVG paths. */
     renderMode: SvgRenderMode;
+    /** How to pick colors for the SVG. */
+    colorMode: SvgColorMode;
+    /** Maximum number of tones extracted when colorMode='svg-to-palette'. */
+    maxTones: number;
     count: number;
     /** Scene units: XY spread */
     spread: number;
@@ -1021,6 +1031,8 @@ export const DEFAULT_SVG2D_CONFIG: Svg2DConfig = {
   svg: {
     source: DEFAULT_SVG_SOURCE,
     renderMode: 'auto',
+    colorMode: 'palette',
+    maxTones: 8,
     count: 220,
     rMinPx: 18,
     rMaxPx: 150,
@@ -1040,6 +1052,8 @@ export const DEFAULT_SVG3D_CONFIG: Svg3DConfig = {
   svg: {
     source: DEFAULT_SVG_SOURCE,
     renderMode: 'auto',
+    colorMode: 'palette',
+    maxTones: 8,
     count: 160,
     spread: 4.4,
     depth: 4.0,
@@ -1275,6 +1289,12 @@ export function normalizeWallpaperConfig(input: any): WallpaperConfig {
 
       const rmRaw = String(sAny.renderMode ?? baseSvg?.renderMode ?? 'auto');
       sAny.renderMode = rmRaw === 'fill' || rmRaw === 'stroke' || rmRaw === 'fill+stroke' ? rmRaw : 'auto';
+
+      const cmRaw = String(sAny.colorMode ?? baseSvg?.colorMode ?? 'palette');
+      sAny.colorMode = cmRaw === 'svg-to-palette' ? 'svg-to-palette' : 'palette';
+
+      const mt = Number(sAny.maxTones);
+      sAny.maxTones = Number.isFinite(mt) ? Math.max(1, Math.min(64, Math.round(mt))) : Math.max(1, Math.min(64, Math.round(Number(baseSvg?.maxTones) || 8)));
 
       const cnt = Number(sAny.count);
       sAny.count = Number.isFinite(cnt)
@@ -1938,6 +1958,8 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
         svg: {
           source: DEFAULT_SVG_SOURCE,
           renderMode: 'auto',
+          colorMode: rng() < 0.12 ? 'svg-to-palette' : 'palette',
+          maxTones: Math.max(2, Math.min(12, Math.round(tri(2, 8, 12)))),
           count: chance(0.15) ? 1 : skewCountLow(2, DEFAULT_SVG2D_CONFIG.svg.count, 420, 1600, 0.03),
           rMinPx: Math.round(randomWeighted(rng, 6, 40, DEFAULT_SVG2D_CONFIG.svg.rMinPx)),
           rMaxPx: Math.round(randomWeighted(rng, 30, 280, DEFAULT_SVG2D_CONFIG.svg.rMaxPx)),
@@ -1956,6 +1978,8 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
         svg: {
           source: DEFAULT_SVG_SOURCE,
           renderMode: 'auto',
+          colorMode: rng() < 0.12 ? 'svg-to-palette' : 'palette',
+          maxTones: Math.max(2, Math.min(12, Math.round(tri(2, 8, 12)))),
           count: chance(0.15) ? 1 : skewCountLow(2, DEFAULT_SVG3D_CONFIG.svg.count, 360, 1500, 0.03),
           spread: randomWeighted(rng, 0.8, 6.5, DEFAULT_SVG3D_CONFIG.svg.spread),
           depth: randomWeighted(rng, 0.5, 7.0, DEFAULT_SVG3D_CONFIG.svg.depth),

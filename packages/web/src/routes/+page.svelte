@@ -1540,6 +1540,8 @@
     if (c.type === 'svg2d') {
       void (c as any).svg?.source;
       void (c as any).svg?.renderMode;
+      void (c as any).svg?.colorMode;
+      void (c as any).svg?.maxTones;
       void (c as any).svg?.count;
       void (c as any).svg?.rMinPx;
       void (c as any).svg?.rMaxPx;
@@ -1556,6 +1558,8 @@
     if (c.type === 'svg3d') {
       void (c as any).svg?.source;
       void (c as any).svg?.renderMode;
+      void (c as any).svg?.colorMode;
+      void (c as any).svg?.maxTones;
       void (c as any).svg?.count;
       void (c as any).svg?.spread;
       void (c as any).svg?.depth;
@@ -4024,6 +4028,20 @@
             </label>
 
             <label class="control-row">
+              <button type="button" class="setting-title" class:locked={isLocked('svg.colorMode')} onclick={() => toggleLock('svg.colorMode')} title="Click to lock/unlock for randomize">Colors</button>
+              <select bind:value={(config as any).svg.colorMode}>
+                <option value="palette">Palette</option>
+                <option value="svg-to-palette">SVG to palette</option>
+              </select>
+            </label>
+            {#if (config as any).svg.colorMode === 'svg-to-palette'}
+              <label class="control-row slider">
+                <button type="button" class="setting-title" class:locked={isLocked('svg.maxTones')} onclick={() => toggleLock('svg.maxTones')} title="Click to lock/unlock for randomize">Max tones: {Math.round(Number((config as any).svg.maxTones) || 0)}</button>
+                <input type="range" bind:value={(config as any).svg.maxTones} min="1" max="24" step="1" />
+              </label>
+            {/if}
+
+            <label class="control-row">
               <button type="button" class="setting-title" class:locked={isLocked('svg.source')} onclick={() => toggleLock('svg.source')} title="Click to lock/unlock for randomize">
                 Source
               </button>
@@ -4528,6 +4546,20 @@
                 <option value="fill+stroke">Fill + Stroke</option>
               </select>
             </label>
+
+            <label class="control-row">
+              <button type="button" class="setting-title" class:locked={isLocked('svg.colorMode')} onclick={() => toggleLock('svg.colorMode')} title="Click to lock/unlock for randomize">Colors</button>
+              <select bind:value={(config as any).svg.colorMode}>
+                <option value="palette">Palette</option>
+                <option value="svg-to-palette">SVG to palette</option>
+              </select>
+            </label>
+            {#if (config as any).svg.colorMode === 'svg-to-palette'}
+              <label class="control-row slider">
+                <button type="button" class="setting-title" class:locked={isLocked('svg.maxTones')} onclick={() => toggleLock('svg.maxTones')} title="Click to lock/unlock for randomize">Max tones: {Math.round(Number((config as any).svg.maxTones) || 0)}</button>
+                <input type="range" bind:value={(config as any).svg.maxTones} min="1" max="24" step="1" />
+              </label>
+            {/if}
 
             <label class="control-row">
               <button type="button" class="setting-title" class:locked={isLocked('svg.source')} onclick={() => toggleLock('svg.source')} title="Click to lock/unlock for randomize">

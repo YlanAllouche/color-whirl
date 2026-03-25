@@ -165,6 +165,144 @@ function buildNormalizedPathsFromSvg(svgSource: string): { fillPath: Path2D; str
   return { fillPath, strokePath, hasFill, hasStroke };
 }
 
+function buildNormalizedToneLayersFromSvg(svgSource: string, maxTones: number): Array<{ fillPath: Path2D; strokePath: Path2D }> {
+  const source = validateSvgSource(svgSource);
+  const cap = Math.max(1, Math.min(64, Math.round(Number(maxTones) || 8)));
+
+  let data: any;
+  try {
+    const loader = new SVGLoader();
+    data = loader.parse(source);
+  } catch (err: any) {
+    throw new Error(`Invalid SVG: failed to parse (${String(err?.message || err)})`);
+  }
+
+  // Global bounds for normalization.
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+
+  type ToneLayer = { key: string; fillPts: Array<{ x: number; y: number }[]>; strokePts: Array<{ x: number; y: number }[]> };
+  const order: ToneLayer[] = [];
+  const byKey = new Map<string, ToneLayer>();
+
+  const normTone = (v: unknown): string => {
+    const s0 = String(v ?? '').trim();
+    if (!s0) return '';
+    const s = s0.toLowerCase();
+    if (s === 'none') return '';
+    if (s.includes('url(')) return `url:${s0}`;
+    return s0;
+  };
+
+  const getLayer = (keyRaw: string): ToneLayer => {
+    const key = keyRaw || '__default__';
+    const existing = byKey.get(key);
+    if (existing) return existing;
+    const layer: ToneLayer = { key, fillPts: [], strokePts: [] };
+    byKey.set(key, layer);
+    order.push(layer);
+    return layer;
+  };
+
+  for (const p of data?.paths ?? []) {
+    const style = (p as any)?.userData?.style ?? {};
+    const fillKey = normTone(style.fill);
+    const strokeKey = normTone(style.stroke);
+    const key = fillKey || strokeKey || '__default__';
+
+    const layer = getLayer(key);
+    const subs = (p as any)?.subPaths ?? [];
+    for (const sp of subs) {
+      const pts = (sp as any).getPoints ? (sp as any).getPoints(80) : [];
+      if (!pts || pts.length < 2) continue;
+
+      const arr: { x: number; y: number }[] = [];
+      for (const v of pts) {
+        const x = Number(v?.x);
+        const y = Number(v?.y);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+        arr.push({ x, y });
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+      if (arr.length < 2) continue;
+
+      layer.strokePts.push(arr);
+
+      // If the polyline is closed, include it in fill too.
+      const dx = arr[arr.length - 1].x - arr[0].x;
+      const dy = arr[arr.length - 1].y - arr[0].y;
+      if (dx * dx + dy * dy <= 1e-6) layer.fillPts.push(arr);
+    }
+  }
+
+  if (!Number.isFinite(minX)) {
+    throw new Error('Invalid SVG: no drawable paths found');
+  }
+
+  const cx = (minX + maxX) * 0.5;
+  const cy = (minY + maxY) * 0.5;
+  const w = Math.max(1e-9, maxX - minX);
+  const h = Math.max(1e-9, maxY - minY);
+  const maxDim = Math.max(w, h);
+
+  const layers: Array<{ fillPath: Path2D; strokePath: Path2D }> = [];
+  const use = order.slice(0, cap);
+  for (const l of use) {
+    const fillPath = new Path2D();
+    const strokePath = new Path2D();
+
+    for (const pts of l.strokePts) {
+      const x0 = (pts[0].x - cx) / maxDim;
+      const y0 = (pts[0].y - cy) / maxDim;
+      strokePath.moveTo(x0, y0);
+      for (let i = 1; i < pts.length; i++) {
+        strokePath.lineTo((pts[i].x - cx) / maxDim, (pts[i].y - cy) / maxDim);
+      }
+    }
+    for (const pts of l.fillPts) {
+      const x0 = (pts[0].x - cx) / maxDim;
+      const y0 = (pts[0].y - cy) / maxDim;
+      fillPath.moveTo(x0, y0);
+      for (let i = 1; i < pts.length; i++) {
+        fillPath.lineTo((pts[i].x - cx) / maxDim, (pts[i].y - cy) / maxDim);
+      }
+      fillPath.closePath();
+    }
+    layers.push({ fillPath, strokePath });
+  }
+
+  // Overflow tones: merge any remaining tones into the last layer.
+  if (order.length > cap && layers.length > 0) {
+    const last = layers[layers.length - 1];
+    for (const l of order.slice(cap)) {
+      for (const pts of l.strokePts) {
+        const x0 = (pts[0].x - cx) / maxDim;
+        const y0 = (pts[0].y - cy) / maxDim;
+        last.strokePath.moveTo(x0, y0);
+        for (let i = 1; i < pts.length; i++) {
+          last.strokePath.lineTo((pts[i].x - cx) / maxDim, (pts[i].y - cy) / maxDim);
+        }
+      }
+      for (const pts of l.fillPts) {
+        const x0 = (pts[0].x - cx) / maxDim;
+        const y0 = (pts[0].y - cy) / maxDim;
+        last.fillPath.moveTo(x0, y0);
+        for (let i = 1; i < pts.length; i++) {
+          last.fillPath.lineTo((pts[i].x - cx) / maxDim, (pts[i].y - cy) / maxDim);
+        }
+        last.fillPath.closePath();
+      }
+    }
+  }
+
+  return layers;
+}
+
 function pickPaletteIndex(rng: () => number, mode: PaletteAssignMode, weightsNorm: number[], i: number, n: number): number {
   if (mode === 'cycle') return ((i % n) + n) % n;
   return sampleWeightedIndex01(rng(), weightsNorm);
@@ -190,7 +328,14 @@ export function renderSvg2DToCanvas(config: Svg2DConfig, canvas?: HTMLCanvasElem
   const doFill = mode === 'fill' || mode === 'fill+stroke';
   const doStroke = mode === 'stroke' || mode === 'fill+stroke';
 
-  const { fillPath, strokePath } = buildNormalizedPathsFromSvg(config.svg.source);
+  const colorModeRaw = String((config as any).svg?.colorMode ?? 'palette');
+  const colorMode = colorModeRaw === 'svg-to-palette' ? 'svg-to-palette' : 'palette';
+  const maxTones = Math.max(1, Math.min(64, Math.round(Number((config as any).svg?.maxTones) || 8)));
+
+  const paletteLayers = colorMode === 'palette' ? null : buildNormalizedToneLayersFromSvg(config.svg.source, maxTones);
+  const single = colorMode === 'palette' ? buildNormalizedPathsFromSvg(config.svg.source) : null;
+  const fillPath = single?.fillPath ?? new Path2D();
+  const strokePath = single?.strokePath ?? new Path2D();
 
   const rng = createRng(config.seed);
   const colors = config.colors.length > 0 ? config.colors : ['#ffffff'];
@@ -222,15 +367,26 @@ export function renderSvg2DToCanvas(config: Svg2DConfig, canvas?: HTMLCanvasElem
   const gctx = glow.getContext('2d');
   if (!gctx) throw new Error('2D canvas not available');
 
-  const drawShape = (target: CanvasRenderingContext2D, x: number, y: number, r: number, theta: number, fill: string) => {
+  const drawShape = (
+    target: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    r: number,
+    theta: number,
+    fill: string,
+    paths?: { fillPath: Path2D; strokePath: Path2D }
+  ) => {
     target.save();
     target.translate(x, y);
     target.rotate(theta);
     target.scale(r, r);
 
+    const fp = paths?.fillPath ?? fillPath;
+    const sp = paths?.strokePath ?? strokePath;
+
     if (doFill && fillOpacity > 0) {
       target.fillStyle = rgba(fill, fillOpacity);
-      target.fill(fillPath, 'evenodd');
+      target.fill(fp, 'evenodd');
     }
 
     if (strokeEnabled && strokeW > 0 && strokeOpacity > 0) {
@@ -238,14 +394,15 @@ export function renderSvg2DToCanvas(config: Svg2DConfig, canvas?: HTMLCanvasElem
       target.lineJoin = 'round';
       target.lineCap = 'round';
       target.lineWidth = lw;
-      target.strokeStyle = rgba(strokeColor, strokeOpacity);
-      target.stroke(strokePath);
+      const sc = colorMode === 'svg-to-palette' ? fill : strokeColor;
+      target.strokeStyle = rgba(sc, strokeOpacity);
+      target.stroke(sp);
     }
 
     target.restore();
   };
 
-  const drawEmission = (x: number, y: number, r: number, theta: number, fill: string, emit: number) => {
+  const drawEmission = (x: number, y: number, r: number, theta: number, fill: string, emit: number, paths?: { fillPath: Path2D; strokePath: Path2D }) => {
     if (!config.bloom.enabled) return;
     const e = Math.max(0, Number(emit) || 0);
     if (!(e > 0)) return;
@@ -256,9 +413,11 @@ export function renderSvg2DToCanvas(config: Svg2DConfig, canvas?: HTMLCanvasElem
     gctx.rotate(theta);
     gctx.scale(r * s, r * s);
     const a = clamp(0.06 + e * 0.02, 0, 1);
+    const fp = paths?.fillPath ?? fillPath;
+    const sp = paths?.strokePath ?? strokePath;
     if (doFill) {
       gctx.fillStyle = rgba(fill, a);
-      gctx.fill(fillPath, 'evenodd');
+      gctx.fill(fp, 'evenodd');
     }
     if (strokeEnabled && strokeW > 0) {
       const lw = clamp(strokeW / Math.max(1e-6, r * s), 0.05, 1000);
@@ -266,23 +425,35 @@ export function renderSvg2DToCanvas(config: Svg2DConfig, canvas?: HTMLCanvasElem
       gctx.lineCap = 'round';
       gctx.lineWidth = lw;
       gctx.strokeStyle = rgba(fill, clamp(a * 0.75, 0, 1));
-      gctx.stroke(strokePath);
+      gctx.stroke(sp);
     }
     gctx.restore();
   };
 
   for (let i = 0; i < count; i++) {
-    const pi = pickPaletteIndex(rng, (config.svg.paletteMode as PaletteAssignMode) === 'cycle' ? 'cycle' : 'weighted', weightsNorm, i, nColors);
-    const fill = colors[pi] ?? '#ffffff';
-
-    const sizeMult = sizeMultByIndex[pi] ?? 1;
     const r0 = rMin + rng() * (rMax - rMin);
-    const r = r0 * sizeMult;
     const x0 = rng() * c.width;
     const y0 = rng() * c.height;
+    const theta = (rng() - 0.5) * rotJ;
+
+    if (colorMode === 'svg-to-palette' && paletteLayers) {
+      const x = x0 + (rng() - 0.5) * r0 * 2 * jitter;
+      const y = y0 + (rng() - 0.5) * r0 * 2 * jitter;
+      for (let ti = 0; ti < paletteLayers.length; ti++) {
+        const col = colors[ti % nColors] ?? '#ffffff';
+        drawShape(ctx, x, y, r0, theta, col, paletteLayers[ti]);
+        const em = emissionByIndex[ti % nColors];
+        if (em?.enabled) drawEmission(x, y, r0, theta, col, em.intensity, paletteLayers[ti]);
+      }
+      continue;
+    }
+
+    const pi = pickPaletteIndex(rng, (config.svg.paletteMode as PaletteAssignMode) === 'cycle' ? 'cycle' : 'weighted', weightsNorm, i, nColors);
+    const fill = colors[pi] ?? '#ffffff';
+    const sizeMult = sizeMultByIndex[pi] ?? 1;
+    const r = r0 * sizeMult;
     const x = x0 + (rng() - 0.5) * r * 2 * jitter;
     const y = y0 + (rng() - 0.5) * r * 2 * jitter;
-    const theta = (rng() - 0.5) * rotJ;
 
     drawShape(ctx, x, y, r, theta, fill);
     {
