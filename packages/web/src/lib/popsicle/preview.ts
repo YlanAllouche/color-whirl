@@ -4,7 +4,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { buildBubbles, buildBubblesSeed, createStickMeshMaterial, resolvePaletteConfig } from '@wallpaper-maker/core';
 import type { WallpaperConfig, EnvironmentStyle, ShadowType, TextureType } from '@wallpaper-maker/core';
-import { ADDITION, Brush, Evaluator, SUBTRACTION } from 'three-bvh-csg';
+import { Brush, Evaluator, SUBTRACTION } from 'three-bvh-csg';
 
 type PopsicleConfig = Extract<WallpaperConfig, { type: 'popsicle' }>;
 
@@ -2120,9 +2120,7 @@ void wmApplyCollisionMask(inout vec4 col) {
     const carveBubbles = (
       geoIn: THREE.BufferGeometry,
       world: THREE.Matrix4,
-      bubbles: Array<{ center: THREE.Vector3; radius: number }>,
-      mode: 'through' | 'cap',
-      coreScale?: { x: number; y: number; z: number }
+      bubbles: Array<{ center: THREE.Vector3; radius: number }>
     ): THREE.BufferGeometry => {
       if (!evaluator || !sphereGeo) return geoIn;
       const inv = world.clone().invert();
@@ -2141,16 +2139,6 @@ void wmApplyCollisionMask(inout vec4 col) {
         const next = evaluator.evaluate(current, sphere, SUBTRACTION);
         if (current.geometry) current.geometry.dispose();
         current = next;
-      }
-
-      if (mode === 'cap' && coreScale) {
-        const core = new Brush(geoIn.clone());
-        core.scale.set(coreScale.x, coreScale.y, coreScale.z);
-        core.updateMatrixWorld(true);
-
-        const capped = evaluator.evaluate(current, core, ADDITION);
-        if (current.geometry) current.geometry.dispose();
-        current = capped;
       }
 
       const out = current.geometry;
@@ -2265,31 +2253,66 @@ void wmApplyCollisionMask(inout vec4 col) {
 
         const candidates = buildBubbles(bubblesCfg, new THREE.Vector3(1, 1, 1), seedBase, {
           bounds: stickBounds,
-          maxBubbles: bubblesMode === 'cap' ? 220 : 140
+          maxBubbles: bubblesMode === 'cap' ? 260 : 160
         });
 
-        // Prefer bubbles that actually open onto the surface (AABB heuristic).
-        const openers = candidates.filter((b) => {
-          const dx = Math.min(b.center.x - stickBounds.min.x, stickBounds.max.x - b.center.x);
-          const dy = Math.min(b.center.y - stickBounds.min.y, stickBounds.max.y - b.center.y);
-          const dz = Math.min(b.center.z - stickBounds.min.z, stickBounds.max.z - b.center.z);
-          const minToFace = Math.min(dx, dy, dz);
-          return minToFace <= b.radius + 0.002;
-        });
+        const inv = mesh.matrixWorld.clone().invert();
+        const halfW = Math.max(1e-6, dims.width * 0.5);
+        const halfH = Math.max(1e-6, dims.height * 0.5);
+        const halfD = Math.max(1e-6, dims.depth * 0.5);
+        const minDim = Math.min(dims.width, dims.height, dims.depth);
+        const openMargin = Math.max(0.002, minDim * 0.01);
+        const sealMargin = Math.max(openMargin, (Number(bubblesCfg.wallThickness) || 0) * 0.85);
 
-        const bubbles = (openers.length > 0 ? openers : candidates).slice(0, bubblesMode === 'cap' ? 20 : 14);
+        const adjusted: Array<{ center: THREE.Vector3; radius: number }> = [];
+        const cLocal = new THREE.Vector3();
 
-        if (bubbles.length > 0) {
+        for (let bi = 0; bi < candidates.length && adjusted.length < (bubblesMode === 'cap' ? 14 : 12); bi++) {
+          const b = candidates[bi];
+
           if (bubblesMode === 'cap') {
-            const inset = clamp(Number(bubblesCfg.wallThickness) || 0.08, 0.01, Math.min(dims.width, dims.height, dims.depth) * 0.24);
-            const sx = clamp((dims.width - 2 * inset) / Math.max(1e-6, dims.width), 0.12, 1);
-            const sy = clamp((dims.height - 2 * inset) / Math.max(1e-6, dims.height), 0.12, 1);
-            const sz = clamp((dims.depth - 2 * inset) / Math.max(1e-6, dims.depth), 0.12, 1);
+            cLocal.copy(b.center).applyMatrix4(inv);
 
-            mesh.geometry = carveBubbles(mesh.geometry, mesh.matrixWorld, bubbles, 'cap', { x: sx, y: sy, z: sz });
+            const dxMin = cLocal.x + halfW;
+            const dxMax = halfW - cLocal.x;
+            const dyMin = cLocal.y + halfH;
+            const dyMax = halfH - cLocal.y;
+            const dzMin = cLocal.z + halfD;
+            const dzMax = halfD - cLocal.z;
+
+            // Must be (roughly) inside stick volume.
+            if (dxMin < 0 || dxMax < 0 || dyMin < 0 || dyMax < 0 || dzMin < 0 || dzMax < 0) continue;
+
+            const dists = [dxMin, dxMax, dyMin, dyMax, dzMin, dzMax];
+            let minI = 0;
+            for (let i2 = 1; i2 < 6; i2++) if (dists[i2] < dists[minI]) minI = i2;
+            const nearDist = dists[minI];
+            const farDist = dists[minI ^ 1];
+
+            const rOpen = nearDist + openMargin;
+            const rSeal = farDist - sealMargin;
+            if (!(rSeal > rOpen)) continue;
+            if (b.radius < rOpen) continue; // don't inflate
+
+            let r = Math.min(b.radius, rSeal);
+
+            // Ensure the cavity does not break out of any other face.
+            for (let fi = 0; fi < 6; fi++) {
+              if (fi === minI) continue;
+              r = Math.min(r, dists[fi] - sealMargin);
+            }
+
+            if (!(r > rOpen)) continue;
+
+            adjusted.push({ center: b.center, radius: r });
           } else {
-            mesh.geometry = carveBubbles(mesh.geometry, mesh.matrixWorld, bubbles, 'through');
+            // through
+            adjusted.push({ center: b.center, radius: b.radius });
           }
+        }
+
+        if (adjusted.length > 0) {
+          mesh.geometry = carveBubbles(mesh.geometry, mesh.matrixWorld, adjusted);
         }
       }
 
