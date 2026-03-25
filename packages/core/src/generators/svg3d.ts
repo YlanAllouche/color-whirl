@@ -5,7 +5,7 @@ import { createRng } from '../types.js';
 import { createSurfaceMaterial } from '../materials.js';
 import { renderWithOptionalBloom } from './postprocessing.js';
 import { autoFitOrthographicCameraToBox } from './camera-fit.js';
-import { validateSvgSource } from '../svg-utils.js';
+import { inferSvgRenderMode, validateSvgSource } from '../svg-utils.js';
 import { resolvePaletteConfig } from '../palette.js';
 
 import { SVGLoader } from 'three/examples/jsm/loaders/SVGLoader.js';
@@ -230,6 +230,159 @@ function buildExtrudedSvgGeometry(config: Svg3DConfig): { geometry: THREE.Buffer
   return { geometry: geom, maxDim };
 }
 
+function mergeNonIndexedBufferGeometries(geoms: THREE.BufferGeometry[]): THREE.BufferGeometry {
+  const list = geoms.filter(Boolean);
+  if (list.length === 0) return new THREE.BufferGeometry();
+
+  const posArrays: Float32Array[] = [];
+  const normArrays: Float32Array[] = [];
+  const uvArrays: Float32Array[] = [];
+
+  let posLen = 0;
+  let normLen = 0;
+  let uvLen = 0;
+
+  for (const g0 of list) {
+    const g = g0.index ? g0.toNonIndexed() : g0;
+    const pos = g.getAttribute('position') as THREE.BufferAttribute | null;
+    if (!pos) continue;
+    if (!g.getAttribute('normal')) g.computeVertexNormals();
+    const nor = g.getAttribute('normal') as THREE.BufferAttribute | null;
+    const uv = g.getAttribute('uv') as THREE.BufferAttribute | null;
+
+    const posArr = pos.array instanceof Float32Array ? pos.array : new Float32Array(pos.array as any);
+    const norArr = nor?.array instanceof Float32Array ? (nor.array as Float32Array) : nor ? new Float32Array(nor.array as any) : new Float32Array(posArr.length);
+    const uvArr = uv?.array instanceof Float32Array ? (uv.array as Float32Array) : uv ? new Float32Array(uv.array as any) : new Float32Array(0);
+
+    posArrays.push(posArr);
+    normArrays.push(norArr);
+    uvArrays.push(uvArr);
+    posLen += posArr.length;
+    normLen += norArr.length;
+    uvLen += uvArr.length;
+  }
+
+  const out = new THREE.BufferGeometry();
+  if (posLen === 0) return out;
+
+  const posMerged = new Float32Array(posLen);
+  const norMerged = new Float32Array(normLen);
+  const uvMerged = uvLen > 0 ? new Float32Array(uvLen) : null;
+
+  let pOff = 0;
+  let nOff = 0;
+  let uOff = 0;
+  for (let i = 0; i < posArrays.length; i++) {
+    posMerged.set(posArrays[i], pOff);
+    pOff += posArrays[i].length;
+    norMerged.set(normArrays[i], nOff);
+    nOff += normArrays[i].length;
+    if (uvMerged && uvArrays[i].length > 0) {
+      uvMerged.set(uvArrays[i], uOff);
+      uOff += uvArrays[i].length;
+    }
+  }
+
+  out.setAttribute('position', new THREE.BufferAttribute(posMerged, 3));
+  out.setAttribute('normal', new THREE.BufferAttribute(norMerged, 3));
+  if (uvMerged && uOff > 0) out.setAttribute('uv', new THREE.BufferAttribute(uvMerged, 2));
+  out.computeBoundingBox();
+  out.computeBoundingSphere();
+  return out;
+}
+
+function buildStrokeSvgGeometry(config: Svg3DConfig): { geometry: THREE.BufferGeometry; maxDim: number } {
+  const source = validateSvgSource(config.svg.source);
+
+  let data: any;
+  try {
+    const loader = new SVGLoader();
+    data = loader.parse(source);
+  } catch (err: any) {
+    throw new Error(`Invalid SVG: failed to parse (${String(err?.message || err)})`);
+  }
+
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+
+  const polylines: THREE.Vector2[][] = [];
+
+  for (const p of data?.paths ?? []) {
+    const subs = (p as any)?.subPaths ?? [];
+    for (const sp of subs) {
+      const pts = (sp as any).getPoints ? (sp as any).getPoints(80) : [];
+      if (!pts || pts.length < 2) continue;
+      const arr: THREE.Vector2[] = [];
+      for (const v of pts) {
+        const x = Number(v?.x);
+        const y = Number(v?.y);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+        arr.push(new THREE.Vector2(x, y));
+      }
+      if (arr.length >= 2) polylines.push(arr);
+    }
+  }
+
+  if (polylines.length === 0 || !Number.isFinite(minX)) {
+    throw new Error('Invalid SVG: no drawable paths found for stroke rendering');
+  }
+
+  const w = Math.max(1e-9, maxX - minX);
+  const h = Math.max(1e-9, maxY - minY);
+  const maxDim = Math.max(w, h);
+  const cx = (minX + maxX) * 0.5;
+  const cy = (minY + maxY) * 0.5;
+
+  // Stroke width is expressed relative to the normalized icon (maxDim=1).
+  const radiusNorm = Math.max(0.000001, Number(config.svg.stroke?.radius) || 0.000001);
+  const widthNorm = radiusNorm * 2;
+  const widthSvg = widthNorm * maxDim;
+
+  const arcDiv = Math.max(1, Math.min(12, Math.round(Number(config.svg.stroke?.segments) || 6)));
+
+  const style: any = {
+    strokeWidth: widthSvg,
+    strokeLineJoin: 'round',
+    strokeLineCap: 'round',
+    strokeMiterLimit: 4
+  };
+
+  const geoms: THREE.BufferGeometry[] = [];
+  for (const pts of polylines) {
+    const g = SVGLoader.pointsToStroke(pts, style, arcDiv, 0);
+    if (g) geoms.push(g);
+  }
+
+  if (geoms.length === 0) {
+    throw new Error('Invalid SVG: could not build stroke geometry');
+  }
+
+  const merged = mergeNonIndexedBufferGeometries(geoms);
+  for (const g of geoms) {
+    try {
+      g.dispose();
+    } catch {
+      // Ignore
+    }
+  }
+
+  // Center + normalize to maxDim=1.
+  const s = 1 / Math.max(1e-9, maxDim);
+  merged.applyMatrix4(new THREE.Matrix4().makeTranslation(-cx, -cy, 0));
+  merged.applyMatrix4(new THREE.Matrix4().makeScale(s, s, s));
+  merged.computeVertexNormals();
+  merged.computeBoundingBox();
+  merged.computeBoundingSphere();
+
+  return { geometry: merged, maxDim };
+}
+
 export function createSvg3DScene(
   config: Svg3DConfig,
   options?: {
@@ -333,6 +486,13 @@ export function createSvg3DScene(
   const rng = createRng(config.seed);
   const weightsNorm = normalizeWeights(config.svg.colorWeights ?? [], nColors);
 
+  const rmRaw = String((config as any).svg?.renderMode ?? 'auto');
+  const explicitMode = rmRaw === 'fill' || rmRaw === 'stroke' || rmRaw === 'fill+stroke' ? rmRaw : 'auto';
+  const inferred = inferSvgRenderMode(config.svg.source);
+  const mode = explicitMode === 'auto' ? inferred : (explicitMode as 'fill' | 'stroke' | 'fill+stroke');
+  const doFill = mode === 'fill' || mode === 'fill+stroke';
+  const doStroke = mode === 'stroke' || mode === 'fill+stroke';
+
   const sizeMultByIndex = Array.from({ length: nColors }, (_, pi) => resolvePaletteConfig(config as any, pi).multipliers.svg.sizeMult);
   const extrudeMultByIndex = Array.from({ length: nColors }, (_, pi) => resolvePaletteConfig(config as any, pi).multipliers.svg.extrudeMult);
 
@@ -342,9 +502,16 @@ export function createSvg3DScene(
   const tiltRad = degToRad(clamp(Number(config.svg.tiltDeg) || 0, 0, 80));
   const sizeMin = Math.max(0.0001, Number(config.svg.sizeMin) || 0.0001);
   const sizeMax = Math.max(sizeMin, Number(config.svg.sizeMax) || sizeMin);
-  const opacity = clamp01(Number(config.svg.opacity) || 1);
+  const fillOpacity = doFill ? clamp01(Number(config.svg.opacity) || 1) : 0;
+  const strokeOpacity = doStroke ? clamp01(Number(config.svg.stroke?.opacity) || 1) : 0;
 
-  const { geometry } = buildExtrudedSvgGeometry(config);
+  const geometryFill = doFill ? buildExtrudedSvgGeometry(config).geometry : null;
+  const geometryStroke = doStroke ? buildStrokeSvgGeometry(config).geometry : null;
+
+  if (!geometryFill && !geometryStroke) {
+    // Should not happen; keep a clear error.
+    throw new Error('SVG renderMode resulted in no geometry to render');
+  }
 
   const useMode: PaletteAssignMode = config.svg.paletteMode === 'cycle' ? 'cycle' : 'weighted';
   const pickIndex = (i: number): number => {
@@ -352,19 +519,34 @@ export function createSvg3DScene(
     return sampleWeightedIndex01(rng(), weightsNorm);
   };
 
-  // One instanced mesh per palette index.
-  const perColor: Array<{ idx: number; inst: THREE.InstancedMesh; mat: THREE.Material; count: number }> = [];
-  for (let pi = 0; pi < nColors; pi++) {
-    const mat = createSurfaceMaterial(config, pi, colors[pi] ?? '#ffffff', envIntensity, opacity);
-    const anyMat: any = mat as any;
-    if (typeof anyMat.side === 'number') anyMat.side = THREE.DoubleSide;
-    perColor.push({ idx: pi, inst: new THREE.InstancedMesh(geometry, mat, count), mat, count: 0 });
+  // Instanced meshes per palette index for fill and/or stroke.
+  const perColorFill: Array<{ idx: number; inst: THREE.InstancedMesh; mat: THREE.Material; count: number }> = [];
+  const perColorStroke: Array<{ idx: number; inst: THREE.InstancedMesh; mat: THREE.Material; count: number }> = [];
+
+  if (geometryFill && fillOpacity > 0) {
+    for (let pi = 0; pi < nColors; pi++) {
+      const mat = createSurfaceMaterial(config, pi, colors[pi] ?? '#ffffff', envIntensity, fillOpacity);
+      const anyMat: any = mat as any;
+      if (typeof anyMat.side === 'number') anyMat.side = THREE.DoubleSide;
+      const inst = new THREE.InstancedMesh(geometryFill, mat, count);
+      perColorFill.push({ idx: pi, inst, mat, count: 0 });
+      inst.castShadow = useShadows;
+      inst.receiveShadow = useShadows;
+      scene.add(inst);
+    }
   }
 
-  for (const it of perColor) {
-    it.inst.castShadow = useShadows;
-    it.inst.receiveShadow = useShadows;
-    scene.add(it.inst);
+  if (geometryStroke && strokeOpacity > 0) {
+    for (let pi = 0; pi < nColors; pi++) {
+      const mat = createSurfaceMaterial(config, pi, colors[pi] ?? '#ffffff', envIntensity, strokeOpacity);
+      const anyMat: any = mat as any;
+      if (typeof anyMat.side === 'number') anyMat.side = THREE.DoubleSide;
+      const inst = new THREE.InstancedMesh(geometryStroke, mat, count);
+      perColorStroke.push({ idx: pi, inst, mat, count: 0 });
+      inst.castShadow = useShadows;
+      inst.receiveShadow = useShadows;
+      scene.add(inst);
+    }
   }
 
   const tmpMat = new THREE.Matrix4();
@@ -383,7 +565,8 @@ export function createSvg3DScene(
     const tiltY = tiltRad > 0 ? (rng() - 0.5) * 2 * tiltRad : 0;
 
     const pi = pickIndex(i);
-    const bucket = perColor[pi] ?? perColor[0];
+    const bucketFill = perColorFill[pi] ?? perColorFill[0];
+    const bucketStroke = perColorStroke[pi] ?? perColorStroke[0];
 
     const sizeMult = sizeMultByIndex[pi] ?? 1;
     const extrudeMult = extrudeMultByIndex[pi] ?? 1;
@@ -393,10 +576,21 @@ export function createSvg3DScene(
     tmpQuat.setFromEuler(tmpEuler);
     tmpScale.set(size * sizeMult, size * sizeMult, extrudeMult);
     tmpMat.compose(tmpPos, tmpQuat, tmpScale);
-    bucket.inst.setMatrixAt(bucket.count++, tmpMat);
+    if (bucketFill) bucketFill.inst.setMatrixAt(bucketFill.count++, tmpMat);
+
+    // Stroke gets the same placement; its Z scale is arbitrary for a planar mesh.
+    if (bucketStroke) {
+      tmpScale.set(size * sizeMult, size * sizeMult, size * sizeMult);
+      tmpMat.compose(tmpPos, tmpQuat, tmpScale);
+      bucketStroke.inst.setMatrixAt(bucketStroke.count++, tmpMat);
+    }
   }
 
-  for (const it of perColor) {
+  for (const it of perColorFill) {
+    it.inst.count = it.count;
+    it.inst.instanceMatrix.needsUpdate = true;
+  }
+  for (const it of perColorStroke) {
     it.inst.count = it.count;
     it.inst.instanceMatrix.needsUpdate = true;
   }

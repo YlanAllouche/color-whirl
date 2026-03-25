@@ -1018,7 +1018,7 @@
           }
         };
       case 'svg3d':
-        return {
+        return ({
           ...src,
           colors: [...src.colors],
           palette,
@@ -1046,12 +1046,13 @@
           shadows: { ...src.shadows },
           rendering: { ...src.rendering },
           geometry: { ...src.geometry },
-          svg: {
-            ...src.svg,
-            bevel: { ...src.svg.bevel },
-            colorWeights: [...(src.svg.colorWeights ?? [])]
-          }
-        };
+          svg: ({
+            ...(src as any).svg,
+            stroke: { ...(src as any).svg?.stroke },
+            bevel: { ...(src as any).svg?.bevel },
+            colorWeights: [...((src as any).svg?.colorWeights ?? [])]
+          } as any)
+        } as any);
     }
   }
 
@@ -1538,6 +1539,7 @@
     }
     if (c.type === 'svg2d') {
       void (c as any).svg?.source;
+      void (c as any).svg?.renderMode;
       void (c as any).svg?.count;
       void (c as any).svg?.rMinPx;
       void (c as any).svg?.rMaxPx;
@@ -1553,12 +1555,17 @@
     }
     if (c.type === 'svg3d') {
       void (c as any).svg?.source;
+      void (c as any).svg?.renderMode;
       void (c as any).svg?.count;
       void (c as any).svg?.spread;
       void (c as any).svg?.depth;
       void (c as any).svg?.sizeMin;
       void (c as any).svg?.sizeMax;
       void (c as any).svg?.extrudeDepth;
+      void (c as any).svg?.stroke?.enabled;
+      void (c as any).svg?.stroke?.radius;
+      void (c as any).svg?.stroke?.segments;
+      void (c as any).svg?.stroke?.opacity;
       void (c as any).svg?.bevel?.enabled;
       void (c as any).svg?.bevel?.size;
       void (c as any).svg?.bevel?.segments;
@@ -4006,11 +4013,21 @@
          <section class="control-section">
            <h3>SVG (2D)</h3>
 
-           <label class="control-row">
-             <button type="button" class="setting-title" class:locked={isLocked('svg.source')} onclick={() => toggleLock('svg.source')} title="Click to lock/unlock for randomize">
-               Source
-             </button>
-           </label>
+            <label class="control-row">
+              <button type="button" class="setting-title" class:locked={isLocked('svg.renderMode')} onclick={() => toggleLock('svg.renderMode')} title="Click to lock/unlock for randomize">Render</button>
+              <select bind:value={(config as any).svg.renderMode}>
+                <option value="auto">Auto</option>
+                <option value="fill">Fill</option>
+                <option value="stroke">Stroke</option>
+                <option value="fill+stroke">Fill + Stroke</option>
+              </select>
+            </label>
+
+            <label class="control-row">
+              <button type="button" class="setting-title" class:locked={isLocked('svg.source')} onclick={() => toggleLock('svg.source')} title="Click to lock/unlock for randomize">
+                Source
+              </button>
+            </label>
            <textarea
              bind:value={(config as any).svg.source}
              rows="6"
@@ -4498,15 +4515,25 @@
             {/if}
           </details>
         </section>
-       {:else if config.type === 'svg3d'}
+        {:else if config.type === 'svg3d'}
          <section class="control-section">
            <h3>SVG (3D)</h3>
 
-           <label class="control-row">
-             <button type="button" class="setting-title" class:locked={isLocked('svg.source')} onclick={() => toggleLock('svg.source')} title="Click to lock/unlock for randomize">
-               Source
-             </button>
-           </label>
+            <label class="control-row">
+              <button type="button" class="setting-title" class:locked={isLocked('svg.renderMode')} onclick={() => toggleLock('svg.renderMode')} title="Click to lock/unlock for randomize">Render</button>
+              <select bind:value={(config as any).svg.renderMode}>
+                <option value="auto">Auto</option>
+                <option value="fill">Fill</option>
+                <option value="stroke">Stroke</option>
+                <option value="fill+stroke">Fill + Stroke</option>
+              </select>
+            </label>
+
+            <label class="control-row">
+              <button type="button" class="setting-title" class:locked={isLocked('svg.source')} onclick={() => toggleLock('svg.source')} title="Click to lock/unlock for randomize">
+                Source
+              </button>
+            </label>
            <textarea
              bind:value={(config as any).svg.source}
              rows="6"
@@ -4551,10 +4578,41 @@
              <input type="range" bind:value={(config as any).svg.extrudeDepth} min="0.005" max="1.0" step="0.005" />
            </label>
 
-           <details class="control-details">
-             <summary class="control-details-summary">Bevel</summary>
-             <label class="control-row checkbox">
-               <input type="checkbox" bind:checked={(config as any).svg.bevel.enabled} />
+            <details class="control-details">
+              <summary class="control-details-summary">Stroke</summary>
+              <label class="control-row checkbox">
+                <input type="checkbox" bind:checked={(config as any).svg.stroke.enabled} />
+                <button
+                  type="button"
+                  class="setting-title"
+                  class:locked={isLocked('svg.stroke.enabled')}
+                  onclick={(e) => {
+                    e.preventDefault();
+                    toggleLock('svg.stroke.enabled');
+                  }}
+                  title="Click to lock/unlock for randomize"
+                >
+                  Enable
+                </button>
+              </label>
+              <label class="control-row slider">
+                <button type="button" class="setting-title" class:locked={isLocked('svg.stroke.radius')} onclick={() => toggleLock('svg.stroke.radius')} title="Click to lock/unlock for randomize">Radius: {Number((config as any).svg.stroke.radius).toFixed(3)}</button>
+                <input type="range" bind:value={(config as any).svg.stroke.radius} min="0.001" max="0.15" step="0.001" disabled={!((config as any).svg.stroke.enabled)} />
+              </label>
+              <label class="control-row slider">
+                <button type="button" class="setting-title" class:locked={isLocked('svg.stroke.segments')} onclick={() => toggleLock('svg.stroke.segments')} title="Click to lock/unlock for randomize">Segments: {Math.round((config as any).svg.stroke.segments)}</button>
+                <input type="range" bind:value={(config as any).svg.stroke.segments} min="1" max="12" step="1" disabled={!((config as any).svg.stroke.enabled)} />
+              </label>
+              <label class="control-row slider">
+                <button type="button" class="setting-title" class:locked={isLocked('svg.stroke.opacity')} onclick={() => toggleLock('svg.stroke.opacity')} title="Click to lock/unlock for randomize">Opacity: {Number((config as any).svg.stroke.opacity).toFixed(2)}</button>
+                <input type="range" bind:value={(config as any).svg.stroke.opacity} min="0" max="1" step="0.01" disabled={!((config as any).svg.stroke.enabled)} />
+              </label>
+            </details>
+
+            <details class="control-details">
+              <summary class="control-details-summary">Bevel</summary>
+              <label class="control-row checkbox">
+                <input type="checkbox" bind:checked={(config as any).svg.bevel.enabled} />
                <button
                  type="button"
                  class="setting-title"

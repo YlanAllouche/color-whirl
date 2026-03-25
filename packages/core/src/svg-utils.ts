@@ -98,3 +98,46 @@ export function stripSvgPresentationAttributes(svgInner: string): string {
   s = s.replace(/\s(style)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '');
   return s;
 }
+
+export function inferSvgRenderMode(svgSource: string): 'fill' | 'stroke' | 'fill+stroke' {
+  const s = validateSvgSource(svgSource);
+  const open = /<svg\b[^>]*>/i.exec(s);
+  const openTag = open?.[0] ?? '';
+
+  const extractAttrValues = (name: string, haystack: string): string[] => {
+    const re = new RegExp(`\\b${name}\\s*=\\s*("[^"]*"|'[^']*'|[^\\s>]+)`, 'gi');
+    const out: string[] = [];
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(haystack))) {
+      const raw = String(m[1] ?? '').trim().replace(/^['"]|['"]$/g, '');
+      if (!raw) continue;
+      out.push(raw);
+    }
+    return out;
+  };
+
+  const normalize = (v: string) => v.trim().toLowerCase();
+
+  // Prefer root-level hints (common in icon sets like Lucide).
+  const rootFill = extractAttrValues('fill', openTag).map(normalize);
+  const rootStroke = extractAttrValues('stroke', openTag).map(normalize);
+
+  const rootFillNone = rootFill.includes('none');
+  const rootHasStroke = rootStroke.some((v) => v !== 'none');
+
+  if (rootFillNone && rootHasStroke) return 'stroke';
+
+  // Broader scan: any explicit fill/stroke present in the SVG.
+  const fillVals = extractAttrValues('fill', s).map(normalize);
+  const strokeVals = extractAttrValues('stroke', s).map(normalize);
+
+  const hasFill = fillVals.some((v) => v !== 'none') || /\bfill\s*=\s*(['"])url\(/i.test(s) || /\bfill\s*:\s*url\(/i.test(s);
+  const hasStroke = strokeVals.some((v) => v !== 'none');
+
+  if (hasFill && hasStroke) return 'fill+stroke';
+  if (hasStroke && !hasFill) return 'stroke';
+  if (hasFill && !hasStroke) return 'fill';
+
+  // Fallback: try to show something for unknown/unstyled SVGs.
+  return 'stroke';
+}

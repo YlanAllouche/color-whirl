@@ -1,5 +1,5 @@
 import type { ExportOptions, WallpaperConfig } from '../types.js';
-import { extractSvgRootAttributes, stripSvgPresentationAttributes, validateSvgSource } from '../svg-utils.js';
+import { extractSvgRootAttributes, inferSvgRenderMode, stripSvgPresentationAttributes, validateSvgSource } from '../svg-utils.js';
 
 export interface ExportResult {
   data: Uint8Array | string;
@@ -774,12 +774,21 @@ function generateSvg2DSVG(config: Extract<WallpaperConfig, { type: 'svg2d' }>): 
   const count = Math.max(1, Math.round(Number(config.svg.count) || 0));
   const rMin = Math.max(0.1, Number(config.svg.rMinPx) || 1);
   const rMax = Math.max(rMin, Number(config.svg.rMaxPx) || rMin);
-  const fillOpacity = clamp01(Number(config.svg.fillOpacity) || 0);
+  let fillOpacity = clamp01(Number(config.svg.fillOpacity) || 0);
   const jitter = clamp01(Number(config.svg.jitter) || 0);
   const rotJ = ((Number(config.svg.rotateJitterDeg) || 0) * Math.PI) / 180;
 
   // Validate early for a friendly error.
   validateSvgSource(config.svg.source);
+
+  const rmRaw = String((config as any).svg?.renderMode ?? 'auto');
+  const explicitMode = rmRaw === 'fill' || rmRaw === 'stroke' || rmRaw === 'fill+stroke' ? rmRaw : 'auto';
+  const inferred = inferSvgRenderMode(config.svg.source);
+  const mode = explicitMode === 'auto' ? inferred : (explicitMode as 'fill' | 'stroke' | 'fill+stroke');
+  const doFill = mode === 'fill' || mode === 'fill+stroke';
+  const doStroke = mode === 'stroke' || mode === 'fill+stroke';
+  fillOpacity = doFill ? fillOpacity : 0;
+
   const { viewBox, inner } = extractSvgRootAttributes(config.svg.source);
   const vbMinX = viewBox.minX;
   const vbMinY = viewBox.minY;
@@ -799,7 +808,7 @@ function generateSvg2DSVG(config: Extract<WallpaperConfig, { type: 'svg2d' }>): 
     return sampleWeightedIndex01(rand01(i, 1), weightsNorm);
   };
 
-  const strokeEnabled = !!config.svg.stroke?.enabled;
+  const strokeEnabled = doStroke ? true : !!config.svg.stroke?.enabled;
   const strokeW = Math.max(0, Number(config.svg.stroke?.widthPx) || 0);
   const strokeOpacity = clamp01(Number(config.svg.stroke?.opacity) || 0);
   const strokeColor = typeof config.svg.stroke?.color === 'string' ? config.svg.stroke.color : '#000000';
@@ -826,7 +835,8 @@ function generateSvg2DSVG(config: Extract<WallpaperConfig, { type: 'svg2d' }>): 
 
     const transform = `translate(${cx.toFixed(3)} ${cy.toFixed(3)}) rotate(${rotDeg.toFixed(3)}) scale(${scale.toFixed(6)}) translate(${(-vbCx).toFixed(3)} ${(-vbCy).toFixed(3)})`;
 
-    svg += `  <g transform="${transform}" fill="${col}" fill-opacity="${fillOpacity}"${strokeAttrs}><use href="#wmSvgShape"/></g>\n`;
+    const fillAttrs = doFill ? ` fill="${col}" fill-opacity="${fillOpacity}"` : ' fill="none"';
+    svg += `  <g transform="${transform}"${fillAttrs}${strokeAttrs}><use href="#wmSvgShape"/></g>\n`;
   }
 
   svg += svgEnd();
@@ -840,6 +850,14 @@ function generateSvg3DSVG(config: Extract<WallpaperConfig, { type: 'svg3d' }>): 
   const count = Math.max(1, Math.round(Number(config.svg.count) || 0));
 
   validateSvgSource(config.svg.source);
+
+  const rmRaw = String((config as any).svg?.renderMode ?? 'auto');
+  const explicitMode = rmRaw === 'fill' || rmRaw === 'stroke' || rmRaw === 'fill+stroke' ? rmRaw : 'auto';
+  const inferred = inferSvgRenderMode(config.svg.source);
+  const mode = explicitMode === 'auto' ? inferred : (explicitMode as 'fill' | 'stroke' | 'fill+stroke');
+  const doFill = mode === 'fill' || mode === 'fill+stroke';
+  const doStroke = mode === 'stroke' || mode === 'fill+stroke';
+
   const { viewBox, inner } = extractSvgRootAttributes(config.svg.source);
   const vbMinX = viewBox.minX;
   const vbMinY = viewBox.minY;
@@ -852,7 +870,13 @@ function generateSvg3DSVG(config: Extract<WallpaperConfig, { type: 'svg3d' }>): 
 
   const rMin = Math.max(0.1, Number(config.svg.sizeMin) * 180);
   const rMax = Math.max(rMin, Number(config.svg.sizeMax) * 180);
-  const opacity = clamp01(Number(config.svg.opacity) || 1);
+  const opacity = doFill ? clamp01(Number(config.svg.opacity) || 1) : 0;
+
+  const strokeEnabled = doStroke ? true : !!(config as any).svg?.stroke?.enabled;
+  const strokeOpacity = doStroke ? clamp01(Number((config as any).svg?.stroke?.opacity) || 1) : 0;
+  const strokeColor = typeof (config as any).svg?.stroke?.color === 'string' ? String((config as any).svg.stroke.color) : '#000000';
+  // 3D stroke config stores a normalized radius; approximate it in px.
+  const strokeW = doStroke ? Math.max(0, Number((config as any).svg?.stroke?.radius) || 0) * 180 : 0;
 
   const seed = config.seed >>> 0;
   const rand01 = (i: number, ch: number) => cellRand01(seed, i, 0, ch);
@@ -875,7 +899,11 @@ function generateSvg3DSVG(config: Extract<WallpaperConfig, { type: 'svg3d' }>): 
     const idx = pickIndex(i);
     const col = colors[idx] ?? '#ffffff';
     const transform = `translate(${cx.toFixed(3)} ${cy.toFixed(3)}) rotate(${rotDeg.toFixed(3)}) scale(${scale.toFixed(6)}) translate(${(-vbCx).toFixed(3)} ${(-vbCy).toFixed(3)})`;
-    svg += `  <g transform="${transform}" fill="${col}" fill-opacity="${opacity}" stroke="none"><use href="#wmSvgShape"/></g>\n`;
+    const fillAttrs = doFill ? ` fill="${col}" fill-opacity="${opacity}"` : ' fill="none"';
+    const strokeAttrs = strokeEnabled && strokeW > 0 && strokeOpacity > 0
+      ? ` stroke="${strokeColor}" stroke-opacity="${strokeOpacity}" stroke-width="${(strokeW / Math.max(1e-9, scale)).toFixed(3)}" stroke-linejoin="round" stroke-linecap="round"`
+      : ' stroke="none"';
+    svg += `  <g transform="${transform}"${fillAttrs}${strokeAttrs}><use href="#wmSvgShape"/></g>\n`;
   }
 
   svg += svgEnd();

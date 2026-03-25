@@ -1,6 +1,6 @@
 import type { Svg2DConfig, PaletteAssignMode } from '../types.js';
 import { createRng } from '../types.js';
-import { validateSvgSource } from '../svg-utils.js';
+import { inferSvgRenderMode, validateSvgSource } from '../svg-utils.js';
 import { resolvePaletteConfig } from '../palette.js';
 
 import { SVGLoader } from 'three/examples/jsm/loaders/SVGLoader.js';
@@ -86,7 +86,7 @@ function applyCanvasBloom(options: {
   ctx.restore();
 }
 
-function buildNormalizedPathFromSvg(svgSource: string): Path2D {
+function buildNormalizedPathsFromSvg(svgSource: string): { fillPath: Path2D; strokePath: Path2D; hasFill: boolean; hasStroke: boolean } {
   const source = validateSvgSource(svgSource);
 
   let data: any;
@@ -134,21 +134,35 @@ function buildNormalizedPathFromSvg(svgSource: string): Path2D {
   const maxDim = Math.max(w, h);
   const eps2 = (maxDim * 0.001) * (maxDim * 0.001);
 
-  const p2d = new Path2D();
+  const fillPath = new Path2D();
+  const strokePath = new Path2D();
+  let hasFill = false;
+  let hasStroke = false;
   for (const pts of ptsAll) {
     const x0 = (pts[0].x - cx) / maxDim;
     const y0 = (pts[0].y - cy) / maxDim;
-    p2d.moveTo(x0, y0);
+    strokePath.moveTo(x0, y0);
     for (let i = 1; i < pts.length; i++) {
-      p2d.lineTo((pts[i].x - cx) / maxDim, (pts[i].y - cy) / maxDim);
+      strokePath.lineTo((pts[i].x - cx) / maxDim, (pts[i].y - cy) / maxDim);
     }
     const dx = pts[pts.length - 1].x - pts[0].x;
     const dy = pts[pts.length - 1].y - pts[0].y;
     const closed = dx * dx + dy * dy <= eps2;
-    if (closed) p2d.closePath();
+    if (closed) {
+      strokePath.closePath();
+
+      // Only closed subpaths are safe to fill.
+      fillPath.moveTo(x0, y0);
+      for (let i = 1; i < pts.length; i++) {
+        fillPath.lineTo((pts[i].x - cx) / maxDim, (pts[i].y - cy) / maxDim);
+      }
+      fillPath.closePath();
+      hasFill = true;
+    }
+    hasStroke = true;
   }
 
-  return p2d;
+  return { fillPath, strokePath, hasFill, hasStroke };
 }
 
 function pickPaletteIndex(rng: () => number, mode: PaletteAssignMode, weightsNorm: number[], i: number, n: number): number {
@@ -168,7 +182,15 @@ export function renderSvg2DToCanvas(config: Svg2DConfig, canvas?: HTMLCanvasElem
   ctx.fillStyle = config.backgroundColor;
   ctx.fillRect(0, 0, c.width, c.height);
 
-  const shapePath = buildNormalizedPathFromSvg(config.svg.source);
+  const modeRaw = String((config as any).svg?.renderMode ?? 'auto');
+  const inferred = inferSvgRenderMode(config.svg.source);
+  const effectiveMode = modeRaw === 'fill' || modeRaw === 'stroke' || modeRaw === 'fill+stroke' ? modeRaw : 'auto';
+  const mode = effectiveMode === 'auto' ? inferred : (effectiveMode as 'fill' | 'stroke' | 'fill+stroke');
+
+  const doFill = mode === 'fill' || mode === 'fill+stroke';
+  const doStroke = mode === 'stroke' || mode === 'fill+stroke';
+
+  const { fillPath, strokePath } = buildNormalizedPathsFromSvg(config.svg.source);
 
   const rng = createRng(config.seed);
   const colors = config.colors.length > 0 ? config.colors : ['#ffffff'];
@@ -187,9 +209,9 @@ export function renderSvg2DToCanvas(config: Svg2DConfig, canvas?: HTMLCanvasElem
   const rMax = Math.max(rMin, Number(config.svg.rMaxPx) || rMin);
   const jitter = clamp01(Number(config.svg.jitter) || 0);
   const rotJ = ((Number(config.svg.rotateJitterDeg) || 0) * Math.PI) / 180;
-  const fillOpacity = clamp01(Number(config.svg.fillOpacity) || 0);
+  const fillOpacity = doFill ? clamp01(Number(config.svg.fillOpacity) || 0) : 0;
 
-  const strokeEnabled = !!config.svg.stroke?.enabled;
+  const strokeEnabled = doStroke ? true : !!config.svg.stroke?.enabled;
   const strokeW = Math.max(0, Number(config.svg.stroke?.widthPx) || 0);
   const strokeOpacity = clamp01(Number(config.svg.stroke?.opacity) || 0);
   const strokeColor = typeof config.svg.stroke?.color === 'string' ? config.svg.stroke.color : '#000000';
@@ -206,8 +228,10 @@ export function renderSvg2DToCanvas(config: Svg2DConfig, canvas?: HTMLCanvasElem
     target.rotate(theta);
     target.scale(r, r);
 
-    target.fillStyle = rgba(fill, fillOpacity);
-    target.fill(shapePath, 'evenodd');
+    if (doFill && fillOpacity > 0) {
+      target.fillStyle = rgba(fill, fillOpacity);
+      target.fill(fillPath, 'evenodd');
+    }
 
     if (strokeEnabled && strokeW > 0 && strokeOpacity > 0) {
       const lw = clamp(strokeW / Math.max(1e-6, r), 0.05, 1000);
@@ -215,7 +239,7 @@ export function renderSvg2DToCanvas(config: Svg2DConfig, canvas?: HTMLCanvasElem
       target.lineCap = 'round';
       target.lineWidth = lw;
       target.strokeStyle = rgba(strokeColor, strokeOpacity);
-      target.stroke(shapePath);
+      target.stroke(strokePath);
     }
 
     target.restore();
@@ -231,8 +255,19 @@ export function renderSvg2DToCanvas(config: Svg2DConfig, canvas?: HTMLCanvasElem
     gctx.translate(x, y);
     gctx.rotate(theta);
     gctx.scale(r * s, r * s);
-    gctx.fillStyle = rgba(fill, clamp(0.06 + e * 0.02, 0, 1));
-    gctx.fill(shapePath, 'evenodd');
+    const a = clamp(0.06 + e * 0.02, 0, 1);
+    if (doFill) {
+      gctx.fillStyle = rgba(fill, a);
+      gctx.fill(fillPath, 'evenodd');
+    }
+    if (strokeEnabled && strokeW > 0) {
+      const lw = clamp(strokeW / Math.max(1e-6, r * s), 0.05, 1000);
+      gctx.lineJoin = 'round';
+      gctx.lineCap = 'round';
+      gctx.lineWidth = lw;
+      gctx.strokeStyle = rgba(fill, clamp(a * 0.75, 0, 1));
+      gctx.stroke(strokePath);
+    }
     gctx.restore();
   };
 

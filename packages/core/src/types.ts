@@ -382,6 +382,8 @@ export interface PopsicleConfig extends BaseWallpaperConfig {
 export type SphereDistribution = 'jitteredGrid' | 'scatter' | 'layeredDepth';
 export type PaletteAssignMode = 'cycle' | 'weighted';
 
+export type SvgRenderMode = 'auto' | 'fill' | 'stroke' | 'fill+stroke';
+
 export type Spheres3DShapeKind = 'uvSphere' | 'spherifiedBox' | 'geodesicPoly';
 
 export interface Spheres3DShapeConfig {
@@ -636,6 +638,8 @@ export interface Svg2DConfig extends BaseWallpaperConfig {
   svg: {
     /** Raw SVG source string */
     source: string;
+    /** How to render the SVG paths. */
+    renderMode: SvgRenderMode;
     count: number;
     rMinPx: number;
     rMaxPx: number;
@@ -661,6 +665,8 @@ export interface Svg3DConfig extends BaseWallpaperConfig {
   svg: {
     /** Raw SVG source string */
     source: string;
+    /** How to render the SVG paths. */
+    renderMode: SvgRenderMode;
     count: number;
     /** Scene units: XY spread */
     spread: number;
@@ -674,6 +680,16 @@ export interface Svg3DConfig extends BaseWallpaperConfig {
     sizeMax: number;
     /** Scene units: extrusion depth (independent of size) */
     extrudeDepth: number;
+    /** Stroke rendering parameters (used when renderMode includes stroke). */
+    stroke: {
+      enabled: boolean;
+      /** Scene units: approximate half-thickness of the stroke mesh. */
+      radius: number;
+      /** 1..12: stroke triangulation quality. */
+      segments: number;
+      /** 0..1 */
+      opacity: number;
+    };
     bevel: {
       enabled: boolean;
       /** 0..0.2: bevel size as fraction of base shape */
@@ -1004,13 +1020,15 @@ export const DEFAULT_SVG2D_CONFIG: Svg2DConfig = {
   type: 'svg2d',
   svg: {
     source: DEFAULT_SVG_SOURCE,
+    renderMode: 'auto',
     count: 220,
     rMinPx: 18,
     rMaxPx: 150,
     jitter: 1.0,
     rotateJitterDeg: 180,
     fillOpacity: 0.95,
-    stroke: { enabled: false, widthPx: 2, color: '#0b0b10', opacity: 0.7 },
+    // Default stroke-on helps outline icons (Lucide etc.) read correctly under auto mode.
+    stroke: { enabled: true, widthPx: 2, color: '#0b0b10', opacity: 0.7 },
     paletteMode: 'weighted',
     colorWeights: [0.34, 0.28, 0.18, 0.12, 0.08]
   }
@@ -1021,6 +1039,7 @@ export const DEFAULT_SVG3D_CONFIG: Svg3DConfig = {
   type: 'svg3d',
   svg: {
     source: DEFAULT_SVG_SOURCE,
+    renderMode: 'auto',
     count: 160,
     spread: 4.4,
     depth: 4.0,
@@ -1028,6 +1047,7 @@ export const DEFAULT_SVG3D_CONFIG: Svg3DConfig = {
     sizeMin: 0.14,
     sizeMax: 0.5,
     extrudeDepth: 0.22,
+    stroke: { enabled: true, radius: 0.03, segments: 6, opacity: 1.0 },
     bevel: { enabled: true, size: 0.06, segments: 2 },
     paletteMode: 'weighted',
     colorWeights: [0.34, 0.28, 0.18, 0.12, 0.08],
@@ -1252,6 +1272,10 @@ export function normalizeWallpaperConfig(input: any): WallpaperConfig {
       (merged as any).svg = cloneJson(baseSvg);
     } else {
       if (typeof sAny.source !== 'string') sAny.source = String(sAny.source ?? baseSvg?.source ?? '');
+
+      const rmRaw = String(sAny.renderMode ?? baseSvg?.renderMode ?? 'auto');
+      sAny.renderMode = rmRaw === 'fill' || rmRaw === 'stroke' || rmRaw === 'fill+stroke' ? rmRaw : 'auto';
+
       const cnt = Number(sAny.count);
       sAny.count = Number.isFinite(cnt)
         ? Math.max(1, Math.round(cnt))
@@ -1265,6 +1289,12 @@ export function normalizeWallpaperConfig(input: any): WallpaperConfig {
         sAny.rotateJitterDeg = Number.isFinite(Number(sAny.rotateJitterDeg)) ? Number(sAny.rotateJitterDeg) : Number(baseSvg?.rotateJitterDeg) || 0;
         sAny.fillOpacity = Number.isFinite(Number(sAny.fillOpacity)) ? clamp(Number(sAny.fillOpacity), 0, 1) : clamp(Number(baseSvg?.fillOpacity) || 0, 0, 1);
         if (!sAny.stroke || typeof sAny.stroke !== 'object') sAny.stroke = cloneJson(baseSvg?.stroke);
+        sAny.stroke.enabled = typeof sAny.stroke.enabled === 'boolean' ? sAny.stroke.enabled : !!sAny.stroke.enabled;
+        const sw = Number(sAny.stroke.widthPx);
+        sAny.stroke.widthPx = Number.isFinite(sw) ? Math.max(0, sw) : Math.max(0, Number(baseSvg?.stroke?.widthPx) || 0);
+        if (typeof sAny.stroke.color !== 'string') sAny.stroke.color = String(sAny.stroke.color ?? baseSvg?.stroke?.color ?? '#000000');
+        const so = Number(sAny.stroke.opacity);
+        sAny.stroke.opacity = Number.isFinite(so) ? clamp(so, 0, 1) : clamp(Number(baseSvg?.stroke?.opacity) || 0, 0, 1);
         sAny.paletteMode = sAny.paletteMode === 'cycle' ? 'cycle' : 'weighted';
         if (!Array.isArray(sAny.colorWeights)) sAny.colorWeights = Array.isArray(baseSvg?.colorWeights) ? baseSvg.colorWeights.slice() : [];
       } else {
@@ -1284,6 +1314,16 @@ export function normalizeWallpaperConfig(input: any): WallpaperConfig {
         sAny.sizeMax = Number.isFinite(sMax) ? Math.max(sAny.sizeMin, sMax) : Math.max(sAny.sizeMin, Number(baseSvg?.sizeMax) || sAny.sizeMin);
         const ed = Number(sAny.extrudeDepth);
         sAny.extrudeDepth = Number.isFinite(ed) ? Math.max(0.000001, ed) : Math.max(0.000001, Number(baseSvg?.extrudeDepth) || 0.000001);
+
+        if (!sAny.stroke || typeof sAny.stroke !== 'object') sAny.stroke = cloneJson(baseSvg?.stroke);
+        sAny.stroke.enabled = typeof sAny.stroke.enabled === 'boolean' ? sAny.stroke.enabled : !!sAny.stroke.enabled;
+        const sr = Number(sAny.stroke.radius);
+        sAny.stroke.radius = Number.isFinite(sr) ? Math.max(0.000001, sr) : Math.max(0.000001, Number(baseSvg?.stroke?.radius) || 0.000001);
+        const sseg = Number(sAny.stroke.segments);
+        sAny.stroke.segments = Number.isFinite(sseg) ? Math.max(1, Math.min(12, Math.round(sseg))) : Math.max(1, Math.min(12, Math.round(Number(baseSvg?.stroke?.segments) || 6)));
+        const sop = Number(sAny.stroke.opacity);
+        sAny.stroke.opacity = Number.isFinite(sop) ? clamp(sop, 0, 1) : clamp(Number(baseSvg?.stroke?.opacity) || 1, 0, 1);
+
         if (!sAny.bevel || typeof sAny.bevel !== 'object') sAny.bevel = cloneJson(baseSvg?.bevel);
         sAny.bevel.enabled = typeof sAny.bevel.enabled === 'boolean' ? sAny.bevel.enabled : !!sAny.bevel.enabled;
         const bs = Number(sAny.bevel.size);
@@ -1897,13 +1937,14 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
         type: 'svg2d',
         svg: {
           source: DEFAULT_SVG_SOURCE,
+          renderMode: 'auto',
           count: chance(0.15) ? 1 : skewCountLow(2, DEFAULT_SVG2D_CONFIG.svg.count, 420, 1600, 0.03),
           rMinPx: Math.round(randomWeighted(rng, 6, 40, DEFAULT_SVG2D_CONFIG.svg.rMinPx)),
           rMaxPx: Math.round(randomWeighted(rng, 30, 280, DEFAULT_SVG2D_CONFIG.svg.rMaxPx)),
           jitter: clamp(randomWeighted(rng, 0, 1, DEFAULT_SVG2D_CONFIG.svg.jitter), 0, 1),
           rotateJitterDeg: randomWeighted(rng, 0, 360, DEFAULT_SVG2D_CONFIG.svg.rotateJitterDeg),
           fillOpacity: clamp(randomWeighted(rng, 0.2, 1, DEFAULT_SVG2D_CONFIG.svg.fillOpacity), 0, 1),
-          stroke: { enabled: rng() < 0.25, widthPx: 2, color: '#0b0b10', opacity: 0.7 },
+          stroke: { enabled: rng() < 0.35, widthPx: 2, color: '#0b0b10', opacity: 0.7 },
           paletteMode: rng() < 0.65 ? 'weighted' : 'cycle',
           colorWeights: [0.34, 0.28, 0.18, 0.12, 0.08]
         }
@@ -1914,6 +1955,7 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
         type: 'svg3d',
         svg: {
           source: DEFAULT_SVG_SOURCE,
+          renderMode: 'auto',
           count: chance(0.15) ? 1 : skewCountLow(2, DEFAULT_SVG3D_CONFIG.svg.count, 360, 1500, 0.03),
           spread: randomWeighted(rng, 0.8, 6.5, DEFAULT_SVG3D_CONFIG.svg.spread),
           depth: randomWeighted(rng, 0.5, 7.0, DEFAULT_SVG3D_CONFIG.svg.depth),
@@ -1921,6 +1963,12 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
           sizeMin: randomWeighted(rng, 0.05, 0.32, DEFAULT_SVG3D_CONFIG.svg.sizeMin),
           sizeMax: randomWeighted(rng, 0.14, 0.9, DEFAULT_SVG3D_CONFIG.svg.sizeMax),
           extrudeDepth: randomWeighted(rng, 0.02, 0.6, DEFAULT_SVG3D_CONFIG.svg.extrudeDepth),
+          stroke: {
+            enabled: rng() < 0.45,
+            radius: clamp(tri(0.006, DEFAULT_SVG3D_CONFIG.svg.stroke.radius, 0.06), 0.001, 0.2),
+            segments: Math.max(1, Math.min(12, Math.round(tri(2, DEFAULT_SVG3D_CONFIG.svg.stroke.segments, 10)))),
+            opacity: randomStickOpacity()
+          },
           bevel: {
             enabled: chance(0.7),
             size: clamp(tri(0.0, DEFAULT_SVG3D_CONFIG.svg.bevel.size, 0.14), 0, 0.2),
