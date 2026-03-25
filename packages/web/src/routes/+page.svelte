@@ -79,6 +79,8 @@
   let iconPreviewLoading = $state<Record<string, boolean>>({});
   let iconGalleryIndex = $state(0);
   let iconGalleryButtons: Array<HTMLButtonElement | null> = [];
+  let iconGalleryContainers: Array<HTMLDivElement | null> = [];
+  let iconGalleryColumnCount = $state(1);
   const ICON_PICKER_LIMIT = 200;
 
   $effect(() => {
@@ -115,7 +117,9 @@
   $effect(() => {
     void filteredIconNames.length;
     iconGalleryButtons = [];
+    iconGalleryContainers = [];
     iconGalleryIndex = filteredIconNames.length === 0 ? 0 : Math.min(iconGalleryIndex, filteredIconNames.length - 1);
+    updateIconGalleryColumnCount();
   });
 
   let selectedProviderMeta = $derived(getIconProviderMeta(iconProvider));
@@ -152,6 +156,56 @@
     iconGalleryButtons[index] = node;
   }
 
+  function setIconGalleryContainer(index: number, node: HTMLDivElement | null) {
+    iconGalleryContainers[index] = node;
+  }
+
+  function measureIconGalleryColumns(node: HTMLDivElement | null): number {
+    if (!node || typeof window === 'undefined') return 1;
+
+    const styles = window.getComputedStyle(node);
+    const templateColumns = styles.gridTemplateColumns;
+    if (!templateColumns || templateColumns === 'none') return 1;
+
+    const explicitColumnCount = templateColumns
+      .split(' ')
+      .map((part) => part.trim())
+      .filter(Boolean).length;
+
+    return Math.max(1, explicitColumnCount);
+  }
+
+  function updateIconGalleryColumnCount() {
+    for (const container of iconGalleryContainers) {
+      const nextCount = measureIconGalleryColumns(container);
+      if (nextCount > 0) {
+        iconGalleryColumnCount = nextCount;
+        return;
+      }
+    }
+
+    iconGalleryColumnCount = 1;
+  }
+
+  function bindIconGalleryContainer(node: HTMLDivElement, index: number) {
+    setIconGalleryContainer(index, node);
+    updateIconGalleryColumnCount();
+
+    return {
+      update(nextIndex: number) {
+        if (nextIndex === index) return;
+        setIconGalleryContainer(index, null);
+        index = nextIndex;
+        setIconGalleryContainer(index, node);
+        updateIconGalleryColumnCount();
+      },
+      destroy() {
+        setIconGalleryContainer(index, null);
+        updateIconGalleryColumnCount();
+      }
+    };
+  }
+
   function bindIconGalleryButton(node: HTMLButtonElement, index: number) {
     setIconGalleryButton(index, node);
 
@@ -182,7 +236,7 @@
     if (filteredIconNames.length === 0) return;
 
     const key = event.key;
-    const columns = window.innerWidth <= 640 ? 3 : window.innerWidth <= 920 ? 4 : 5;
+    const columns = Math.max(1, iconGalleryColumnCount);
     let nextIndex: number | null = null;
 
     if (key === 'ArrowRight') nextIndex = index + 1;
@@ -1539,6 +1593,21 @@
           void o.edge?.band?.width;
           void o.edge?.band?.noise;
           void o.edge?.band?.emissiveIntensity;
+          void o.voronoi?.enabled;
+          void o.voronoi?.space;
+          void o.voronoi?.kind;
+          void o.voronoi?.scale;
+          void o.voronoi?.seedOffset;
+          void o.voronoi?.amount;
+          void o.voronoi?.edgeWidth;
+          void o.voronoi?.softness;
+          void o.voronoi?.colorStrength;
+          void o.voronoi?.colorMode;
+          void o.voronoi?.tintColor;
+          void o.voronoi?.materialMode;
+          void o.voronoi?.roughnessStrength;
+          void o.voronoi?.normalStrength;
+          void o.voronoi?.normalScale;
         }
       }
     }
@@ -1559,6 +1628,7 @@
     void (c as any).voronoi?.colorStrength;
     void (c as any).voronoi?.colorMode;
     void (c as any).voronoi?.tintColor;
+    void (c as any).voronoi?.materialMode;
     void (c as any).voronoi?.roughnessStrength;
     void (c as any).voronoi?.normalStrength;
     void (c as any).voronoi?.normalScale;
@@ -1895,6 +1965,7 @@
     
     const resizeObserver = new ResizeObserver(() => {
       schedulePreviewRender();
+      updateIconGalleryColumnCount();
     });
 
     const handleGlobalPointerUp = () => {
@@ -1925,6 +1996,10 @@
     
     if (canvasContainer) {
       resizeObserver.observe(canvasContainer);
+    }
+
+    for (const container of iconGalleryContainers) {
+      if (container) resizeObserver.observe(container);
     }
     
     return () => {
@@ -2840,6 +2915,25 @@
                             }}
                           />
                         </label>
+                        <label class="control-row">
+                          <span class="setting-title">Material mode</span>
+                          <select
+                            value={ov.voronoi.materialMode ?? (config as any).voronoi.materialMode}
+                            oninput={(e) => {
+                              const v = (e.currentTarget as HTMLSelectElement).value;
+                              updatePaletteOverride(i, (cur) => ({
+                                ...(cur ?? { enabled: true }),
+                                enabled: true,
+                                voronoi: { ...(cur?.voronoi ?? {}), materialMode: v }
+                              }));
+                            }}
+                          >
+                            <option value="none">None</option>
+                            <option value="roughness">Roughness</option>
+                            <option value="normal">Normal</option>
+                            <option value="both">Both</option>
+                          </select>
+                        </label>
                         <label class="control-row slider">
                           <span class="setting-title">Roughness feel: {Number(ov.voronoi.roughnessStrength ?? (config as any).voronoi.roughnessStrength).toFixed(2)}</span>
                           <input
@@ -2848,6 +2942,7 @@
                             min="0"
                             max="1"
                             step="0.01"
+                            disabled={['none', 'normal'].includes(ov.voronoi.materialMode ?? (config as any).voronoi.materialMode)}
                             oninput={(e) => {
                               const v = Number((e.currentTarget as HTMLInputElement).value);
                               updatePaletteOverride(i, (cur) => ({
@@ -2866,6 +2961,7 @@
                             min="0"
                             max="1"
                             step="0.01"
+                            disabled={['none', 'roughness'].includes(ov.voronoi.materialMode ?? (config as any).voronoi.materialMode)}
                             oninput={(e) => {
                               const v = Number((e.currentTarget as HTMLInputElement).value);
                               updatePaletteOverride(i, (cur) => ({
@@ -2884,6 +2980,7 @@
                             min="0"
                             max="1"
                             step="0.01"
+                            disabled={['none', 'roughness'].includes(ov.voronoi.materialMode ?? (config as any).voronoi.materialMode)}
                             oninput={(e) => {
                               const v = Number((e.currentTarget as HTMLInputElement).value);
                               updatePaletteOverride(i, (cur) => ({
@@ -3664,17 +3761,26 @@
               <button type="button" class="setting-title" class:locked={isLocked('voronoi.colorStrength')} onclick={() => toggleLock('voronoi.colorStrength')} title="Click to lock/unlock for randomize">Color strength: {Number((config as any).voronoi.colorStrength).toFixed(2)}</button>
               <input type="range" bind:value={(config as any).voronoi.colorStrength} min="0" max="1" step="0.01" disabled={!((config as any).voronoi.enabled)} />
             </label>
+            <label class="control-row">
+              <button type="button" class="setting-title" class:locked={isLocked('voronoi.materialMode')} onclick={() => toggleLock('voronoi.materialMode')} title="Click to lock/unlock for randomize">Material mode</button>
+              <select bind:value={(config as any).voronoi.materialMode} disabled={!((config as any).voronoi.enabled)}>
+                <option value="none">None</option>
+                <option value="roughness">Roughness</option>
+                <option value="normal">Normal</option>
+                <option value="both">Both</option>
+              </select>
+            </label>
             <label class="control-row slider">
               <button type="button" class="setting-title" class:locked={isLocked('voronoi.roughnessStrength')} onclick={() => toggleLock('voronoi.roughnessStrength')} title="Click to lock/unlock for randomize">Roughness feel: {Number((config as any).voronoi.roughnessStrength).toFixed(2)}</button>
-              <input type="range" bind:value={(config as any).voronoi.roughnessStrength} min="0" max="1" step="0.01" disabled={!((config as any).voronoi.enabled)} />
+              <input type="range" bind:value={(config as any).voronoi.roughnessStrength} min="0" max="1" step="0.01" disabled={!((config as any).voronoi.enabled) || ['none', 'normal'].includes((config as any).voronoi.materialMode)} />
             </label>
             <label class="control-row slider">
               <button type="button" class="setting-title" class:locked={isLocked('voronoi.normalStrength')} onclick={() => toggleLock('voronoi.normalStrength')} title="Click to lock/unlock for randomize">Normal feel: {Number((config as any).voronoi.normalStrength).toFixed(2)}</button>
-              <input type="range" bind:value={(config as any).voronoi.normalStrength} min="0" max="1" step="0.01" disabled={!((config as any).voronoi.enabled)} />
+              <input type="range" bind:value={(config as any).voronoi.normalStrength} min="0" max="1" step="0.01" disabled={!((config as any).voronoi.enabled) || ['none', 'roughness'].includes((config as any).voronoi.materialMode)} />
             </label>
             <label class="control-row slider">
               <button type="button" class="setting-title" class:locked={isLocked('voronoi.normalScale')} onclick={() => toggleLock('voronoi.normalScale')} title="Click to lock/unlock for randomize">Normal scale: {Number((config as any).voronoi.normalScale).toFixed(2)}</button>
-              <input type="range" bind:value={(config as any).voronoi.normalScale} min="0" max="1" step="0.01" disabled={!((config as any).voronoi.enabled)} />
+              <input type="range" bind:value={(config as any).voronoi.normalScale} min="0" max="1" step="0.01" disabled={!((config as any).voronoi.enabled) || ['none', 'roughness'].includes((config as any).voronoi.materialMode)} />
             </label>
             <label class="control-row">
               <button type="button" class="setting-title" class:locked={isLocked('voronoi.colorMode')} onclick={() => toggleLock('voronoi.colorMode')} title="Click to lock/unlock for randomize">Color mode</button>
@@ -4580,7 +4686,7 @@
               {#if iconPickError}
                 <div class="error-box" style="margin-top:0.5rem;">{iconPickError}</div>
               {/if}
-              <div class="icon-picker-results" role="listbox" aria-label={`${selectedProviderMeta.label} icon gallery`}>
+              <div class="icon-picker-results" role="listbox" aria-label={`${selectedProviderMeta.label} icon gallery`} use:bindIconGalleryContainer={0}>
                 {#if iconLoading}
                   <div class="mono icon-picker-status">Loading icons...</div>
                 {:else if filteredIconNames.length === 0}
@@ -5160,7 +5266,7 @@
               {#if iconPickError}
                 <div class="error-box" style="margin-top:0.5rem;">{iconPickError}</div>
               {/if}
-              <div class="icon-picker-results" role="listbox" aria-label={`${selectedProviderMeta.label} icon gallery`}>
+              <div class="icon-picker-results" role="listbox" aria-label={`${selectedProviderMeta.label} icon gallery`} use:bindIconGalleryContainer={1}>
                 {#if iconLoading}
                   <div class="mono icon-picker-status">Loading icons...</div>
                 {:else if filteredIconNames.length === 0}
