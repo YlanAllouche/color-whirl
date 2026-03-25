@@ -1616,12 +1616,12 @@
   });
 
   $effect(() => {
-    if (config.type !== 'popsicle' && renderMode === 'path') {
-      renderMode = 'raster';
-      return;
-    }
-
-    if (config.texture === 'cel' && renderMode === 'path') {
+    const supportsPath =
+      config.type === 'popsicle' ||
+      config.type === 'spheres3d' ||
+      config.type === 'triangles3d' ||
+      config.type === 'svg3d';
+    if (!supportsPath && renderMode === 'path') {
       renderMode = 'raster';
     }
   });
@@ -1652,6 +1652,13 @@
     if (!preview) return;
     if (config.type !== 'popsicle') return;
     preview.setMode(renderMode);
+    schedulePreviewRender();
+  });
+
+  $effect(() => {
+    if (!basic3dPreview) return;
+    if (config.type !== 'spheres3d' && config.type !== 'triangles3d' && config.type !== 'svg3d') return;
+    basic3dPreview.setMode(renderMode);
     schedulePreviewRender();
   });
   
@@ -4872,7 +4879,17 @@
             <span class="setting-title">Mode</span>
             <select bind:value={renderMode} title="Raster is instant; Path traced refines progressively">
               <option value="raster">Raster</option>
-              <option value="path" disabled={config.type !== 'popsicle' || config.texture === 'cel'}>Path traced</option>
+              <option
+                value="path"
+                disabled={
+                  config.type !== 'popsicle' &&
+                  config.type !== 'spheres3d' &&
+                  config.type !== 'triangles3d' &&
+                  config.type !== 'svg3d'
+                }
+              >
+                Path traced
+              </option>
             </select>
           </label>
         {/if}

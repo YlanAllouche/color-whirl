@@ -9,6 +9,7 @@ import { createSpheres3DScene, createTriangles3DScene, createSvg3DScene } from '
 export type Basic3DType = 'spheres3d' | 'triangles3d' | 'svg3d';
 export type Basic3DConfig = Spheres3DConfig | Triangles3DConfig | Svg3DConfig;
 export type PreviewQuality = 'interactive' | 'final';
+export type RenderMode = 'raster' | 'path';
 
 export type RenderSize = { width: number; height: number };
 
@@ -157,9 +158,21 @@ export class Basic3DPreview {
   private container: HTMLElement;
   private type: Basic3DType;
 
+  private mode: RenderMode = 'raster';
+
   private renderer: THREE.WebGLRenderer | null = null;
   private scene: THREE.Scene | null = null;
   private camera: THREE.OrthographicCamera | null = null;
+
+  // Path tracing state
+  private pathTracer: any = null;
+  private pathInitPromise: Promise<void> | null = null;
+  private pathRenderToken = 0;
+  private pathScene: THREE.Scene | null = null;
+  private pathCamera: THREE.Camera | null = null;
+  private lastPathKey: string | null = null;
+  private lastPathQuality: PreviewQuality | null = null;
+  private pathLoopId: number | null = null;
 
   private composer: EffectComposer | null = null;
   private renderPass: RenderPass | null = null;
@@ -171,6 +184,17 @@ export class Basic3DPreview {
   constructor(container: HTMLElement, type: Basic3DType) {
     this.container = container;
     this.type = type;
+  }
+
+  setMode(mode: RenderMode): void {
+    const next: RenderMode = mode === 'path' ? 'path' : 'raster';
+    if (this.mode === next) return;
+    this.mode = next;
+    if (next === 'raster') {
+      this.stopPathTracingLoop();
+    }
+    // Reset accumulation on mode change.
+    this.pathTracer?.reset?.();
   }
 
   getDomElement(): HTMLCanvasElement | null {
@@ -198,6 +222,19 @@ export class Basic3DPreview {
     this.bloomPass = null;
     this.lastSig = null;
     this.lastBloomEnabled = null;
+
+    this.stopPathTracingLoop();
+    try {
+      this.pathTracer?.dispose?.();
+    } catch {
+      // Ignore.
+    }
+    this.pathTracer = null;
+    this.pathInitPromise = null;
+    this.pathScene = null;
+    this.pathCamera = null;
+    this.lastPathKey = null;
+    this.lastPathQuality = null;
 
     try {
       prev.composer?.dispose();
@@ -304,6 +341,11 @@ export class Basic3DPreview {
       }
     }
 
+    if (this.mode === 'path') {
+      void this.renderPath(config, quality, renderW, renderH);
+      return;
+    }
+
     // Generator hooks (collision masking, etc.).
     try {
       (this.scene.userData as any).__wmBeforeRender?.(this.renderer, this.scene, this.camera);
@@ -319,6 +361,95 @@ export class Basic3DPreview {
 
     // Note: quality is handled by the caller via renderSize.
     void quality;
+  }
+
+  private getPathKey(config: Basic3DConfig): string {
+    // Stable + cheap enough.
+    return JSON.stringify(config);
+  }
+
+  private async initPathTracer(): Promise<void> {
+    if (this.pathTracer) return;
+    const mod = await import('three-gpu-pathtracer');
+    const WebGLPathTracer = (mod as any).WebGLPathTracer ?? (mod as any).default?.WebGLPathTracer;
+    if (!WebGLPathTracer) throw new Error('WebGLPathTracer export not found in three-gpu-pathtracer');
+    if (!this.renderer) return;
+    this.pathTracer = new WebGLPathTracer(this.renderer);
+    this.pathTracer.renderToCanvas = true;
+    this.pathTracer.dynamicLowRes = true;
+    this.pathTracer.lowResScale = 0.5;
+    this.pathTracer.synchronizeRenderSize = true;
+    this.pathTracer.rasterizeScene = true;
+    this.pathTracer.enablePathTracing = true;
+    this.pathTracer.pausePathTracing = false;
+    this.pathTracer.bounces = 4;
+    this.pathTracer.transmissiveBounces = 2;
+    this.pathTracer.filterGlossyFactor = 0.5;
+  }
+
+  private stopPathTracingLoop(): void {
+    if (this.pathLoopId != null) {
+      try {
+        cancelAnimationFrame(this.pathLoopId);
+      } catch {
+        // Ignore
+      }
+      this.pathLoopId = null;
+    }
+  }
+
+  private startPathTracingLoop(sampleBudget: number): void {
+    this.stopPathTracingLoop();
+    const loop = () => {
+      if (!this.pathTracer) return;
+      if (this.pathTracer.pausePathTracing) return;
+      if (this.pathTracer.samples >= sampleBudget) {
+        this.stopPathTracingLoop();
+        return;
+      }
+      this.pathTracer.renderSample();
+      this.pathLoopId = requestAnimationFrame(loop);
+    };
+    this.pathLoopId = requestAnimationFrame(loop);
+  }
+
+  private async renderPath(config: Basic3DConfig, quality: PreviewQuality, renderW: number, renderH: number): Promise<void> {
+    const token = ++this.pathRenderToken;
+    if (!this.renderer || !this.scene || !this.camera) return;
+
+    // Lazy init path tracer.
+    if (!this.pathInitPromise) this.pathInitPromise = this.initPathTracer();
+    await this.pathInitPromise;
+    if (token !== this.pathRenderToken) return;
+    if (!this.pathTracer) return;
+
+    // Size.
+    this.renderer.setPixelRatio(1);
+    this.renderer.setSize(renderW, renderH, false);
+
+    const key = this.getPathKey(config);
+    const changed = key !== this.lastPathKey;
+    const qualityChanged = quality !== this.lastPathQuality;
+    this.lastPathQuality = quality;
+
+    if (changed) {
+      this.lastPathKey = key;
+      this.pathScene = this.scene;
+      this.pathCamera = this.camera;
+      await this.pathTracer.setSceneAsync(this.pathScene, this.pathCamera);
+      if (token !== this.pathRenderToken) return;
+      this.pathTracer.reset();
+    } else if (qualityChanged) {
+      this.pathTracer.reset();
+    }
+
+    if (quality === 'interactive') {
+      this.pathTracer.renderScale = 0.65;
+      this.startPathTracingLoop(2);
+    } else {
+      this.pathTracer.renderScale = 1.0;
+      this.startPathTracingLoop(48);
+    }
   }
 
   private rebuild(config: Basic3DConfig): void {
@@ -366,6 +497,20 @@ export class Basic3DPreview {
     this.scene = nextScene;
     this.camera = nextCamera;
     this.renderer = nextRenderer;
+
+    // Path tracer is tied to a renderer; reset on rebuild.
+    if (this.pathTracer) {
+      this.stopPathTracingLoop();
+      try {
+        this.pathTracer.dispose?.();
+      } catch {
+        // Ignore.
+      }
+      this.pathTracer = null;
+      this.pathInitPromise = null;
+      this.lastPathKey = null;
+      this.lastPathQuality = null;
+    }
 
     // Recreate composer wiring lazily after rebuild.
     this.composer = null;
