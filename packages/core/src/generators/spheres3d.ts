@@ -913,9 +913,39 @@ void wmApplyCollisionMask(inout vec4 col) {
         return false;
       });
 
-      if (intersecting.length > 0) {
+      // Clamp interior sphere radius so it stays inside a containing sphere.
+      const thickness = Math.max(0, Number(bubblesConfig.wallThickness) || 0);
+      const softness = Math.max(0, Number(bubblesConfig.softness) || 0);
+      const adjusted = intersecting
+        .map((b) => {
+          const bx = b.center.x;
+          const by = b.center.y;
+          const bz = b.center.z;
+          let bestMargin = -Infinity;
+          for (let i = 0; i < spheresForInterior.length; i++) {
+            const s = spheresForInterior[i];
+            const dx = bx - s.x;
+            const dy = by - s.y;
+            const dz = bz - s.z;
+            const dd = dx * dx + dy * dy + dz * dz;
+            if (dd > s.r * s.r) continue;
+            const margin = s.r - Math.sqrt(dd);
+            if (margin > bestMargin) bestMargin = margin;
+          }
+
+          if (!(bestMargin > 0)) return null;
+
+          // buildBubblesInteriorWalls uses (bubble.radius - thickness - softness) for the interior sphere.
+          const capR = bestMargin + thickness + softness;
+          const nextR = Math.min(b.radius, capR);
+          if (!(nextR > thickness + softness + 0.02)) return null;
+          return { ...b, radius: nextR };
+        })
+        .filter((v): v is { center: THREE.Vector3; radius: number } => !!v);
+
+      if (adjusted.length > 0) {
         const walls = buildBubblesInteriorWalls({
-          bubbles: intersecting,
+          bubbles: adjusted,
           palette: colors,
           wallThickness: bubblesConfig.wallThickness,
           softness: bubblesConfig.softness,
