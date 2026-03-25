@@ -1621,7 +1621,7 @@
       return;
     }
 
-    if ((config.texture === 'cel' || config.facades.outline.enabled || config.bloom.enabled) && renderMode === 'path') {
+    if (config.texture === 'cel' && renderMode === 'path') {
       renderMode = 'raster';
     }
   });
@@ -4872,7 +4872,7 @@
             <span class="setting-title">Mode</span>
             <select bind:value={renderMode} title="Raster is instant; Path traced refines progressively">
               <option value="raster">Raster</option>
-              <option value="path" disabled={config.type !== 'popsicle' || config.texture === 'cel' || config.facades.outline.enabled || config.bloom.enabled}>Path traced</option>
+              <option value="path" disabled={config.type !== 'popsicle' || config.texture === 'cel'}>Path traced</option>
             </select>
           </label>
         {/if}
