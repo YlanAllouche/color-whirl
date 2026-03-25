@@ -248,6 +248,7 @@ export interface BloomConfig {
 export type VoronoiKind = 'cells' | 'edges';
 export type VoronoiSpace = 'world' | 'object';
 export type VoronoiColorMode = 'darken' | 'lighten' | 'tint';
+export type VoronoiMaterialMode = 'none' | 'roughness' | 'normal' | 'both';
 
 export interface VoronoiConfig {
   enabled: boolean;
@@ -269,12 +270,15 @@ export interface VoronoiConfig {
   colorMode: VoronoiColorMode;
   tintColor: string;
 
-   /** 0..1: adds material roughness variation from the Voronoi mask. */
-   roughnessStrength: number;
-   /** 0..1: how much the Voronoi field perturbs the shading normal. */
-   normalStrength: number;
-   /** 0..1: scale of the derivative step used for the Voronoi normal perturbation. */
-   normalScale: number;
+  /** Controls whether Voronoi affects roughness, normals, both, or color only. */
+  materialMode: VoronoiMaterialMode;
+
+  /** 0..1: adds material roughness variation from the Voronoi mask. */
+  roughnessStrength: number;
+  /** 0..1: how much the Voronoi field perturbs the shading normal. */
+  normalStrength: number;
+  /** 0..1: scale of the derivative step used for the Voronoi normal perturbation. */
+  normalScale: number;
 }
 
 export type CollisionsMode = 'none' | 'carve';
@@ -801,6 +805,7 @@ export const DEFAULT_POPSICLE_CONFIG: PopsicleConfig = {
     colorStrength: 0.25,
     colorMode: 'darken',
     tintColor: '#ffffff',
+    materialMode: 'both',
     roughnessStrength: 0.42,
     normalStrength: 0.34,
     normalScale: 0.52
@@ -1300,6 +1305,8 @@ export function normalizeWallpaperConfig(input: any): WallpaperConfig {
     const cm = String(vAny.colorMode ?? baseVor?.colorMode ?? 'darken');
     vAny.colorMode = cm === 'lighten' ? 'lighten' : cm === 'tint' ? 'tint' : 'darken';
     if (typeof vAny.tintColor !== 'string') vAny.tintColor = String(vAny.tintColor ?? baseVor?.tintColor ?? '#ffffff');
+    const mm = String(vAny.materialMode ?? baseVor?.materialMode ?? 'both');
+    vAny.materialMode = mm === 'none' ? 'none' : mm === 'roughness' ? 'roughness' : mm === 'normal' ? 'normal' : 'both';
     const rs = Number(vAny.roughnessStrength);
     vAny.roughnessStrength = Number.isFinite(rs) ? clamp(rs, 0, 1) : clamp(Number(baseVor?.roughnessStrength) || 0, 0, 1);
     const ns = Number(vAny.normalStrength);
@@ -1708,6 +1715,7 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
         colorStrength: enabled ? clamp(tri(0.05, DEFAULT_POPSICLE_CONFIG.voronoi.colorStrength, 1.0), 0, 1) : DEFAULT_POPSICLE_CONFIG.voronoi.colorStrength,
         colorMode: (['darken', 'lighten', 'tint'] as const)[Math.floor(rng() * 3)],
         tintColor: '#ffffff',
+        materialMode: !enabled ? DEFAULT_POPSICLE_CONFIG.voronoi.materialMode : texture === 'glass' ? (chance(0.65) ? 'normal' : chance(0.35) ? 'none' : 'both') : texture === 'matte' ? (chance(0.62) ? 'roughness' : chance(0.38) ? 'both' : 'none') : texture === 'mirror' ? (chance(0.58) ? 'normal' : chance(0.34) ? 'both' : 'roughness') : chance(0.45) ? 'both' : chance(0.5) ? 'roughness' : chance(0.55) ? 'normal' : 'none',
         roughnessStrength: enabled ? clamp(tri(0.08, textureBias.roughness, 0.78), 0, 1) : DEFAULT_POPSICLE_CONFIG.voronoi.roughnessStrength,
         normalStrength: enabled ? clamp(tri(0.06, textureBias.normal, 0.68), 0, 1) : DEFAULT_POPSICLE_CONFIG.voronoi.normalStrength,
         normalScale: clamp(tri(0.12, DEFAULT_POPSICLE_CONFIG.voronoi.normalScale, 0.88), 0, 1)
@@ -1926,6 +1934,7 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
           kind: rng() < 0.7 ? 'edges' : 'cells',
           colorStrength: clamp(tri(0.05, 0.25, 1.0), 0, 1),
           colorMode: rng() < 0.6 ? 'darken' : rng() < 0.5 ? 'lighten' : 'tint',
+          materialMode: rng() < 0.2 ? 'none' : rng() < 0.5 ? 'roughness' : rng() < 0.75 ? 'normal' : 'both',
           tintColor: '#ffffff'
         }
       });

@@ -251,6 +251,9 @@ function applyVoronoi(material: THREE.Material, cfg: VoronoiConfig | undefined):
   const roughnessStrength = clamp(Number(cfg.roughnessStrength) || 0, 0, 1);
   const normalStrength = clamp(Number(cfg.normalStrength) || 0, 0, 1);
   const normalScale = clamp(Number(cfg.normalScale) || 0, 0, 1);
+  const materialModeRaw = String(cfg.materialMode ?? 'both');
+  const materialMode =
+    materialModeRaw === 'none' ? 0 : materialModeRaw === 'roughness' ? 1 : materialModeRaw === 'normal' ? 2 : 3;
   const modeRaw = String(cfg.colorMode ?? 'darken');
   const colorMode = modeRaw === 'lighten' ? 1 : modeRaw === 'tint' ? 2 : 0;
   const tint = new THREE.Color(typeof cfg.tintColor === 'string' ? cfg.tintColor : '#ffffff');
@@ -266,14 +269,19 @@ function applyVoronoi(material: THREE.Material, cfg: VoronoiConfig | undefined):
   const tunedRoughnessStrength = clamp(roughnessStrength * reflectiveBoost, 0, 1);
   const tunedNormalStrength = clamp(normalStrength * (0.9 + (reflectiveBoost - 1.0) * 0.85), 0, 1);
   const tunedNormalScale = clamp(normalScale * (0.92 + (reflectiveBoost - 1.0) * 0.45), 0, 1);
+  const usesRoughness = materialMode === 1 || materialMode === 3;
+  const usesNormal = materialMode === 2 || materialMode === 3;
+  const effectiveRoughnessStrength = usesRoughness ? tunedRoughnessStrength : 0;
+  const effectiveNormalStrength = usesNormal ? tunedNormalStrength : 0;
+  const effectiveNormalScale = usesNormal ? tunedNormalScale : 0;
 
-  if (!(scale > 0) || !(amount > 0) || !(colorStrength > 0 || tunedRoughnessStrength > 0 || tunedNormalStrength > 0)) return;
+  if (!(scale > 0) || !(amount > 0) || !(colorStrength > 0 || effectiveRoughnessStrength > 0 || effectiveNormalStrength > 0)) return;
 
   const key =
     `voronoi-v1:${space}:${kind}:` +
     `${scale.toFixed(4)}:${seedOffset.toFixed(4)}:` +
     `${amount.toFixed(4)}:${edgeWidth.toFixed(4)}:${softness.toFixed(4)}:` +
-    `${colorStrength.toFixed(4)}:${tunedRoughnessStrength.toFixed(4)}:${tunedNormalStrength.toFixed(4)}:${tunedNormalScale.toFixed(4)}:` +
+    `${colorStrength.toFixed(4)}:${materialMode}:${effectiveRoughnessStrength.toFixed(4)}:${effectiveNormalStrength.toFixed(4)}:${effectiveNormalScale.toFixed(4)}:` +
     `${colorMode}:${tint.getHexString()}`;
 
   chainOnBeforeCompile(
@@ -287,9 +295,9 @@ function applyVoronoi(material: THREE.Material, cfg: VoronoiConfig | undefined):
       shader.uniforms.wmVorEdgeWidth = { value: edgeWidth };
       shader.uniforms.wmVorSoftness = { value: softness };
       shader.uniforms.wmVorColorStrength = { value: colorStrength };
-      shader.uniforms.wmVorRoughnessStrength = { value: tunedRoughnessStrength };
-      shader.uniforms.wmVorNormalStrength = { value: tunedNormalStrength };
-      shader.uniforms.wmVorNormalScale = { value: tunedNormalScale };
+      shader.uniforms.wmVorRoughnessStrength = { value: effectiveRoughnessStrength };
+      shader.uniforms.wmVorNormalStrength = { value: effectiveNormalStrength };
+      shader.uniforms.wmVorNormalScale = { value: effectiveNormalScale };
       shader.uniforms.wmVorColorMode = { value: colorMode };
       shader.uniforms.wmVorTint = { value: tint };
 
