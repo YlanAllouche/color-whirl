@@ -123,6 +123,11 @@ export interface EdgeConfig {
 
 export interface BubblesConfig {
   enabled: boolean;
+  /**
+   * - through: actually carve holes (discard/alpha)
+   * - cap: keep surface, shade as a cavity (no see-through)
+   */
+  mode: 'through' | 'cap';
   interior: {
     /** Whether to render approximated interior surfaces for carved cavities */
     enabled: boolean;
@@ -768,6 +773,7 @@ export const DEFAULT_POPSICLE_CONFIG: PopsicleConfig = {
   },
   bubbles: {
     enabled: false,
+    mode: 'through',
     interior: { enabled: true },
     frequency: 1.8,
     frequencyVariance: 0.22,
@@ -1158,6 +1164,8 @@ export function normalizeWallpaperConfig(input: any): WallpaperConfig {
     (merged as any).bubbles = cloneJson(baseBubbles);
   } else {
     gAny.enabled = typeof gAny.enabled === 'boolean' ? gAny.enabled : !!gAny.enabled;
+
+    gAny.mode = gAny.mode === 'cap' ? 'cap' : 'through';
 
     if (!gAny.interior || typeof gAny.interior !== 'object') gAny.interior = cloneJson(baseBubbles.interior);
     gAny.interior.enabled = typeof gAny.interior.enabled === 'boolean' ? gAny.interior.enabled : !!gAny.interior.enabled;
@@ -1584,6 +1592,7 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
     },
     bubbles: {
       enabled: bubblesEnabled,
+      mode: 'through',
       interior: { enabled: true },
       // frequency controls density; count is the sample budget in shader.
       frequency: bubblesEnabled ? clamp(tri(1.1, 1.8, 3.2), 0.1, 20) : DEFAULT_POPSICLE_CONFIG.bubbles.frequency,

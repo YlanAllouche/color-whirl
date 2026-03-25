@@ -1432,6 +1432,7 @@
     void (c as any).bubbles?.frequency;
     void (c as any).bubbles?.frequencyVariance;
     void (c as any).bubbles?.count;
+    void (c as any).bubbles?.mode;
     void (c as any).bubbles?.radiusMin;
     void (c as any).bubbles?.radiusMax;
     void (c as any).bubbles?.softness;
@@ -1888,6 +1889,24 @@
                       </label>
 
                       {#if ov?.bubbles}
+                        <label class="control-row">
+                          <span class="setting-title">Mode</span>
+                          <select
+                            value={(ov.bubbles as any)?.mode ?? (config as any).bubbles.mode}
+                            oninput={(e) => {
+                              const v = String((e.currentTarget as HTMLSelectElement).value);
+                              updatePaletteOverride(i, (cur) => ({
+                                ...(cur ?? { enabled: true }),
+                                enabled: true,
+                                bubbles: { ...((cur as any)?.bubbles ?? {}), mode: v === 'cap' ? 'cap' : 'through' }
+                              }));
+                            }}
+                          >
+                            <option value="through">Through</option>
+                            <option value="cap">Cap</option>
+                          </select>
+                        </label>
+
                         <label class="control-row checkbox">
                           <input
                             type="checkbox"
@@ -1919,6 +1938,7 @@
                                 }
                               }));
                             }}
+                            disabled={String((ov.bubbles as any)?.mode ?? (config as any).bubbles.mode) !== 'through'}
                           />
                           <span class="setting-title">Interior surfaces</span>
                         </label>
@@ -3469,7 +3489,11 @@
           </label>
 
           <label class="control-row checkbox">
-            <input type="checkbox" bind:checked={(config as any).bubbles.interior.enabled} disabled={!(config as any).bubbles.enabled} />
+            <input
+              type="checkbox"
+              bind:checked={(config as any).bubbles.interior.enabled}
+              disabled={!(config as any).bubbles.enabled || (config as any).bubbles.mode !== 'through'}
+            />
             <button
               type="button"
               class="setting-title"
@@ -3482,6 +3506,16 @@
             >
               Interior surfaces
             </button>
+          </label>
+
+          <label class="control-row">
+            <button type="button" class="setting-title" class:locked={isLocked('bubbles.mode')} onclick={() => toggleLock('bubbles.mode')} title="Click to lock/unlock for randomize">
+              Mode
+            </button>
+            <select bind:value={(config as any).bubbles.mode} disabled={!(config as any).bubbles.enabled}>
+              <option value="through">Through</option>
+              <option value="cap">Cap</option>
+            </select>
           </label>
 
           <label class="control-row slider">

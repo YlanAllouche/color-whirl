@@ -699,7 +699,7 @@ export function createPopsicleScene(
 
   const finalBounds = new THREE.Box3().setFromObject(group);
   const bubblesConfig = (config as any).bubbles as BubblesConfig | undefined;
-  if (bubblesConfig?.enabled && bubblesConfig.wallThickness > 0 && bubblesConfig.interior.enabled) {
+  if (bubblesConfig?.enabled && bubblesConfig.mode !== 'cap' && bubblesConfig.wallThickness > 0 && bubblesConfig.interior.enabled) {
     const seedBase = buildBubblesSeed(config.seed, bubblesConfig.seedOffset);
     const bubbles = buildBubbles(bubblesConfig, new THREE.Vector3(1, 1, 1), seedBase, { maxBubbles: 48, bounds: finalBounds });
     const hasBounds = !finalBounds.isEmpty();

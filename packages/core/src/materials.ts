@@ -245,6 +245,8 @@ export function applyBubbles(
   const g = (bubbles ?? ((config as any)?.bubbles as BubblesConfig | undefined)) as BubblesConfig | undefined;
   if (!g?.enabled) return;
 
+  const mode = (g as any).mode === 'cap' ? 1 : 0;
+
   const enabled = !!g.enabled;
   const frequency = clamp(Number(g.frequency) || 0, 0, 20);
   const variance = clamp(Number(g.frequencyVariance) || 0, 0, 1);
@@ -258,8 +260,8 @@ export function applyBubbles(
   if (!enabled || frequency <= 0 || count <= 0 || radiusMax <= 0) return;
 
   const anyMat: any = material as any;
-  // Soft edges rely on alpha; enable transparency when needed.
-  if (softness > 0) {
+  // Through mode relies on alpha/discard; enable transparency when needed.
+  if (mode === 0 && softness > 0) {
     anyMat.transparent = true;
     anyMat.depthWrite = false;
   }
@@ -276,6 +278,7 @@ export function applyBubbles(
 
   const key =
     `bubbles-v2:${enabled ? 1 : 0}:` +
+    `${mode}:` +
     `${frequency.toFixed(4)}:${variance.toFixed(4)}:${count}:` +
     `${radiusMin.toFixed(4)}:${radiusMax.toFixed(4)}:` +
     `${softness.toFixed(4)}:${wallThickness.toFixed(4)}:` +
@@ -286,6 +289,7 @@ export function applyBubbles(
     material,
     (shader) => {
       shader.uniforms.wmBubblesEnabled = { value: enabled ? 1 : 0 };
+      shader.uniforms.wmBubblesMode = { value: mode };
       shader.uniforms.wmBubblesFrequency = { value: frequency };
       shader.uniforms.wmBubblesFrequencyVariance = { value: variance };
       shader.uniforms.wmBubblesCount = { value: count };
@@ -317,6 +321,7 @@ export function applyBubbles(
 
       const fragHeader = `
  uniform int wmBubblesEnabled;
+ uniform int wmBubblesMode;
  uniform float wmBubblesFrequency;
  uniform float wmBubblesFrequencyVariance;
  uniform int wmBubblesCount;
@@ -397,18 +402,30 @@ vec3 wmHash3(vec3 p) {
     fade = smoothstep(thickness, thickness + softness, depth);
   }
 
-  if (fade >= 0.999) {
-    discard;
-  }
+  if (wmBubblesMode == 0) {
+    // through
+    if (fade >= 0.999) {
+      discard;
+    }
 
-  col.a *= max(0.0, 1.0 - fade);
-  if (col.a <= 0.001) discard;
+    col.a *= max(0.0, 1.0 - fade);
+    if (col.a <= 0.001) discard;
 
-  if (thickness > 1e-6 && depth <= thickness) {
-    float wallNorm = clamp(1.0 - depth / thickness, 0.0, 1.0);
-    vec3 wallTone = mix(vec3(0.04, 0.04, 0.05), col.rgb * 0.32, wallNorm);
-    float mixAmt = clamp(0.45 + 0.45 * wallNorm, 0.0, 1.0);
-    col.rgb = mix(col.rgb, wallTone, mixAmt);
+    if (thickness > 1e-6 && depth <= thickness) {
+      float wallNorm = clamp(1.0 - depth / thickness, 0.0, 1.0);
+      vec3 wallTone = mix(vec3(0.04, 0.04, 0.05), col.rgb * 0.32, wallNorm);
+      float mixAmt = clamp(0.45 + 0.45 * wallNorm, 0.0, 1.0);
+      col.rgb = mix(col.rgb, wallTone, mixAmt);
+    }
+  } else {
+    // cap (no see-through): keep alpha, just shade as cavity
+    float wallT = thickness > 1e-6 ? clamp(depth / thickness, 0.0, 1.0) : 1.0;
+    vec3 rimCol = col.rgb * 0.70;
+    vec3 innerCol = mix(vec3(0.03, 0.03, 0.05), col.rgb * 0.20, 0.25);
+    vec3 shaded = mix(rimCol, innerCol, wallT);
+    // Deep interior (beyond thickness) darkens further based on fade.
+    shaded = mix(shaded, innerCol, clamp(fade, 0.0, 1.0));
+    col.rgb = mix(col.rgb, shaded, clamp(0.35 + 0.55 * max(wallT, fade), 0.0, 1.0));
   }
 }
 `;

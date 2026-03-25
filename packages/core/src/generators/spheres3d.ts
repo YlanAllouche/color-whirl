@@ -892,7 +892,7 @@ void wmApplyCollisionMask(inout vec4 col) {
   scene.updateWorldMatrix(true, true);
   const preCenterBounds = new THREE.Box3().setFromObject(scene);
   const bubblesConfig = (config as any).bubbles as BubblesConfig | undefined;
-  if (bubblesConfig?.enabled && bubblesConfig.wallThickness > 0 && bubblesConfig.interior.enabled && !preCenterBounds.isEmpty()) {
+  if (bubblesConfig?.enabled && bubblesConfig.mode !== 'cap' && bubblesConfig.wallThickness > 0 && bubblesConfig.interior.enabled && !preCenterBounds.isEmpty()) {
     const seedBase = buildBubblesSeed(config.seed, bubblesConfig.seedOffset);
     const bubbles = buildBubbles(bubblesConfig, new THREE.Vector3(1, 1, 1), seedBase, { maxBubbles: 48, bounds: preCenterBounds });
     if (bubbles.length > 0) {
