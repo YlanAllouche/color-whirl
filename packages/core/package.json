@@ -12,13 +12,15 @@
   },
   "scripts": {
     "build": "tsc",
-    "dev": "tsc --watch"
+    "dev": "tsc --watch",
+    "verify:svg-tones": "pnpm build && node dist/svg-tone-extraction.verify.js"
   },
   "dependencies": {
     "three": "^0.180.0",
     "three-gpu-pathtracer": "^0.0.24"
   },
   "devDependencies": {
+    "@xmldom/xmldom": "^0.8.11",
     "@types/three": "^0.160.0",
     "typescript": "^5.4.0"
   }

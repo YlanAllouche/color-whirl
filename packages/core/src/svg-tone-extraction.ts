@@ -15,6 +15,21 @@ export type SvgToneGeometry3D = {
   geometry: THREE.BufferGeometry;
 };
 
+export type SvgToneDebugLayer = {
+  fillTone: number;
+  strokeTone: number;
+  fillShapeCount: number;
+  strokePathCount: number;
+  area: number;
+};
+
+export type SvgToneDebugSummary = {
+  bounds: Bounds;
+  bucketScores: number[];
+  layers: SvgToneDebugLayer[];
+  pathCount: number;
+};
+
 type Bounds = {
   minX: number;
   minY: number;
@@ -158,8 +173,9 @@ function parseStopOffset(input: unknown): number | null {
 
 function parseGradientPaintId(input: unknown): string | null {
   const raw = String(input ?? '').trim();
-  const m = /^url\(\s*#([^)\s]+)\s*\)$/i.exec(raw);
-  return m?.[1] ?? null;
+  const m = /^url\(\s*#([^\)\s]+)\s*\)$/i.exec(raw);
+  if (!m?.[1]) return null;
+  return m[1].replace(/^['"]|['"]$/g, '');
 }
 
 function ensureGradientOffsets(stops: GradientStop[]): GradientStop[] {
@@ -605,4 +621,24 @@ export function extractSvgToneGeometries3D(
   }
 
   return out;
+}
+
+export function debugExtractSvgToneSummary(svgSource: string, maxTones: number): SvgToneDebugSummary {
+  const { paths, bounds } = parseSvgPaths(svgSource);
+  const buckets = makeToneBuckets(paths, maxTones);
+  const centers = buckets.map((bucket) => bucket.score);
+  return {
+    bounds,
+    bucketScores: centers,
+    pathCount: paths.length,
+    layers: buckets.map((bucket, bucketIndex) => ({
+      fillTone: bucket.score,
+      strokeTone: bucket.score,
+      fillShapeCount: bucket.fillPts.length + bucket.shapes.length,
+      strokePathCount: bucket.strokePts.length,
+      area: paths
+        .filter((path) => nearestToneIndex(path.fillTone, centers) === bucketIndex || nearestToneIndex(path.strokeTone, centers) === bucketIndex)
+        .reduce((sum, path) => sum + path.area, 0)
+    }))
+  };
 }
