@@ -268,6 +268,13 @@ export interface VoronoiConfig {
   colorStrength: number;
   colorMode: VoronoiColorMode;
   tintColor: string;
+
+   /** 0..1: adds material roughness variation from the Voronoi mask. */
+   roughnessStrength: number;
+   /** 0..1: how much the Voronoi field perturbs the shading normal. */
+   normalStrength: number;
+   /** 0..1: scale of the derivative step used for the Voronoi normal perturbation. */
+   normalScale: number;
 }
 
 export type CollisionsMode = 'none' | 'carve';
@@ -793,7 +800,10 @@ export const DEFAULT_POPSICLE_CONFIG: PopsicleConfig = {
     softness: 0.55,
     colorStrength: 0.25,
     colorMode: 'darken',
-    tintColor: '#ffffff'
+    tintColor: '#ffffff',
+    roughnessStrength: 0.28,
+    normalStrength: 0.18,
+    normalScale: 0.35
   },
   backgroundColor: '#1a1a2e',
   facades: {
@@ -1290,6 +1300,12 @@ export function normalizeWallpaperConfig(input: any): WallpaperConfig {
     const cm = String(vAny.colorMode ?? baseVor?.colorMode ?? 'darken');
     vAny.colorMode = cm === 'lighten' ? 'lighten' : cm === 'tint' ? 'tint' : 'darken';
     if (typeof vAny.tintColor !== 'string') vAny.tintColor = String(vAny.tintColor ?? baseVor?.tintColor ?? '#ffffff');
+    const rs = Number(vAny.roughnessStrength);
+    vAny.roughnessStrength = Number.isFinite(rs) ? clamp(rs, 0, 1) : clamp(Number(baseVor?.roughnessStrength) || 0, 0, 1);
+    const ns = Number(vAny.normalStrength);
+    vAny.normalStrength = Number.isFinite(ns) ? clamp(ns, 0, 1) : clamp(Number(baseVor?.normalStrength) || 0, 0, 1);
+    const nsc = Number(vAny.normalScale);
+    vAny.normalScale = Number.isFinite(nsc) ? clamp(nsc, 0, 1) : clamp(Number(baseVor?.normalScale) || 0, 0, 1);
   }
 
   const edgeObj: any = (merged as any).edge;
@@ -1680,7 +1696,10 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
         softness: clamp(tri(0.0, DEFAULT_POPSICLE_CONFIG.voronoi.softness, 1.0), 0, 1),
         colorStrength: enabled ? clamp(tri(0.05, DEFAULT_POPSICLE_CONFIG.voronoi.colorStrength, 1.0), 0, 1) : DEFAULT_POPSICLE_CONFIG.voronoi.colorStrength,
         colorMode: (['darken', 'lighten', 'tint'] as const)[Math.floor(rng() * 3)],
-        tintColor: '#ffffff'
+        tintColor: '#ffffff',
+        roughnessStrength: enabled ? clamp(tri(0.0, DEFAULT_POPSICLE_CONFIG.voronoi.roughnessStrength, 0.9), 0, 1) : DEFAULT_POPSICLE_CONFIG.voronoi.roughnessStrength,
+        normalStrength: enabled ? clamp(tri(0.0, DEFAULT_POPSICLE_CONFIG.voronoi.normalStrength, 0.75), 0, 1) : DEFAULT_POPSICLE_CONFIG.voronoi.normalStrength,
+        normalScale: clamp(tri(0.05, DEFAULT_POPSICLE_CONFIG.voronoi.normalScale, 1.0), 0, 1)
       };
     })(),
     backgroundColor: theme.backgroundColor,

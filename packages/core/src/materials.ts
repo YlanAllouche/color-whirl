@@ -248,17 +248,21 @@ function applyVoronoi(material: THREE.Material, cfg: VoronoiConfig | undefined):
   const edgeWidth = clamp(Number(cfg.edgeWidth) || 0, 0, 1);
   const softness = clamp(Number(cfg.softness) || 0, 0, 1);
   const colorStrength = clamp(Number(cfg.colorStrength) || 0, 0, 1);
+  const roughnessStrength = clamp(Number(cfg.roughnessStrength) || 0, 0, 1);
+  const normalStrength = clamp(Number(cfg.normalStrength) || 0, 0, 1);
+  const normalScale = clamp(Number(cfg.normalScale) || 0, 0, 1);
   const modeRaw = String(cfg.colorMode ?? 'darken');
   const colorMode = modeRaw === 'lighten' ? 1 : modeRaw === 'tint' ? 2 : 0;
   const tint = new THREE.Color(typeof cfg.tintColor === 'string' ? cfg.tintColor : '#ffffff');
 
-  if (!(scale > 0) || !(amount > 0) || !(colorStrength > 0)) return;
+  if (!(scale > 0) || !(amount > 0) || !(colorStrength > 0 || roughnessStrength > 0 || normalStrength > 0)) return;
 
   const key =
     `voronoi-v1:${space}:${kind}:` +
     `${scale.toFixed(4)}:${seedOffset.toFixed(4)}:` +
     `${amount.toFixed(4)}:${edgeWidth.toFixed(4)}:${softness.toFixed(4)}:` +
-    `${colorStrength.toFixed(4)}:${colorMode}:${tint.getHexString()}`;
+    `${colorStrength.toFixed(4)}:${roughnessStrength.toFixed(4)}:${normalStrength.toFixed(4)}:${normalScale.toFixed(4)}:` +
+    `${colorMode}:${tint.getHexString()}`;
 
   chainOnBeforeCompile(
     material,
@@ -271,6 +275,9 @@ function applyVoronoi(material: THREE.Material, cfg: VoronoiConfig | undefined):
       shader.uniforms.wmVorEdgeWidth = { value: edgeWidth };
       shader.uniforms.wmVorSoftness = { value: softness };
       shader.uniforms.wmVorColorStrength = { value: colorStrength };
+      shader.uniforms.wmVorRoughnessStrength = { value: roughnessStrength };
+      shader.uniforms.wmVorNormalStrength = { value: normalStrength };
+      shader.uniforms.wmVorNormalScale = { value: normalScale };
       shader.uniforms.wmVorColorMode = { value: colorMode };
       shader.uniforms.wmVorTint = { value: tint };
 
@@ -310,6 +317,9 @@ uniform float wmVorAmount;
 uniform float wmVorEdgeWidth;
 uniform float wmVorSoftness;
 uniform float wmVorColorStrength;
+uniform float wmVorRoughnessStrength;
+uniform float wmVorNormalStrength;
+uniform float wmVorNormalScale;
 uniform int wmVorColorMode;
 uniform vec3 wmVorTint;
 varying vec3 wmVorWorldPos;
@@ -326,9 +336,11 @@ vec2 wmVorHash2(vec2 p) {
   );
 }
 
-void wmApplyVoronoi(inout vec4 col) {
-  vec3 p3 = wmVorSpace == 0 ? wmVorWorldPos : wmVorObjPos;
-  vec2 p = p3.xy * wmVorScale + vec2(wmVorSeed, wmVorSeed * 1.37);
+vec2 wmVorCoords(vec3 p3) {
+  return p3.xy * wmVorScale + vec2(wmVorSeed, wmVorSeed * 1.37);
+}
+
+float wmVorFieldAt(vec2 p) {
   vec2 g = floor(p);
   vec2 f = fract(p);
   float d1 = 1e9;
@@ -348,18 +360,27 @@ void wmApplyVoronoi(inout vec4 col) {
   }
   float f1 = sqrt(max(0.0, d1));
   float f2 = sqrt(max(0.0, d2));
-  float v = wmVorKind == 0 ? f1 : (f2 - f1);
+  return wmVorKind == 0 ? f1 : (f2 - f1);
+}
+
+float wmVorMaskFromField(float v) {
 
   float w = max(1e-6, wmVorEdgeWidth);
   float s = max(1e-6, wmVorSoftness);
-  float mask;
   if (wmVorKind == 0) {
-    // cells
-    mask = 1.0 - smoothstep(0.15, 0.15 + s * 0.9, v);
-  } else {
-    // edges
-    mask = 1.0 - smoothstep(w, w + s, v);
+    return 1.0 - smoothstep(0.15, 0.15 + s * 0.9, v);
   }
+  return 1.0 - smoothstep(w, w + s, v);
+}
+
+float wmVorMaskAt(vec2 p) {
+  return wmVorMaskFromField(wmVorFieldAt(p));
+}
+
+void wmApplyVoronoi(inout vec4 col) {
+  vec3 p3 = wmVorSpace == 0 ? wmVorWorldPos : wmVorObjPos;
+  vec2 p = wmVorCoords(p3);
+  float mask = wmVorMaskAt(p);
 
   float a = clamp(wmVorAmount * mask, 0.0, 1.0);
   float cs = clamp(wmVorColorStrength, 0.0, 1.0);
@@ -371,12 +392,47 @@ void wmApplyVoronoi(inout vec4 col) {
     col.rgb = mix(col.rgb, wmVorTint, a * cs);
   }
 }
+
+float wmVorMaterialMask() {
+  vec3 p3 = wmVorSpace == 0 ? wmVorWorldPos : wmVorObjPos;
+  return clamp(wmVorAmount * wmVorMaskAt(wmVorCoords(p3)), 0.0, 1.0);
+}
+
+vec3 wmVorNormalPerturb(vec3 baseNormal) {
+  vec3 p3 = wmVorSpace == 0 ? wmVorWorldPos : wmVorObjPos;
+  vec2 p = wmVorCoords(p3);
+  float stepSize = max(0.0005, mix(0.004, 0.08, wmVorNormalScale)) / max(wmVorScale, 0.25);
+  float center = wmVorMaterialMask();
+  float dx = wmVorMaskAt(p + vec2(stepSize, 0.0)) - center;
+  float dy = wmVorMaskAt(p + vec2(0.0, stepSize)) - center;
+  vec3 bumped = normalize(baseNormal + vec3(-dx, -dy, 0.0) * (wmVorNormalStrength * 3.0));
+  return bumped;
+}
 `;
 
       if (shader.fragmentShader.includes('#include <common>')) {
         shader.fragmentShader = shader.fragmentShader.replace('#include <common>', `#include <common>\n${fragUniforms}`);
       } else if (!shader.fragmentShader.includes('wmApplyVoronoi')) {
         shader.fragmentShader = fragUniforms + '\n' + shader.fragmentShader;
+      }
+
+      if (shader.fragmentShader.includes('#include <normal_fragment_maps>')) {
+        shader.fragmentShader = shader.fragmentShader.replace(
+          '#include <normal_fragment_maps>',
+          `#include <normal_fragment_maps>\nnormal = wmVorNormalPerturb(normal);`
+        );
+      }
+
+      if (shader.fragmentShader.includes('#include <roughnessmap_fragment>')) {
+        shader.fragmentShader = shader.fragmentShader.replace(
+          '#include <roughnessmap_fragment>',
+          `#include <roughnessmap_fragment>\nroughnessFactor = clamp(roughnessFactor + (wmVorMaterialMask() - 0.5) * wmVorRoughnessStrength, 0.0, 1.0);`
+        );
+      } else if (shader.fragmentShader.includes('float roughnessFactor = roughness;')) {
+        shader.fragmentShader = shader.fragmentShader.replace(
+          'float roughnessFactor = roughness;',
+          `float roughnessFactor = clamp(roughness + (wmVorMaterialMask() - 0.5) * wmVorRoughnessStrength, 0.0, 1.0);`
+        );
       }
 
       shader.fragmentShader = shader.fragmentShader.replace(
