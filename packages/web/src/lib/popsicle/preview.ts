@@ -2111,6 +2111,83 @@ void wmApplyCollisionMask(inout vec4 col) {
     const evaluator = useBubblesGeometry && bubblesMode === 'through' ? new Evaluator() : null;
     const sphereGeo = useBubblesGeometry && bubblesMode === 'through' ? new THREE.SphereGeometry(1, 16, 12) : null;
 
+    const fract = (x: number) => x - Math.floor(x);
+    const hash1 = (x: number, y: number, z: number) => fract(Math.sin(x * 127.1 + y * 311.7 + z * 74.7) * 43758.5453123);
+    const hash3 = (x: number, y: number, z: number) => ({
+      x: hash1(x + 0.0, y + 0.0, z + 0.0),
+      y: hash1(x + 17.0, y + 0.0, z + 0.0),
+      z: hash1(x + 0.0, y + 37.0, z + 0.0)
+    });
+    const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+    const clamp01 = (x: number) => clamp(x, 0, 1);
+
+    const bubblesEffectiveFrequency = () => {
+      const baseFreq = Math.max(1e-6, Number(bubblesCfg?.frequency) || 0);
+      const variance = clamp01(Number(bubblesCfg?.frequencyVariance) || 0);
+      const bias = hash1(seedBase, seedBase + 3.1, seedBase + 7.2);
+      return baseFreq * (1 + (bias - 0.5) * 2 * variance);
+    };
+
+    const bubblesMinSdfWithRadius = (pWorld: THREE.Vector3): { sdf: number; radius: number } => {
+      const freq = bubblesEffectiveFrequency();
+      const invF = 1 / Math.max(1e-6, freq);
+
+      const gpX = pWorld.x * freq;
+      const gpY = pWorld.y * freq;
+      const gpZ = pWorld.z * freq;
+
+      const iX = Math.floor(gpX);
+      const iY = Math.floor(gpY);
+      const iZ = Math.floor(gpZ);
+
+      const fracX = fract(gpX);
+      const fracY = fract(gpY);
+      const fracZ = fract(gpZ);
+
+      const oX = fracX >= 0.5 ? 1 : 0;
+      const oY = fracY >= 0.5 ? 1 : 0;
+      const oZ = fracZ >= 0.5 ? 1 : 0;
+
+      const baseX = iX + oX;
+      const baseY = iY + oY;
+      const baseZ = iZ + oZ;
+
+      const radiusMin = Math.max(0, Number(bubblesCfg?.radiusMin) || 0);
+      const radiusMax = Math.max(radiusMin, Number(bubblesCfg?.radiusMax) || 0);
+      const count = Math.max(0, Math.min(8, Math.round(Number(bubblesCfg?.count) || 0)));
+
+      let dMin = Infinity;
+      let rMinAt = 0;
+
+      const sampleCell = (cx: number, cy: number, cz: number) => {
+        const jitter = hash3(cx + seedBase, cy + seedBase, cz + seedBase);
+        const centerX = (cx + jitter.x) * invF;
+        const centerY = (cy + jitter.y) * invF;
+        const centerZ = (cz + jitter.z) * invF;
+        const rr = lerp(radiusMin, radiusMax, hash1(cx + seedBase + 13.37, cy + seedBase + 9.91, cz + seedBase + 2.17));
+        const dx = pWorld.x - centerX;
+        const dy = pWorld.y - centerY;
+        const dz = pWorld.z - centerZ;
+        const d = Math.sqrt(dx * dx + dy * dy + dz * dz) - rr;
+        if (d < dMin) {
+          dMin = d;
+          rMinAt = rr;
+        }
+      };
+
+      // Must match shader sample ordering.
+      if (count > 0) sampleCell(baseX + 0, baseY + 0, baseZ + 0);
+      if (count > 1) sampleCell(baseX - 1, baseY + 0, baseZ + 0);
+      if (count > 2) sampleCell(baseX + 0, baseY - 1, baseZ + 0);
+      if (count > 3) sampleCell(baseX - 1, baseY - 1, baseZ + 0);
+      if (count > 4) sampleCell(baseX + 0, baseY + 0, baseZ - 1);
+      if (count > 5) sampleCell(baseX - 1, baseY + 0, baseZ - 1);
+      if (count > 6) sampleCell(baseX + 0, baseY - 1, baseZ - 1);
+      if (count > 7) sampleCell(baseX - 1, baseY - 1, baseZ - 1);
+
+      return { sdf: dMin, radius: rMinAt };
+    };
+
     const smoothstep = (e0: number, e1: number, x: number) => {
       const t = clamp((x - e0) / Math.max(1e-6, e1 - e0), 0, 1);
       return t * t * (3 - 2 * t);
@@ -2119,12 +2196,11 @@ void wmApplyCollisionMask(inout vec4 col) {
     const dentGeometry = (
       geoIn: THREE.BufferGeometry,
       world: THREE.Matrix4,
-      bubbles: Array<{ center: THREE.Vector3; radius: number }>,
       wallThickness: number,
       softness: number
     ): THREE.BufferGeometry => {
       const base = geoIn.clone();
-      const capSubdiv = 1;
+      const capSubdiv = qualityBoost < 0.9 ? 1 : 0;
       const geo = capSubdiv > 0 ? subdivideGeometry(base, capSubdiv) : base;
       if (!geo.getAttribute('normal')) geo.computeVertexNormals();
 
@@ -2146,23 +2222,10 @@ void wmApplyCollisionMask(inout vec4 col) {
         pWorld.copy(pLocal).applyMatrix4(world);
         nWorld.copy(nLocal).transformDirection(world).normalize();
 
-        let minSdf = Infinity;
-        let closestRadius = 0;
-        for (let j = 0; j < bubbles.length; j++) {
-          const b = bubbles[j];
-          const dx = pWorld.x - b.center.x;
-          const dy = pWorld.y - b.center.y;
-          const dz = pWorld.z - b.center.z;
-          const d = Math.sqrt(dx * dx + dy * dy + dz * dz) - b.radius;
-          if (d < minSdf) {
-            minSdf = d;
-            closestRadius = b.radius;
-          }
-        }
-
-        if (minSdf < 0) {
-          const depth = -minSdf;
-          const dentMax = Math.min(Math.max(t * 2.75, t + s), Math.max(0.001, closestRadius * 0.65));
+        const { sdf, radius } = bubblesMinSdfWithRadius(pWorld);
+        if (sdf < 0) {
+          const depth = -sdf;
+          const dentMax = Math.min(Math.max(t * 2.75, t + s), Math.max(0.001, radius * 0.65));
           const dent = dentMax * smoothstep(0, t + s, depth);
           pWorld.addScaledVector(nWorld, -dent);
           pLocal.copy(pWorld).applyMatrix4(inv);
@@ -2305,14 +2368,14 @@ void wmApplyCollisionMask(inout vec4 col) {
       mesh.updateMatrixWorld(true);
 
       if (useBubblesGeometry) {
-        const stickBounds = new THREE.Box3().setFromObject(mesh);
-        const bubbles = buildBubbles(bubblesCfg, new THREE.Vector3(1, 1, 1), seedBase, { bounds: stickBounds, maxBubbles: 96 });
-        if (bubbles.length > 0) {
-          const nextGeo =
-            bubblesMode === 'through'
-              ? carveThrough(mesh.geometry, mesh.matrixWorld, bubbles)
-              : dentGeometry(mesh.geometry, mesh.matrixWorld, bubbles, Number(bubblesCfg.wallThickness) || 0, Number(bubblesCfg.softness) || 0);
-          mesh.geometry = nextGeo;
+        if (bubblesMode === 'through') {
+          const stickBounds = new THREE.Box3().setFromObject(mesh);
+          const bubbles = buildBubbles(bubblesCfg, new THREE.Vector3(1, 1, 1), seedBase, { bounds: stickBounds, maxBubbles: 24 });
+          if (bubbles.length > 0) {
+            mesh.geometry = carveThrough(mesh.geometry, mesh.matrixWorld, bubbles);
+          }
+        } else {
+          mesh.geometry = dentGeometry(mesh.geometry, mesh.matrixWorld, Number(bubblesCfg.wallThickness) || 0, Number(bubblesCfg.softness) || 0);
         }
       }
 
