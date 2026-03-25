@@ -7,6 +7,7 @@ import { renderWithOptionalBloom } from './postprocessing.js';
 import { autoFitOrthographicCameraToBox } from './camera-fit.js';
 import { inferSvgRenderMode, validateSvgSource } from '../svg-utils.js';
 import { resolvePaletteConfig } from '../palette.js';
+import { extractSvgToneGeometries3D } from '../svg-tone-extraction.js';
 
 import { SVGLoader } from 'three/examples/jsm/loaders/SVGLoader.js';
 
@@ -228,138 +229,6 @@ function buildExtrudedSvgGeometry(config: Svg3DConfig): { geometry: THREE.Buffer
   geom.computeBoundingSphere();
 
   return { geometry: geom, maxDim };
-}
-
-function buildExtrudedSvgGeometriesByTone(config: Svg3DConfig, maxTones: number): { geometries: THREE.BufferGeometry[]; maxDim: number } {
-  const source = validateSvgSource(config.svg.source);
-  const cap = Math.max(1, Math.min(64, Math.round(Number(maxTones) || 8)));
-
-  let data: any;
-  try {
-    const loader = new SVGLoader();
-    data = loader.parse(source);
-  } catch (err: any) {
-    throw new Error(`Invalid SVG: failed to parse (${String(err?.message || err)})`);
-  }
-
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-
-  const normTone = (v: unknown): string => {
-    const s0 = String(v ?? '').trim();
-    if (!s0) return '';
-    const s = s0.toLowerCase();
-    if (s === 'none') return '';
-    if (s.includes('url(')) return `url:${s0}`;
-    return s0;
-  };
-
-  type Bucket = { key: string; shapes: THREE.Shape[] };
-  const order: Bucket[] = [];
-  const byKey = new Map<string, Bucket>();
-  const getBucket = (keyRaw: string): Bucket => {
-    const key = keyRaw || '__default__';
-    const existing = byKey.get(key);
-    if (existing) return existing;
-    const b: Bucket = { key, shapes: [] };
-    byKey.set(key, b);
-    order.push(b);
-    return b;
-  };
-
-  for (const p of data?.paths ?? []) {
-    // Bounds (global)
-    const subs = (p as any)?.subPaths ?? [];
-    for (const sp of subs) {
-      const pts = (sp as any).getPoints ? (sp as any).getPoints(40) : [];
-      for (const v of pts) {
-        const x = Number(v?.x);
-        const y = Number(v?.y);
-        if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
-        if (x < minX) minX = x;
-        if (x > maxX) maxX = x;
-        if (y < minY) minY = y;
-        if (y > maxY) maxY = y;
-      }
-    }
-
-    // Shapes by tone
-    const style = (p as any)?.userData?.style ?? {};
-    const fillKey = normTone(style.fill);
-    const strokeKey = normTone(style.stroke);
-    const key = fillKey || strokeKey || '__default__';
-    let shapes: THREE.Shape[] = [];
-    try {
-      shapes = SVGLoader.createShapes(p as any);
-    } catch {
-      shapes = [];
-    }
-    if (shapes.length === 0) continue;
-    const b = getBucket(key);
-    for (const s of shapes) b.shapes.push(s);
-  }
-
-  if (!Number.isFinite(minX)) {
-    throw new Error('Invalid SVG: no drawable paths found');
-  }
-
-  const w = Math.max(1e-9, maxX - minX);
-  const h = Math.max(1e-9, maxY - minY);
-  const maxDim = Math.max(w, h);
-  const cx = (minX + maxX) * 0.5;
-  const cy = (minY + maxY) * 0.5;
-
-  const curveSegments = Math.max(1, Math.round(4 + clamp01(Number(config.geometry.quality) || 0) * 20));
-  const bevelEnabled = !!config.svg.bevel?.enabled;
-  const bevelSizeNorm = clamp(Number(config.svg.bevel?.size) || 0, 0, 0.2);
-  const bevelSeg = Math.max(0, Math.min(8, Math.round(Number(config.svg.bevel?.segments) || 0)));
-  const depthScene = Math.max(0.000001, Number(config.svg.extrudeDepth) || 0.000001);
-  const depthSvg = depthScene * maxDim;
-  const bevelSvg = bevelEnabled ? bevelSizeNorm * maxDim : 0;
-
-  const use = order.slice(0, cap);
-  if (use.length === 0) {
-    throw new Error('Invalid SVG: no closed shapes found to extrude');
-  }
-
-  // Overflow: append shapes to last bucket.
-  if (order.length > cap && use.length > 0) {
-    const last = use[use.length - 1];
-    for (const extra of order.slice(cap)) {
-      for (const s of extra.shapes) last.shapes.push(s);
-    }
-  }
-
-  const geometries: THREE.BufferGeometry[] = [];
-  for (const b of use) {
-    if (b.shapes.length === 0) continue;
-    const geom = new THREE.ExtrudeGeometry(b.shapes, {
-      depth: depthSvg,
-      bevelEnabled: bevelEnabled && bevelSvg > 0 && bevelSeg > 0,
-      bevelSize: bevelSvg,
-      bevelThickness: bevelSvg,
-      bevelSegments: Math.max(1, bevelSeg),
-      curveSegments,
-      steps: 1
-    });
-
-    // Center + normalize to maxDim=1 (uniform).
-    const s = 1 / Math.max(1e-9, maxDim);
-    geom.applyMatrix4(new THREE.Matrix4().makeTranslation(-cx, -cy, -depthSvg * 0.5));
-    geom.applyMatrix4(new THREE.Matrix4().makeScale(s, s, s));
-    geom.computeVertexNormals();
-    geom.computeBoundingBox();
-    geom.computeBoundingSphere();
-    geometries.push(geom);
-  }
-
-  if (geometries.length === 0) {
-    throw new Error('Invalid SVG: no closed shapes found to extrude');
-  }
-
-  return { geometries, maxDim };
 }
 
 function mergeNonIndexedBufferGeometries(geoms: THREE.BufferGeometry[]): THREE.BufferGeometry {
@@ -642,7 +511,15 @@ export function createSvg3DScene(
   const strokeOpacity = doStroke ? clamp01(Number(config.svg.stroke?.opacity) || 1) : 0;
 
   const geometryFill = doFill && colorMode === 'palette' ? buildExtrudedSvgGeometry(config).geometry : null;
-  const toneGeometries = doFill && colorMode === 'svg-to-palette' ? buildExtrudedSvgGeometriesByTone(config, maxTones).geometries : null;
+  const toneGeometries = doFill && colorMode === 'svg-to-palette'
+    ? extractSvgToneGeometries3D(config.svg.source, maxTones, {
+        curveSegments: Math.max(1, Math.round(4 + clamp01(Number(config.geometry.quality) || 0) * 20)),
+        bevelEnabled: !!config.svg.bevel?.enabled,
+        bevelSizeNorm: clamp(Number(config.svg.bevel?.size) || 0, 0, 0.2),
+        bevelSegments: Math.max(0, Math.min(8, Math.round(Number(config.svg.bevel?.segments) || 0))),
+        depthScene: Math.max(0.000001, Number(config.svg.extrudeDepth) || 0.000001)
+      }).map((entry) => entry.geometry)
+    : null;
   const geometryStroke = doStroke ? buildStrokeSvgGeometry(config).geometry : null;
 
   if (!geometryFill && (!toneGeometries || toneGeometries.length === 0) && !geometryStroke) {
