@@ -249,6 +249,7 @@ export type VoronoiKind = 'cells' | 'edges';
 export type VoronoiSpace = 'world' | 'object';
 export type VoronoiColorMode = 'darken' | 'lighten' | 'tint';
 export type VoronoiMaterialMode = 'none' | 'roughness' | 'normal' | 'both';
+export type VoronoiMaterialKind = 'match' | 'cells' | 'edges';
 
 export interface VoronoiConfig {
   enabled: boolean;
@@ -273,12 +274,31 @@ export interface VoronoiConfig {
   /** Controls whether Voronoi affects roughness, normals, both, or color only. */
   materialMode: VoronoiMaterialMode;
 
+  /** Which Voronoi mask drives roughness/normal changes (independent from color). */
+  materialKind: VoronoiMaterialKind;
+
   /** 0..1: adds material roughness variation from the Voronoi mask. */
   roughnessStrength: number;
   /** 0..1: how much the Voronoi field perturbs the shading normal. */
   normalStrength: number;
   /** 0..1: scale of the derivative step used for the Voronoi normal perturbation. */
   normalScale: number;
+
+  /** 0..1: randomly removes parts of walls for a cracked/chipped look. */
+  crackleAmount: number;
+  /** Noise frequency for crackle (higher = finer chips). */
+  crackleScale: number;
+
+  nucleus: {
+    enabled: boolean;
+    /** 0..1: radius in Voronoi cell units */
+    size: number;
+    /** 0..1: softness of the nucleus mask */
+    softness: number;
+    /** 0..1: mix amount toward nucleusColor */
+    strength: number;
+    color: string;
+  };
 }
 
 export type CollisionsMode = 'none' | 'carve';
@@ -806,9 +826,19 @@ export const DEFAULT_POPSICLE_CONFIG: PopsicleConfig = {
     colorMode: 'darken',
     tintColor: '#ffffff',
     materialMode: 'both',
+    materialKind: 'match',
     roughnessStrength: 0.42,
     normalStrength: 0.34,
-    normalScale: 0.52
+    normalScale: 0.52,
+    crackleAmount: 0,
+    crackleScale: 14,
+    nucleus: {
+      enabled: false,
+      size: 0.09,
+      softness: 0.28,
+      strength: 0.7,
+      color: '#ffffff'
+    }
   },
   backgroundColor: '#1a1a2e',
   facades: {
@@ -1307,12 +1337,34 @@ export function normalizeWallpaperConfig(input: any): WallpaperConfig {
     if (typeof vAny.tintColor !== 'string') vAny.tintColor = String(vAny.tintColor ?? baseVor?.tintColor ?? '#ffffff');
     const mm = String(vAny.materialMode ?? baseVor?.materialMode ?? 'both');
     vAny.materialMode = mm === 'none' ? 'none' : mm === 'roughness' ? 'roughness' : mm === 'normal' ? 'normal' : 'both';
+
+    const mk = String(vAny.materialKind ?? baseVor?.materialKind ?? 'match');
+    vAny.materialKind = mk === 'cells' ? 'cells' : mk === 'edges' ? 'edges' : 'match';
     const rs = Number(vAny.roughnessStrength);
     vAny.roughnessStrength = Number.isFinite(rs) ? clamp(rs, 0, 1) : clamp(Number(baseVor?.roughnessStrength) || 0, 0, 1);
     const ns = Number(vAny.normalStrength);
     vAny.normalStrength = Number.isFinite(ns) ? clamp(ns, 0, 1) : clamp(Number(baseVor?.normalStrength) || 0, 0, 1);
     const nsc = Number(vAny.normalScale);
     vAny.normalScale = Number.isFinite(nsc) ? clamp(nsc, 0, 1) : clamp(Number(baseVor?.normalScale) || 0, 0, 1);
+
+    const ca = Number(vAny.crackleAmount);
+    vAny.crackleAmount = Number.isFinite(ca) ? clamp(ca, 0, 1) : clamp(Number(baseVor?.crackleAmount) || 0, 0, 1);
+    const csc = Number(vAny.crackleScale);
+    vAny.crackleScale = Number.isFinite(csc) ? clamp(csc, 0, 200) : clamp(Number(baseVor?.crackleScale) || 0, 0, 200);
+
+    const baseNucleus: any = baseVor?.nucleus;
+    if (!vAny.nucleus || typeof vAny.nucleus !== 'object') {
+      vAny.nucleus = cloneJson(baseNucleus);
+    } else {
+      vAny.nucleus.enabled = typeof vAny.nucleus.enabled === 'boolean' ? vAny.nucleus.enabled : !!vAny.nucleus.enabled;
+      const ns0 = Number(vAny.nucleus.size);
+      vAny.nucleus.size = Number.isFinite(ns0) ? clamp(ns0, 0, 1) : clamp(Number(baseNucleus?.size) || 0, 0, 1);
+      const nsoft = Number(vAny.nucleus.softness);
+      vAny.nucleus.softness = Number.isFinite(nsoft) ? clamp(nsoft, 0, 1) : clamp(Number(baseNucleus?.softness) || 0, 0, 1);
+      const nstr = Number(vAny.nucleus.strength);
+      vAny.nucleus.strength = Number.isFinite(nstr) ? clamp(nstr, 0, 1) : clamp(Number(baseNucleus?.strength) || 0, 0, 1);
+      if (typeof vAny.nucleus.color !== 'string') vAny.nucleus.color = String(vAny.nucleus.color ?? baseNucleus?.color ?? '#ffffff');
+    }
   }
 
   const edgeObj: any = (merged as any).edge;
@@ -1702,23 +1754,62 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
               : texture === 'glass'
                 ? { roughness: 0.34, normal: 0.28, amount: 0.74, scale: 4.4 }
                 : { roughness: DEFAULT_POPSICLE_CONFIG.voronoi.roughnessStrength, normal: DEFAULT_POPSICLE_CONFIG.voronoi.normalStrength, amount: DEFAULT_POPSICLE_CONFIG.voronoi.amount, scale: DEFAULT_POPSICLE_CONFIG.voronoi.scale };
+      const kind: VoronoiKind = enabled ? (chance(0.78) ? 'edges' : 'cells') : DEFAULT_POPSICLE_CONFIG.voronoi.kind;
+      const materialKind: VoronoiMaterialKind =
+        !enabled
+          ? DEFAULT_POPSICLE_CONFIG.voronoi.materialKind
+          : kind === 'cells'
+            ? (chance(0.62) ? 'edges' : chance(0.75) ? 'match' : 'cells')
+            : (chance(0.78) ? 'match' : chance(0.85) ? 'edges' : 'cells');
+
+      const crackleEnabled = enabled && (kind === 'edges' || materialKind === 'edges') && chance(0.22);
+      const nucleusEnabled = enabled && chance(kind === 'cells' ? 0.65 : 0.25);
+
+      const materialMode: VoronoiMaterialMode =
+        !enabled
+          ? DEFAULT_POPSICLE_CONFIG.voronoi.materialMode
+          : texture === 'glass'
+            ? (chance(0.72) ? 'normal' : chance(0.8) ? 'both' : chance(0.9) ? 'roughness' : 'none')
+            : texture === 'matte'
+              ? (chance(0.7) ? 'roughness' : chance(0.75) ? 'both' : chance(0.9) ? 'normal' : 'none')
+              : texture === 'mirror'
+                ? (chance(0.66) ? 'normal' : chance(0.72) ? 'both' : chance(0.9) ? 'roughness' : 'none')
+                : (() => {
+                    const r = rng();
+                    if (r < 0.5) return 'both';
+                    if (r < 0.82) return 'roughness';
+                    if (r < 0.98) return 'normal';
+                    return 'none';
+                  })();
+
       return {
         ...DEFAULT_POPSICLE_CONFIG.voronoi,
         enabled,
         space: chance(0.72) ? 'world' : 'object',
-        kind: chance(0.68) ? 'edges' : 'cells',
+        kind,
         scale: clamp(tri(0.8, textureBias.scale, 16), 0.1, 80),
         seedOffset: Math.round(tri(-50, 0, 50)),
         amount: enabled ? clamp(tri(0.18, textureBias.amount, 0.96), 0, 1) : DEFAULT_POPSICLE_CONFIG.voronoi.amount,
         edgeWidth: clamp(tri(0.01, DEFAULT_POPSICLE_CONFIG.voronoi.edgeWidth, 0.48), 0, 1),
         softness: clamp(tri(0.0, DEFAULT_POPSICLE_CONFIG.voronoi.softness, 0.78), 0, 1),
-        colorStrength: enabled ? clamp(tri(0.05, DEFAULT_POPSICLE_CONFIG.voronoi.colorStrength, 1.0), 0, 1) : DEFAULT_POPSICLE_CONFIG.voronoi.colorStrength,
-        colorMode: (['darken', 'lighten', 'tint'] as const)[Math.floor(rng() * 3)],
+        colorStrength: enabled ? clamp(tri(0.12, DEFAULT_POPSICLE_CONFIG.voronoi.colorStrength, 1.0), 0, 1) : DEFAULT_POPSICLE_CONFIG.voronoi.colorStrength,
+        colorMode: (['darken', 'lighten', 'tint'] as const)[chance(0.6) ? 0 : Math.floor(rng() * 3)],
         tintColor: '#ffffff',
-        materialMode: !enabled ? DEFAULT_POPSICLE_CONFIG.voronoi.materialMode : texture === 'glass' ? (chance(0.65) ? 'normal' : chance(0.35) ? 'none' : 'both') : texture === 'matte' ? (chance(0.62) ? 'roughness' : chance(0.38) ? 'both' : 'none') : texture === 'mirror' ? (chance(0.58) ? 'normal' : chance(0.34) ? 'both' : 'roughness') : chance(0.45) ? 'both' : chance(0.5) ? 'roughness' : chance(0.55) ? 'normal' : 'none',
+        materialMode,
+        materialKind,
         roughnessStrength: enabled ? clamp(tri(0.08, textureBias.roughness, 0.78), 0, 1) : DEFAULT_POPSICLE_CONFIG.voronoi.roughnessStrength,
         normalStrength: enabled ? clamp(tri(0.06, textureBias.normal, 0.68), 0, 1) : DEFAULT_POPSICLE_CONFIG.voronoi.normalStrength,
-        normalScale: clamp(tri(0.12, DEFAULT_POPSICLE_CONFIG.voronoi.normalScale, 0.88), 0, 1)
+        normalScale: clamp(tri(0.12, DEFAULT_POPSICLE_CONFIG.voronoi.normalScale, 0.88), 0, 1),
+        crackleAmount: crackleEnabled ? clamp(tri(0.05, 0.28, 0.85), 0, 1) : 0,
+        crackleScale: crackleEnabled ? clamp(tri(2, DEFAULT_POPSICLE_CONFIG.voronoi.crackleScale, 60), 0, 200) : DEFAULT_POPSICLE_CONFIG.voronoi.crackleScale,
+        nucleus: {
+          ...DEFAULT_POPSICLE_CONFIG.voronoi.nucleus,
+          enabled: nucleusEnabled,
+          size: nucleusEnabled ? clamp(tri(0.03, DEFAULT_POPSICLE_CONFIG.voronoi.nucleus.size, 0.18), 0, 1) : DEFAULT_POPSICLE_CONFIG.voronoi.nucleus.size,
+          softness: nucleusEnabled ? clamp(tri(0.05, DEFAULT_POPSICLE_CONFIG.voronoi.nucleus.softness, 0.85), 0, 1) : DEFAULT_POPSICLE_CONFIG.voronoi.nucleus.softness,
+          strength: nucleusEnabled ? clamp(tri(0.25, DEFAULT_POPSICLE_CONFIG.voronoi.nucleus.strength, 1.0), 0, 1) : DEFAULT_POPSICLE_CONFIG.voronoi.nucleus.strength,
+          color: '#ffffff'
+        }
       };
     })(),
     backgroundColor: theme.backgroundColor,
@@ -1924,6 +2015,15 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
     }
 
     // Rare: per-color voronoi override (accent texture).
+    if (is3DType && base.voronoi?.enabled && chance(0.12)) {
+      const idx = Math.floor(rng() * paletteCount);
+      setOverride(idx, {
+        voronoi: {
+          enabled: false
+        }
+      });
+    }
+
     if (is3DType && chance(0.16)) {
       const idx = Math.floor(rng() * paletteCount);
       setOverride(idx, {
@@ -1932,6 +2032,16 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
           amount: clamp(tri(0.05, 0.65, 1.0), 0, 1),
           scale: clamp(tri(0.6, 3.5, 18), 0.1, 80),
           kind: rng() < 0.7 ? 'edges' : 'cells',
+          materialKind: rng() < 0.7 ? 'match' : rng() < 0.85 ? 'edges' : 'cells',
+          crackleAmount: rng() < 0.22 ? clamp(tri(0.05, 0.25, 0.85), 0, 1) : 0,
+          crackleScale: clamp(tri(2, DEFAULT_POPSICLE_CONFIG.voronoi.crackleScale, 60), 0, 200),
+          nucleus: {
+            enabled: rng() < 0.25,
+            size: clamp(tri(0.03, DEFAULT_POPSICLE_CONFIG.voronoi.nucleus.size, 0.18), 0, 1),
+            softness: clamp(tri(0.05, DEFAULT_POPSICLE_CONFIG.voronoi.nucleus.softness, 0.85), 0, 1),
+            strength: clamp(tri(0.25, DEFAULT_POPSICLE_CONFIG.voronoi.nucleus.strength, 1.0), 0, 1),
+            color: '#ffffff'
+          },
           colorStrength: clamp(tri(0.05, 0.25, 1.0), 0, 1),
           colorMode: rng() < 0.6 ? 'darken' : rng() < 0.5 ? 'lighten' : 'tint',
           materialMode: rng() < 0.2 ? 'none' : rng() < 0.5 ? 'roughness' : rng() < 0.75 ? 'normal' : 'both',
