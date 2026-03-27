@@ -773,7 +773,7 @@
         if (next.voronoi) {
           delete next.voronoi;
         } else {
-          next.voronoi = { ...(config as any).voronoi };
+          next.voronoi = { ...(config as any).voronoi, nucleus: { ...((config as any).voronoi?.nucleus ?? { enabled: false }) } };
         }
       }
 
@@ -784,18 +784,19 @@
   function cloneDefaultConfig(): WallpaperConfig {
       return {
          ...DEFAULT_CONFIG,
-            colors: [...DEFAULT_CONFIG.colors],
-            palette: { overrides: Array.isArray((DEFAULT_CONFIG as any).palette?.overrides) ? (DEFAULT_CONFIG as any).palette.overrides.map((v: any) => (v && typeof v === 'object' ? { ...v } : null)) : [] },
-             textureParams: {
-               drywall: { ...DEFAULT_CONFIG.textureParams.drywall },
-               glass: { ...DEFAULT_CONFIG.textureParams.glass },
-               cel: { ...DEFAULT_CONFIG.textureParams.cel }
+             colors: [...DEFAULT_CONFIG.colors],
+             palette: { overrides: Array.isArray((DEFAULT_CONFIG as any).palette?.overrides) ? (DEFAULT_CONFIG as any).palette.overrides.map((v: any) => (v && typeof v === 'object' ? { ...v } : null)) : [] },
+              textureParams: {
+                drywall: { ...DEFAULT_CONFIG.textureParams.drywall },
+                glass: { ...DEFAULT_CONFIG.textureParams.glass },
+                cel: { ...DEFAULT_CONFIG.textureParams.cel }
+              },
+             voronoi: { ...(DEFAULT_CONFIG as any).voronoi, nucleus: { ...((DEFAULT_CONFIG as any).voronoi?.nucleus ?? { enabled: false }) } } as any,
+             facades: {
+               side: { ...DEFAULT_CONFIG.facades.side },
+               grazing: { ...DEFAULT_CONFIG.facades.grazing },
+               outline: { ...DEFAULT_CONFIG.facades.outline }
              },
-            facades: {
-              side: { ...DEFAULT_CONFIG.facades.side },
-              grazing: { ...DEFAULT_CONFIG.facades.grazing },
-              outline: { ...DEFAULT_CONFIG.facades.outline }
-            },
             edge: { ...DEFAULT_CONFIG.edge, seam: { ...DEFAULT_CONFIG.edge.seam }, band: { ...DEFAULT_CONFIG.edge.band } },
              bubbles: { ...(DEFAULT_CONFIG as any).bubbles, interior: { ...((DEFAULT_CONFIG as any).bubbles?.interior ?? { enabled: true }) } },
             emission: { ...DEFAULT_CONFIG.emission },
@@ -835,6 +836,10 @@
         glass: { ...next.textureParams.glass },
         cel: { ...next.textureParams.cel }
       },
+      voronoi: {
+        ...((next as any).voronoi ?? {}),
+        nucleus: { ...(((next as any).voronoi?.nucleus ?? { enabled: false }) as any) }
+      } as any,
       facades: {
         side: { ...next.facades.side },
         grazing: { ...next.facades.grazing },
@@ -927,6 +932,11 @@
       overrides: Array.isArray((src as any).palette?.overrides) ? cloneAny((src as any).palette.overrides) : []
     } as any;
 
+    const voronoi = {
+      ...((src as any).voronoi ?? {}),
+      nucleus: { ...(((src as any).voronoi?.nucleus ?? { enabled: false }) as any) }
+    } as any;
+
     switch (src.type) {
       case 'popsicle':
         return {
@@ -943,6 +953,7 @@
             grazing: { ...src.facades.grazing },
             outline: { ...src.facades.outline }
           },
+          voronoi,
           edge: { ...src.edge, seam: { ...src.edge.seam }, band: { ...src.edge.band } },
           bubbles: { ...(src as any).bubbles },
           emission: { ...src.emission },
@@ -973,6 +984,7 @@
             grazing: { ...src.facades.grazing },
             outline: { ...src.facades.outline }
           },
+          voronoi,
           edge: { ...src.edge, seam: { ...src.edge.seam }, band: { ...src.edge.band } },
           bubbles: { ...(src as any).bubbles },
           emission: { ...src.emission },
@@ -1004,6 +1016,7 @@
             grazing: { ...src.facades.grazing },
             outline: { ...src.facades.outline }
           },
+          voronoi,
           edge: { ...src.edge, seam: { ...src.edge.seam }, band: { ...src.edge.band } },
           bubbles: { ...(src as any).bubbles },
           emission: { ...src.emission },
@@ -1040,6 +1053,7 @@
             grazing: { ...src.facades.grazing },
             outline: { ...src.facades.outline }
           },
+          voronoi,
           edge: { ...src.edge, seam: { ...src.edge.seam }, band: { ...src.edge.band } },
           bubbles: { ...(src as any).bubbles },
           emission: { ...src.emission },
@@ -1075,6 +1089,7 @@
             grazing: { ...src.facades.grazing },
             outline: { ...src.facades.outline }
           },
+          voronoi,
           edge: { ...src.edge, seam: { ...src.edge.seam }, band: { ...src.edge.band } },
           bubbles: { ...(src as any).bubbles },
           emission: { ...src.emission },
@@ -1111,6 +1126,7 @@
             grazing: { ...src.facades.grazing },
             outline: { ...src.facades.outline }
           },
+          voronoi,
           edge: { ...src.edge, seam: { ...src.edge.seam }, band: { ...src.edge.band } },
           bubbles: { ...(src as any).bubbles },
           emission: { ...src.emission },
@@ -1215,6 +1231,7 @@
             grazing: { ...src.facades.grazing },
             outline: { ...src.facades.outline }
           },
+          voronoi,
           edge: { ...src.edge, seam: { ...src.edge.seam }, band: { ...src.edge.band } },
           bubbles: { ...(src as any).bubbles },
           emission: { ...src.emission },
@@ -1250,6 +1267,7 @@
             grazing: { ...src.facades.grazing },
             outline: { ...src.facades.outline }
           },
+          voronoi,
           edge: { ...src.edge, seam: { ...src.edge.seam }, band: { ...src.edge.band } },
           bubbles: { ...(src as any).bubbles },
           emission: { ...src.emission },
@@ -1303,6 +1321,10 @@
       drywall: { ...current.textureParams.drywall },
       glass: { ...current.textureParams.glass },
       cel: { ...current.textureParams.cel }
+    };
+    (next as any).voronoi = {
+      ...((current as any).voronoi ?? {}),
+      nucleus: { ...(((current as any).voronoi?.nucleus ?? { enabled: false }) as any) }
     };
     next.facades = {
       side: { ...current.facades.side },
@@ -1605,9 +1627,17 @@
           void o.voronoi?.colorMode;
           void o.voronoi?.tintColor;
           void o.voronoi?.materialMode;
+          void (o.voronoi as any)?.materialKind;
           void o.voronoi?.roughnessStrength;
           void o.voronoi?.normalStrength;
           void o.voronoi?.normalScale;
+          void (o.voronoi as any)?.crackleAmount;
+          void (o.voronoi as any)?.crackleScale;
+          void (o.voronoi as any)?.nucleus?.enabled;
+          void (o.voronoi as any)?.nucleus?.size;
+          void (o.voronoi as any)?.nucleus?.softness;
+          void (o.voronoi as any)?.nucleus?.strength;
+          void (o.voronoi as any)?.nucleus?.color;
         }
       }
     }
@@ -1629,9 +1659,17 @@
     void (c as any).voronoi?.colorMode;
     void (c as any).voronoi?.tintColor;
     void (c as any).voronoi?.materialMode;
+    void (c as any).voronoi?.materialKind;
     void (c as any).voronoi?.roughnessStrength;
     void (c as any).voronoi?.normalStrength;
     void (c as any).voronoi?.normalScale;
+    void (c as any).voronoi?.crackleAmount;
+    void (c as any).voronoi?.crackleScale;
+    void (c as any).voronoi?.nucleus?.enabled;
+    void (c as any).voronoi?.nucleus?.size;
+    void (c as any).voronoi?.nucleus?.softness;
+    void (c as any).voronoi?.nucleus?.strength;
+    void (c as any).voronoi?.nucleus?.color;
     void c.backgroundColor;
     void c.facades.side.enabled;
     void c.facades.side.tintColor;
@@ -2869,6 +2907,7 @@
                             min="0"
                             max="1"
                             step="0.01"
+                            disabled={!((ov.voronoi.enabled ?? (config as any).voronoi.enabled)) || ((ov.voronoi.kind ?? (config as any).voronoi.kind) !== 'edges' && (ov.voronoi.materialKind ?? (config as any).voronoi.materialKind) !== 'edges')}
                             oninput={(e) => {
                               const v = Number((e.currentTarget as HTMLInputElement).value);
                               updatePaletteOverride(i, (cur) => ({
@@ -2893,6 +2932,44 @@
                                 ...(cur ?? { enabled: true }),
                                 enabled: true,
                                 voronoi: { ...(cur?.voronoi ?? {}), softness: v }
+                              }));
+                            }}
+                          />
+                        </label>
+                        <label class="control-row slider">
+                          <span class="setting-title">Crackle: {Number(ov.voronoi.crackleAmount ?? (config as any).voronoi.crackleAmount).toFixed(2)}</span>
+                          <input
+                            type="range"
+                            value={Number(ov.voronoi.crackleAmount ?? (config as any).voronoi.crackleAmount)}
+                            min="0"
+                            max="1"
+                            step="0.01"
+                            disabled={!((ov.voronoi.enabled ?? (config as any).voronoi.enabled)) || ((ov.voronoi.kind ?? (config as any).voronoi.kind) !== 'edges' && (ov.voronoi.materialKind ?? (config as any).voronoi.materialKind) !== 'edges')}
+                            oninput={(e) => {
+                              const v = Number((e.currentTarget as HTMLInputElement).value);
+                              updatePaletteOverride(i, (cur) => ({
+                                ...(cur ?? { enabled: true }),
+                                enabled: true,
+                                voronoi: { ...(cur?.voronoi ?? {}), crackleAmount: v }
+                              }));
+                            }}
+                          />
+                        </label>
+                        <label class="control-row slider">
+                          <span class="setting-title">Crackle scale: {Number(ov.voronoi.crackleScale ?? (config as any).voronoi.crackleScale).toFixed(1)}</span>
+                          <input
+                            type="range"
+                            value={Number(ov.voronoi.crackleScale ?? (config as any).voronoi.crackleScale)}
+                            min="0"
+                            max="80"
+                            step="0.5"
+                            disabled={!((ov.voronoi.enabled ?? (config as any).voronoi.enabled)) || !(Number(ov.voronoi.crackleAmount ?? (config as any).voronoi.crackleAmount) > 0) || ((ov.voronoi.kind ?? (config as any).voronoi.kind) !== 'edges' && (ov.voronoi.materialKind ?? (config as any).voronoi.materialKind) !== 'edges')}
+                            oninput={(e) => {
+                              const v = Number((e.currentTarget as HTMLInputElement).value);
+                              updatePaletteOverride(i, (cur) => ({
+                                ...(cur ?? { enabled: true }),
+                                enabled: true,
+                                voronoi: { ...(cur?.voronoi ?? {}), crackleScale: v }
                               }));
                             }}
                           />
@@ -2932,6 +3009,24 @@
                             <option value="roughness">Roughness</option>
                             <option value="normal">Normal</option>
                             <option value="both">Both</option>
+                          </select>
+                        </label>
+                        <label class="control-row">
+                          <span class="setting-title">Material mask</span>
+                          <select
+                            value={ov.voronoi.materialKind ?? (config as any).voronoi.materialKind}
+                            oninput={(e) => {
+                              const v = (e.currentTarget as HTMLSelectElement).value;
+                              updatePaletteOverride(i, (cur) => ({
+                                ...(cur ?? { enabled: true }),
+                                enabled: true,
+                                voronoi: { ...(cur?.voronoi ?? {}), materialKind: v }
+                              }));
+                            }}
+                          >
+                            <option value="match">Match kind</option>
+                            <option value="edges">Edges</option>
+                            <option value="cells">Cells</option>
                           </select>
                         </label>
                         <label class="control-row slider">
@@ -3020,6 +3115,111 @@
                                 ...(cur ?? { enabled: true }),
                                 enabled: true,
                                 voronoi: { ...(cur?.voronoi ?? {}), tintColor: v }
+                              }));
+                            }}
+                          />
+                        </label>
+
+                        <label class="control-row checkbox">
+                          <input
+                            type="checkbox"
+                            checked={!!(ov.voronoi.nucleus?.enabled ?? (config as any).voronoi.nucleus.enabled)}
+                            disabled={!((ov.voronoi.enabled ?? (config as any).voronoi.enabled))}
+                            oninput={(e) => {
+                              const checked = (e.currentTarget as HTMLInputElement).checked;
+                              updatePaletteOverride(i, (cur) => ({
+                                ...(cur ?? { enabled: true }),
+                                enabled: true,
+                                voronoi: {
+                                  ...(cur?.voronoi ?? {}),
+                                  nucleus: { ...(((cur?.voronoi as any)?.nucleus ?? {}) as any), enabled: checked }
+                                }
+                              }));
+                            }}
+                          />
+                          <span class="setting-title">Nucleus</span>
+                        </label>
+                        <label class="control-row slider">
+                          <span class="setting-title">Nucleus size: {Number(ov.voronoi.nucleus?.size ?? (config as any).voronoi.nucleus.size).toFixed(2)}</span>
+                          <input
+                            type="range"
+                            value={Number(ov.voronoi.nucleus?.size ?? (config as any).voronoi.nucleus.size)}
+                            min="0"
+                            max="0.5"
+                            step="0.01"
+                            disabled={!((ov.voronoi.enabled ?? (config as any).voronoi.enabled)) || !((ov.voronoi.nucleus?.enabled ?? (config as any).voronoi.nucleus.enabled))}
+                            oninput={(e) => {
+                              const v = Number((e.currentTarget as HTMLInputElement).value);
+                              updatePaletteOverride(i, (cur) => ({
+                                ...(cur ?? { enabled: true }),
+                                enabled: true,
+                                voronoi: {
+                                  ...(cur?.voronoi ?? {}),
+                                  nucleus: { ...(((cur?.voronoi as any)?.nucleus ?? {}) as any), size: v }
+                                }
+                              }));
+                            }}
+                          />
+                        </label>
+                        <label class="control-row slider">
+                          <span class="setting-title">Nucleus softness: {Number(ov.voronoi.nucleus?.softness ?? (config as any).voronoi.nucleus.softness).toFixed(2)}</span>
+                          <input
+                            type="range"
+                            value={Number(ov.voronoi.nucleus?.softness ?? (config as any).voronoi.nucleus.softness)}
+                            min="0"
+                            max="1"
+                            step="0.01"
+                            disabled={!((ov.voronoi.enabled ?? (config as any).voronoi.enabled)) || !((ov.voronoi.nucleus?.enabled ?? (config as any).voronoi.nucleus.enabled))}
+                            oninput={(e) => {
+                              const v = Number((e.currentTarget as HTMLInputElement).value);
+                              updatePaletteOverride(i, (cur) => ({
+                                ...(cur ?? { enabled: true }),
+                                enabled: true,
+                                voronoi: {
+                                  ...(cur?.voronoi ?? {}),
+                                  nucleus: { ...(((cur?.voronoi as any)?.nucleus ?? {}) as any), softness: v }
+                                }
+                              }));
+                            }}
+                          />
+                        </label>
+                        <label class="control-row slider">
+                          <span class="setting-title">Nucleus strength: {Number(ov.voronoi.nucleus?.strength ?? (config as any).voronoi.nucleus.strength).toFixed(2)}</span>
+                          <input
+                            type="range"
+                            value={Number(ov.voronoi.nucleus?.strength ?? (config as any).voronoi.nucleus.strength)}
+                            min="0"
+                            max="1"
+                            step="0.01"
+                            disabled={!((ov.voronoi.enabled ?? (config as any).voronoi.enabled)) || !((ov.voronoi.nucleus?.enabled ?? (config as any).voronoi.nucleus.enabled))}
+                            oninput={(e) => {
+                              const v = Number((e.currentTarget as HTMLInputElement).value);
+                              updatePaletteOverride(i, (cur) => ({
+                                ...(cur ?? { enabled: true }),
+                                enabled: true,
+                                voronoi: {
+                                  ...(cur?.voronoi ?? {}),
+                                  nucleus: { ...(((cur?.voronoi as any)?.nucleus ?? {}) as any), strength: v }
+                                }
+                              }));
+                            }}
+                          />
+                        </label>
+                        <label class="control-row">
+                          <span class="setting-title">Nucleus color</span>
+                          <input
+                            type="color"
+                            value={ov.voronoi.nucleus?.color ?? (config as any).voronoi.nucleus.color}
+                            disabled={!((ov.voronoi.enabled ?? (config as any).voronoi.enabled)) || !((ov.voronoi.nucleus?.enabled ?? (config as any).voronoi.nucleus.enabled))}
+                            oninput={(e) => {
+                              const v = (e.currentTarget as HTMLInputElement).value;
+                              updatePaletteOverride(i, (cur) => ({
+                                ...(cur ?? { enabled: true }),
+                                enabled: true,
+                                voronoi: {
+                                  ...(cur?.voronoi ?? {}),
+                                  nucleus: { ...(((cur?.voronoi as any)?.nucleus ?? {}) as any), color: v }
+                                }
                               }));
                             }}
                           />
@@ -3751,11 +3951,40 @@
             </label>
             <label class="control-row slider">
               <button type="button" class="setting-title" class:locked={isLocked('voronoi.edgeWidth')} onclick={() => toggleLock('voronoi.edgeWidth')} title="Click to lock/unlock for randomize">Edge width: {Number((config as any).voronoi.edgeWidth).toFixed(2)}</button>
-              <input type="range" bind:value={(config as any).voronoi.edgeWidth} min="0" max="1" step="0.01" disabled={!((config as any).voronoi.enabled) || (config as any).voronoi.kind !== 'edges'} />
+              <input
+                type="range"
+                bind:value={(config as any).voronoi.edgeWidth}
+                min="0"
+                max="1"
+                step="0.01"
+                disabled={!((config as any).voronoi.enabled) || ((config as any).voronoi.kind !== 'edges' && (config as any).voronoi.materialKind !== 'edges')}
+              />
             </label>
             <label class="control-row slider">
               <button type="button" class="setting-title" class:locked={isLocked('voronoi.softness')} onclick={() => toggleLock('voronoi.softness')} title="Click to lock/unlock for randomize">Softness: {Number((config as any).voronoi.softness).toFixed(2)}</button>
               <input type="range" bind:value={(config as any).voronoi.softness} min="0" max="1" step="0.01" disabled={!((config as any).voronoi.enabled)} />
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('voronoi.crackleAmount')} onclick={() => toggleLock('voronoi.crackleAmount')} title="Click to lock/unlock for randomize">Crackle: {Number((config as any).voronoi.crackleAmount).toFixed(2)}</button>
+              <input
+                type="range"
+                bind:value={(config as any).voronoi.crackleAmount}
+                min="0"
+                max="1"
+                step="0.01"
+                disabled={!((config as any).voronoi.enabled) || ((config as any).voronoi.kind !== 'edges' && (config as any).voronoi.materialKind !== 'edges')}
+              />
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('voronoi.crackleScale')} onclick={() => toggleLock('voronoi.crackleScale')} title="Click to lock/unlock for randomize">Crackle scale: {Number((config as any).voronoi.crackleScale).toFixed(1)}</button>
+              <input
+                type="range"
+                bind:value={(config as any).voronoi.crackleScale}
+                min="0"
+                max="80"
+                step="0.5"
+                disabled={!((config as any).voronoi.enabled) || !((config as any).voronoi.crackleAmount > 0) || ((config as any).voronoi.kind !== 'edges' && (config as any).voronoi.materialKind !== 'edges')}
+              />
             </label>
             <label class="control-row slider">
               <button type="button" class="setting-title" class:locked={isLocked('voronoi.colorStrength')} onclick={() => toggleLock('voronoi.colorStrength')} title="Click to lock/unlock for randomize">Color strength: {Number((config as any).voronoi.colorStrength).toFixed(2)}</button>
@@ -3768,6 +3997,14 @@
                 <option value="roughness">Roughness</option>
                 <option value="normal">Normal</option>
                 <option value="both">Both</option>
+              </select>
+            </label>
+            <label class="control-row">
+              <button type="button" class="setting-title" class:locked={isLocked('voronoi.materialKind')} onclick={() => toggleLock('voronoi.materialKind')} title="Click to lock/unlock for randomize">Material mask</button>
+              <select bind:value={(config as any).voronoi.materialKind} disabled={!((config as any).voronoi.enabled)}>
+                <option value="match">Match kind</option>
+                <option value="edges">Edges</option>
+                <option value="cells">Cells</option>
               </select>
             </label>
             <label class="control-row slider">
@@ -3793,6 +4030,37 @@
             <label class="control-row">
               <button type="button" class="setting-title" class:locked={isLocked('voronoi.tintColor')} onclick={() => toggleLock('voronoi.tintColor')} title="Click to lock/unlock for randomize">Tint</button>
               <input type="color" bind:value={(config as any).voronoi.tintColor} disabled={!((config as any).voronoi.enabled) || (config as any).voronoi.colorMode !== 'tint'} />
+            </label>
+            <label class="control-row checkbox">
+              <input type="checkbox" bind:checked={(config as any).voronoi.nucleus.enabled} disabled={!((config as any).voronoi.enabled)} />
+              <button
+                type="button"
+                class="setting-title"
+                class:locked={isLocked('voronoi.nucleus.enabled')}
+                onclick={(e) => {
+                  e.preventDefault();
+                  toggleLock('voronoi.nucleus.enabled');
+                }}
+                title="Click to lock/unlock for randomize"
+              >
+                Nucleus
+              </button>
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('voronoi.nucleus.size')} onclick={() => toggleLock('voronoi.nucleus.size')} title="Click to lock/unlock for randomize">Nucleus size: {Number((config as any).voronoi.nucleus.size).toFixed(2)}</button>
+              <input type="range" bind:value={(config as any).voronoi.nucleus.size} min="0" max="0.5" step="0.01" disabled={!((config as any).voronoi.enabled) || !((config as any).voronoi.nucleus.enabled)} />
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('voronoi.nucleus.softness')} onclick={() => toggleLock('voronoi.nucleus.softness')} title="Click to lock/unlock for randomize">Nucleus softness: {Number((config as any).voronoi.nucleus.softness).toFixed(2)}</button>
+              <input type="range" bind:value={(config as any).voronoi.nucleus.softness} min="0" max="1" step="0.01" disabled={!((config as any).voronoi.enabled) || !((config as any).voronoi.nucleus.enabled)} />
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('voronoi.nucleus.strength')} onclick={() => toggleLock('voronoi.nucleus.strength')} title="Click to lock/unlock for randomize">Nucleus strength: {Number((config as any).voronoi.nucleus.strength).toFixed(2)}</button>
+              <input type="range" bind:value={(config as any).voronoi.nucleus.strength} min="0" max="1" step="0.01" disabled={!((config as any).voronoi.enabled) || !((config as any).voronoi.nucleus.enabled)} />
+            </label>
+            <label class="control-row">
+              <button type="button" class="setting-title" class:locked={isLocked('voronoi.nucleus.color')} onclick={() => toggleLock('voronoi.nucleus.color')} title="Click to lock/unlock for randomize">Nucleus color</button>
+              <input type="color" bind:value={(config as any).voronoi.nucleus.color} disabled={!((config as any).voronoi.enabled) || !((config as any).voronoi.nucleus.enabled)} />
             </label>
           </details>
         {/if}
