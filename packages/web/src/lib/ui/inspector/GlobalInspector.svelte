@@ -16,6 +16,7 @@
     config: WallpaperConfig;
     is3DType: boolean;
     supportsBloom: boolean;
+    searchQuery: string;
 
     schedulePreviewRender: () => void;
 
@@ -44,6 +45,7 @@
     config,
     is3DType,
     supportsBloom,
+    searchQuery = $bindable(),
     schedulePreviewRender,
     generateRandomGeneratedColors,
     generateRandomIncludingType,
@@ -63,7 +65,15 @@
 </script>
 
 <div oninput={schedulePreviewRender} onchange={schedulePreviewRender}>
-  <InspectorColumn id="global" title="Global" icon="wand" defaultColumns={1} searchPlaceholder="Search global…">
+  <InspectorColumn
+    id="global"
+    title="Global"
+    icon="wand"
+    defaultColumns={1}
+    searchPlaceholder="Search global…"
+    bind:searchQuery
+    showSearch={false}
+  >
     <RandomizeSection {generateRandomGeneratedColors} {generateRandomIncludingType} />
     <TypeSection {config} {switchType} />
     <RenderSection {config} {is3DType} {supportsBloom} {isLocked} {toggleLock} bind:renderMode />

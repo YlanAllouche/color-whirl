@@ -10,11 +10,20 @@
     icon: string;
     defaultColumns?: 1 | 2;
     searchPlaceholder?: string;
+    searchQuery?: string;
+    showSearch?: boolean;
   };
 
-  let { id, title, icon, defaultColumns = 1, searchPlaceholder = 'Search settings…' }: Props = $props();
+  let {
+    id,
+    title,
+    icon,
+    defaultColumns = 1,
+    searchPlaceholder = 'Search settings…',
+    searchQuery = $bindable(''),
+    showSearch = true
+  }: Props = $props();
 
-  let search = $state('');
   const colsKey = $derived(`ui.inspector.${id}.columns`);
   let columns = $state<1 | 2>(defaultColumns);
 
@@ -36,17 +45,21 @@
     </div>
 
     <div class="inspector-tools">
-      <label class="inspector-search">
-        <LucideIcon name="search" size={16} class="inspector-search-icon" />
-        <input
-          type="search"
-          bind:value={search}
-          placeholder={searchPlaceholder}
-          autocapitalize="off"
-          autocomplete="off"
-          spellcheck="false"
-        />
-      </label>
+      {#if showSearch}
+        <label class="inspector-search">
+          <LucideIcon name="search" size={16} class="inspector-search-icon" />
+          <input
+            type="search"
+            bind:value={searchQuery}
+            placeholder={searchPlaceholder}
+            autocapitalize="off"
+            autocomplete="off"
+            spellcheck="false"
+          />
+        </label>
+      {:else}
+        <div class="inspector-search" aria-hidden="true"></div>
+      {/if}
 
       <button
         type="button"
@@ -61,7 +74,7 @@
     </div>
   </div>
 
-  <div class="inspector-scroll" use:filterDom={search}>
+  <div class="inspector-scroll" use:filterDom={searchQuery}>
     <div class="inspector-content" class:cols2={columns === 2}>
       <slot />
     </div>

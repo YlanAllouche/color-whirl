@@ -7,9 +7,10 @@
     appTitle?: string;
     quickRandomize?: () => void;
     quickExport?: () => void;
+    searchQuery?: string;
   };
 
-  let { appTitle = 'ColorWhirl', quickRandomize, quickExport }: Props = $props();
+  let { appTitle = 'ColorWhirl', quickRandomize, quickExport, searchQuery = $bindable('') }: Props = $props();
 
   const leftKey = 'ui.layout.leftWidth';
   const rightKey = 'ui.layout.rightWidth';
@@ -70,14 +71,32 @@
   onpointermove={onResizeMove}
   onpointerup={stopResize}
   onpointercancel={stopResize}
+  role="application"
+  aria-label="Wallpaper editor"
 >
-  <header class="mobile-topbar">
-    <div class="mobile-brand">
-      <span class="mobile-dot" aria-hidden="true"></span>
-      <span class="mobile-title">{appTitle}</span>
+  <header class="app-topbar">
+    <div class="topbar-left"></div>
+
+    <div class="topbar-center">
+      <div class="topbar-brand" title={appTitle}>
+        <span class="mobile-dot" aria-hidden="true"></span>
+        <span class="topbar-title">{appTitle}</span>
+      </div>
+
+      <label class="topbar-search">
+        <LucideIcon name="search" size={16} class="inspector-search-icon" />
+        <input
+          type="search"
+          bind:value={searchQuery}
+          placeholder="Filter settings…"
+          autocapitalize="off"
+          autocomplete="off"
+          spellcheck="false"
+        />
+      </label>
     </div>
 
-    <div class="mobile-actions">
+    <div class="topbar-right">
       <button type="button" class="mobile-btn" onclick={quickRandomize} disabled={!quickRandomize} title="Randomize">
         <LucideIcon name="dice-5" size={18} />
       </button>
@@ -92,6 +111,7 @@
         }}
         aria-expanded={mobileOpen}
         title="Settings"
+        data-mobile-only
       >
         <LucideIcon name={mobileOpen ? 'x' : 'sliders-horizontal'} size={18} />
       </button>

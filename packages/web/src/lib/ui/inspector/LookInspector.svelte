@@ -18,6 +18,8 @@
     showEmissionSection: boolean;
     supportsCollisions: boolean;
 
+    searchQuery: string;
+
     schedulePreviewRender: () => void;
     clearPreviewSettleTimer: () => void;
 
@@ -52,6 +54,7 @@
     supportsEmission,
     showEmissionSection,
     supportsCollisions,
+    searchQuery = $bindable(),
     schedulePreviewRender,
     clearPreviewSettleTimer,
     isLocked,
@@ -76,7 +79,15 @@
 </script>
 
 <div oninput={schedulePreviewRender} onchange={schedulePreviewRender}>
-  <InspectorColumn id="look" title="Type + Look" icon="palette" defaultColumns={2} searchPlaceholder="Search look…">
+  <InspectorColumn
+    id="look"
+    title="Type + Look"
+    icon="palette"
+    defaultColumns={2}
+    searchPlaceholder="Search look…"
+    bind:searchQuery
+    showSearch={false}
+  >
     <ColorsSection
       {config}
       {is3DType}

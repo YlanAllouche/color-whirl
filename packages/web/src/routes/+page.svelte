@@ -60,6 +60,9 @@
   
   // Reactive state using Svelte 5 runes
   let config = $state<WallpaperConfig>(cloneDefaultConfig());
+
+  // UI-only: shared search/filter for both inspector columns.
+  let inspectorSearch = $state('');
   
   let canvasContainer: HTMLDivElement | null = null;
   let canvasHost: HTMLDivElement | null = null;
@@ -854,12 +857,13 @@
   <title>ColorWhirl</title>
 </svelte:head>
 
-<EditorShell appTitle="ColorWhirl" quickRandomize={generateRandomGeneratedColors} quickExport={handleExport}>
+<EditorShell appTitle="ColorWhirl" quickRandomize={generateRandomGeneratedColors} quickExport={handleExport} bind:searchQuery={inspectorSearch}>
   <svelte:fragment slot="left">
     <GlobalInspector
       {config}
       {is3DType}
       {supportsBloom}
+      bind:searchQuery={inspectorSearch}
       {schedulePreviewRender}
       {generateRandomGeneratedColors}
       {generateRandomIncludingType}
@@ -931,6 +935,7 @@
       {supportsEmission}
       {showEmissionSection}
       {supportsCollisions}
+      bind:searchQuery={inspectorSearch}
       {schedulePreviewRender}
       {clearPreviewSettleTimer}
       {isLocked}
