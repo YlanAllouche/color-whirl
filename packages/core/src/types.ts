@@ -720,6 +720,22 @@ export interface Bands2DConfig extends BaseWallpaperConfig {
     gapPx: number;
     offsetPx: number;
     jitterPx: number;
+
+    /** Optional axis-aligned panel clip in screen space (fractional units). */
+    panel: {
+      enabled: boolean;
+      /** 0..1 fractions of the full canvas */
+      rectFrac: { x: number; y: number; w: number; h: number };
+      /** Corner radius in pixels */
+      radiusPx: number;
+      /** Optional panel underlay fill (rendered before bands inside the clip). */
+      fill: {
+        enabled: boolean;
+        color: string;
+        /** 0..1 */
+        opacity: number;
+      };
+    };
     fill: {
       enabled: boolean;
       /** 0..1 */
@@ -1286,6 +1302,12 @@ export const DEFAULT_BANDS2D_CONFIG: Bands2DConfig = {
     gapPx: 28,
     offsetPx: 0,
     jitterPx: 0,
+    panel: {
+      enabled: false,
+      rectFrac: { x: 0.33, y: 0.33, w: 0.34, h: 0.34 },
+      radiusPx: 0,
+      fill: { enabled: false, color: '#0b0b10', opacity: 1.0 }
+    },
     fill: { enabled: true, opacity: 1.0 },
     stroke: { enabled: false, widthPx: 2, color: '#0b0b10', opacity: 0.65 },
     waves: {
@@ -1785,6 +1807,26 @@ export function normalizeWallpaperConfig(input: any): WallpaperConfig {
       bAny.offsetPx = Number.isFinite(off) ? off : Number(baseBands?.offsetPx) || 0;
       const jit = Number(bAny.jitterPx);
       bAny.jitterPx = Number.isFinite(jit) ? Math.max(0, jit) : Math.max(0, Number(baseBands?.jitterPx) || 0);
+
+      if (!bAny.panel || typeof bAny.panel !== 'object') bAny.panel = cloneJson(baseBands?.panel);
+      bAny.panel.enabled = typeof bAny.panel.enabled === 'boolean' ? bAny.panel.enabled : !!(baseBands?.panel?.enabled);
+      if (!bAny.panel.rectFrac || typeof bAny.panel.rectFrac !== 'object') bAny.panel.rectFrac = cloneJson(baseBands?.panel?.rectFrac);
+      const pxRaw = Number(bAny.panel.rectFrac?.x);
+      const pyRaw = Number(bAny.panel.rectFrac?.y);
+      const pwRaw = Number(bAny.panel.rectFrac?.w);
+      const phRaw = Number(bAny.panel.rectFrac?.h);
+      const pw = Number.isFinite(pwRaw) ? clamp(pwRaw, 0.02, 1) : clamp(Number(baseBands?.panel?.rectFrac?.w) || 0.34, 0.02, 1);
+      const ph = Number.isFinite(phRaw) ? clamp(phRaw, 0.02, 1) : clamp(Number(baseBands?.panel?.rectFrac?.h) || 0.34, 0.02, 1);
+      const px = Number.isFinite(pxRaw) ? clamp(pxRaw, 0, 1 - pw) : clamp(Number(baseBands?.panel?.rectFrac?.x) || 0.33, 0, 1 - pw);
+      const py = Number.isFinite(pyRaw) ? clamp(pyRaw, 0, 1 - ph) : clamp(Number(baseBands?.panel?.rectFrac?.y) || 0.33, 0, 1 - ph);
+      bAny.panel.rectFrac = { x: px, y: py, w: pw, h: ph };
+      const pr = Number(bAny.panel.radiusPx);
+      bAny.panel.radiusPx = Number.isFinite(pr) ? Math.max(0, pr) : Math.max(0, Number(baseBands?.panel?.radiusPx) || 0);
+      if (!bAny.panel.fill || typeof bAny.panel.fill !== 'object') bAny.panel.fill = cloneJson(baseBands?.panel?.fill);
+      bAny.panel.fill.enabled = typeof bAny.panel.fill.enabled === 'boolean' ? bAny.panel.fill.enabled : !!(baseBands?.panel?.fill?.enabled);
+      if (typeof bAny.panel.fill.color !== 'string') bAny.panel.fill.color = String(bAny.panel.fill.color ?? baseBands?.panel?.fill?.color ?? '#000000');
+      const pfo = Number(bAny.panel.fill.opacity);
+      bAny.panel.fill.opacity = Number.isFinite(pfo) ? clamp(pfo, 0, 1) : clamp(Number(baseBands?.panel?.fill?.opacity) || 0, 0, 1);
 
       if (!bAny.fill || typeof bAny.fill !== 'object') bAny.fill = cloneJson(baseBands?.fill);
       bAny.fill.enabled = typeof bAny.fill.enabled === 'boolean' ? bAny.fill.enabled : !!bAny.fill.enabled;
@@ -2548,11 +2590,54 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
       }
     case 'bands2d':
       {
+        const panelEnabled = chance(0.55);
+
         const modeRoll = rng();
-        const mode: Bands2DMode = modeRoll < 0.42 ? 'waves' : modeRoll < 0.7 ? 'chevron' : 'straight';
+        const mode: Bands2DMode = panelEnabled
+          ? (modeRoll < 0.75 ? 'chevron' : modeRoll < 0.95 ? 'waves' : 'straight')
+          : (modeRoll < 0.42 ? 'waves' : modeRoll < 0.7 ? 'chevron' : 'straight');
+
         const bandWidthPx = Math.max(8, Math.round(randomWeighted(rng, 10, 260, 120)));
         const gapPx = Math.max(0, Math.round(randomWeighted(rng, 0, 120, 28)));
         const angleDeg = randomWeighted(rng, 0, 360, 22);
+
+        const pickPanelRect = (): { x: number; y: number; w: number; h: number } => {
+          const r = rng();
+          // Biased archetypes to often hit the target-like compositions.
+          if (r < 0.42) {
+            // Center card (wide_lines-like)
+            const w = clamp(tri(0.22, 0.34, 0.52), 0.08, 0.95);
+            const h = clamp(tri(0.18, 0.34, 0.6), 0.08, 0.95);
+            const x = clamp(0.5 - w * 0.5 + tri(-0.06, 0, 0.06), 0, 1 - w);
+            const y = clamp(0.5 - h * 0.5 + tri(-0.08, 0, 0.08), 0, 1 - h);
+            return { x, y, w, h };
+          }
+          if (r < 0.72) {
+            // Left strip (nordic-like)
+            const w = clamp(tri(0.12, 0.18, 0.28), 0.06, 0.6);
+            const x = clamp(tri(0.02, 0.14, 0.32), 0, 1 - w);
+            return { x, y: 0, w, h: 1 };
+          }
+          if (r < 0.82) {
+            // Right strip
+            const w = clamp(tri(0.12, 0.18, 0.28), 0.06, 0.6);
+            const x = clamp(1 - w - tri(0.02, 0.06, 0.28), 0, 1 - w);
+            return { x, y: 0, w, h: 1 };
+          }
+          if (r < 0.91) {
+            // Top banner
+            const h = clamp(tri(0.12, 0.18, 0.32), 0.06, 0.6);
+            const y = clamp(tri(0.02, 0.06, 0.22), 0, 1 - h);
+            return { x: 0, y, w: 1, h };
+          }
+          // Bottom banner
+          const h = clamp(tri(0.12, 0.18, 0.32), 0.06, 0.6);
+          const y = clamp(1 - h - tri(0.02, 0.06, 0.22), 0, 1 - h);
+          return { x: 0, y, w: 1, h };
+        };
+
+        const rectFrac = pickPanelRect();
+
         return {
           ...base,
           type: 'bands2d',
@@ -2567,6 +2652,16 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
             gapPx,
             offsetPx: Math.round(randomWeighted(rng, -400, 400, 0)),
             jitterPx: Math.round(randomWeighted(rng, 0, 120, 0)),
+            panel: {
+              enabled: panelEnabled,
+              rectFrac,
+              radiusPx: Math.round(tri(0, 0, 80)),
+              fill: {
+                enabled: panelEnabled && chance(0.18),
+                color: theme.backgroundColor,
+                opacity: clamp(tri(0.25, 0.85, 1.0), 0, 1)
+              }
+            },
             fill: { enabled: true, opacity: clamp(tri(0.35, 1.0, 1.0), 0, 1) },
             stroke: { enabled: rng() < 0.22, widthPx: Math.round(randomWeighted(rng, 1, 10, 2)), color: '#0b0b10', opacity: clamp(tri(0.1, 0.65, 1.0), 0, 1) },
             waves: {
@@ -2579,7 +2674,7 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
               amplitudePx: Math.round(randomWeighted(rng, 0, 220, 68)),
               wavelengthPx: Math.round(randomWeighted(rng, 80, 700, 260)),
               sharpness: clamp(tri(0.6, 1.4, 4.0), 0.1, 8),
-              sharedPhase: chance(0.75)
+              sharedPhase: panelEnabled ? chance(0.9) : chance(0.75)
             },
             paletteMode: rng() < 0.55 ? 'cycle' : 'weighted',
             colorWeights: [0.34, 0.28, 0.18, 0.12, 0.08]

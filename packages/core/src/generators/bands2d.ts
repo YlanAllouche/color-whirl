@@ -93,6 +93,28 @@ function triWave01(t: number): number {
   return 1 - 4 * Math.abs(f - 0.5);
 }
 
+function roundRectPath(p: Path2D, x: number, y: number, w: number, h: number, r: number): void {
+  const rr = Math.max(0, Math.min(r, w * 0.5, h * 0.5));
+  if (rr <= 0) {
+    p.rect(x, y, w, h);
+    return;
+  }
+  const x0 = x;
+  const y0 = y;
+  const x1 = x + w;
+  const y1 = y + h;
+  p.moveTo(x0 + rr, y0);
+  p.lineTo(x1 - rr, y0);
+  p.arcTo(x1, y0, x1, y0 + rr, rr);
+  p.lineTo(x1, y1 - rr);
+  p.arcTo(x1, y1, x1 - rr, y1, rr);
+  p.lineTo(x0 + rr, y1);
+  p.arcTo(x0, y1, x0, y1 - rr, rr);
+  p.lineTo(x0, y0 + rr);
+  p.arcTo(x0, y0, x0 + rr, y0, rr);
+  p.closePath();
+}
+
 export function renderBands2DToCanvas(config: Bands2DConfig, canvas?: HTMLCanvasElement): HTMLCanvasElement {
   const c = canvas ?? document.createElement('canvas');
   c.width = Math.max(1, Math.round(config.width));
@@ -180,7 +202,30 @@ export function renderBands2DToCanvas(config: Bands2DConfig, canvas?: HTMLCanvas
     return Math.max(8, Math.round(waveLen / 34));
   })();
 
+  const panel = bands?.panel ?? {};
+  const panelEnabled = !!panel.enabled;
+  const rectFrac = panel.rectFrac ?? { x: 0, y: 0, w: 1, h: 1 };
+  const rx = clamp01(Number(rectFrac.x) || 0) * w;
+  const ry = clamp01(Number(rectFrac.y) || 0) * h;
+  const rw = Math.max(1, clamp01(Number(rectFrac.w) || 1) * w);
+  const rh = Math.max(1, clamp01(Number(rectFrac.h) || 1) * h);
+  const radiusPx = Math.max(0, Number(panel.radiusPx) || 0);
+
   ctx.save();
+  if (panelEnabled) {
+    const p = new Path2D();
+    roundRectPath(p, rx, ry, rw, rh, radiusPx);
+    ctx.clip(p);
+    const pf = panel.fill ?? {};
+    const pfEnabled = !!pf.enabled;
+    const pfOpacity = clamp01(Number(pf.opacity) || 0);
+    const pfColor = typeof pf.color === 'string' ? String(pf.color) : '#000000';
+    if (pfEnabled && pfOpacity > 0) {
+      ctx.fillStyle = rgba(pfColor, pfOpacity);
+      ctx.fill(p);
+    }
+  }
+
   ctx.translate(cx, cy);
   ctx.rotate(angleRad);
   ctx.translate(-cx, -cy);

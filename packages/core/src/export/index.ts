@@ -191,6 +191,19 @@ function generateBands2DSVG(config: Extract<WallpaperConfig, { type: 'bands2d' }
   const offsetPx = Number(b.offsetPx) || 0;
   const jitterPx = Math.max(0, Number(b.jitterPx) || 0);
 
+  const panel: any = b.panel ?? {};
+  const panelEnabled = !!panel.enabled;
+  const rectFrac: any = panel.rectFrac ?? { x: 0, y: 0, w: 1, h: 1 };
+  const prx = clamp01(Number(rectFrac.x) || 0) * width;
+  const pry = clamp01(Number(rectFrac.y) || 0) * height;
+  const prw = Math.max(1, clamp01(Number(rectFrac.w) || 1) * width);
+  const prh = Math.max(1, clamp01(Number(rectFrac.h) || 1) * height);
+  const prRadius = Math.max(0, Number(panel.radiusPx) || 0);
+  const pf: any = panel.fill ?? {};
+  const panelFillEnabled = !!pf.enabled;
+  const panelFillOpacity = clamp01(Number(pf.opacity) || 0);
+  const panelFillColor = typeof pf.color === 'string' ? String(pf.color) : '#000000';
+
   const fillEnabled = !!b.fill?.enabled;
   const fillOpacity = clamp01(Number(b.fill?.opacity) || 0);
   const strokeEnabled = !!b.stroke?.enabled;
@@ -273,8 +286,22 @@ function generateBands2DSVG(config: Extract<WallpaperConfig, { type: 'bands2d' }
   const stepPx = mode === 'straight' ? Math.max(8, Math.round(period * 0.4)) : Math.max(8, Math.round((mode === 'chevron' ? chevLen : waveLen) / 34));
 
   let svg = svgStart(width, height, backgroundColor);
+
   const groupTransform = `translate(${cx.toFixed(3)} ${cy.toFixed(3)}) rotate(${angleDeg.toFixed(3)}) translate(${(-cx).toFixed(3)} ${(-cy).toFixed(3)})`;
-  svg += `  <g transform="${groupTransform}">\n`;
+  const clipId = `wm-bands-panel-${(seed >>> 0).toString(16)}`;
+  if (panelEnabled) {
+    svg += '  <defs>\n';
+    svg += `    <clipPath id="${clipId}" clipPathUnits="userSpaceOnUse">\n`;
+    svg += `      <rect x="${prx.toFixed(3)}" y="${pry.toFixed(3)}" width="${prw.toFixed(3)}" height="${prh.toFixed(3)}" rx="${prRadius.toFixed(3)}" ry="${prRadius.toFixed(3)}"/>\n`;
+    svg += '    </clipPath>\n';
+    svg += '  </defs>\n';
+  }
+
+  svg += panelEnabled ? `  <g clip-path="url(#${clipId})">\n` : '  <g>\n';
+  if (panelEnabled && panelFillEnabled && panelFillOpacity > 0) {
+    svg += `    <rect x="${prx.toFixed(3)}" y="${pry.toFixed(3)}" width="${prw.toFixed(3)}" height="${prh.toFixed(3)}" rx="${prRadius.toFixed(3)}" ry="${prRadius.toFixed(3)}" fill="${panelFillColor}" fill-opacity="${panelFillOpacity.toFixed(3)}"/>\n`;
+  }
+  svg += `    <g transform="${groupTransform}">\n`;
 
   for (let bi = 0; bi < maxBands; bi++) {
     const baseY = yStart + bi * period;
@@ -292,7 +319,7 @@ function generateBands2DSVG(config: Extract<WallpaperConfig, { type: 'bands2d' }
       : '';
 
     if (mode === 'straight') {
-      svg += `    <rect x="${xStart.toFixed(3)}" y="${y0.toFixed(3)}" width="${(xEnd - xStart).toFixed(3)}" height="${bandWidth.toFixed(3)}"${fillAttr}${strokeAttr}/>\n`;
+      svg += `      <rect x="${xStart.toFixed(3)}" y="${y0.toFixed(3)}" width="${(xEnd - xStart).toFixed(3)}" height="${bandWidth.toFixed(3)}"${fillAttr}${strokeAttr}/>\n`;
       continue;
     }
 
@@ -306,9 +333,10 @@ function generateBands2DSVG(config: Extract<WallpaperConfig, { type: 'bands2d' }
     }
     const pts = ptsTop.concat(ptsBot);
     const d = 'M ' + pts.map((p, i) => `${i === 0 ? '' : 'L '}${p.x.toFixed(3)} ${p.y.toFixed(3)}`).join(' ') + ' Z';
-    svg += `    <path d="${d}"${fillAttr}${strokeAttr}/>\n`;
+    svg += `      <path d="${d}"${fillAttr}${strokeAttr}/>\n`;
   }
 
+  svg += '    </g>\n';
   svg += '  </g>\n';
   svg += svgEnd();
   return svg;
