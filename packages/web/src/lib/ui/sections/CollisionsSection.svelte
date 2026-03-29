@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { WallpaperConfig } from '@wallpaper-maker/core';
+  import CollapsiblePanel from '$lib/ui/inspector/CollapsiblePanel.svelte';
 
   type Props = {
     config: WallpaperConfig;
@@ -25,8 +26,7 @@
 </script>
 
 {#if supportsCollisions}
-  <section class="control-section">
-    <h3>Collisions</h3>
+  <CollapsiblePanel id="collisions" title="Collisions" icon="scan" defaultOpen={false}>
     <label class="control-row">
       <button
         type="button"
@@ -216,5 +216,5 @@
         One-way priority is based on palette weights: higher weight carves lower.
       </div>
     {/if}
-  </section>
+  </CollapsiblePanel>
 {/if}

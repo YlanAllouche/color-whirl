@@ -1,0 +1,74 @@
+<script lang="ts">
+  import type { WallpaperConfig } from '@wallpaper-maker/core';
+  import type { PreviewRenderMode } from '$lib/popsicle/preview';
+
+  import InspectorColumn from '$lib/ui/inspector/InspectorColumn.svelte';
+  import RandomizeSection from '$lib/ui/sections/RandomizeSection.svelte';
+  import TypeSection from '$lib/ui/sections/TypeSection.svelte';
+  import RenderSection from '$lib/ui/sections/RenderSection.svelte';
+  import ResolutionSection from '$lib/ui/sections/ResolutionSection.svelte';
+  import ExportSection from '$lib/ui/sections/ExportSection.svelte';
+  import CliSection from '$lib/ui/sections/CliSection.svelte';
+
+  type ExportFormat = 'png' | 'jpg' | 'webp' | 'svg';
+
+  type Props = {
+    config: WallpaperConfig;
+    is3DType: boolean;
+    supportsBloom: boolean;
+
+    schedulePreviewRender: () => void;
+
+    generateRandomGeneratedColors: () => void;
+    generateRandomIncludingType: () => void;
+    switchType: (nextType: any) => void;
+
+    isLocked: (path: string) => boolean;
+    toggleLock: (path: string) => void;
+
+    RESOLUTION_PRESETS: Record<string, { width: number; height: number }>;
+    applyResolutionPreset: (preset: any) => void;
+
+    isExporting: boolean;
+    handleExport: () => void | Promise<void>;
+
+    cliCommand: string;
+    copyCliCommand: () => void;
+
+    cliViewMode: 'bash' | 'json';
+    exportFormat: ExportFormat;
+    renderMode: PreviewRenderMode;
+  };
+
+  let {
+    config,
+    is3DType,
+    supportsBloom,
+    schedulePreviewRender,
+    generateRandomGeneratedColors,
+    generateRandomIncludingType,
+    switchType,
+    isLocked,
+    toggleLock,
+    RESOLUTION_PRESETS,
+    applyResolutionPreset,
+    isExporting,
+    handleExport,
+    cliCommand,
+    copyCliCommand,
+    cliViewMode = $bindable(),
+    exportFormat = $bindable(),
+    renderMode = $bindable()
+  }: Props = $props();
+</script>
+
+<div oninput={schedulePreviewRender} onchange={schedulePreviewRender}>
+  <InspectorColumn id="global" title="Global" icon="wand" defaultColumns={1} searchPlaceholder="Search global…">
+    <RandomizeSection {generateRandomGeneratedColors} {generateRandomIncludingType} />
+    <TypeSection {config} {switchType} />
+    <RenderSection {config} {is3DType} {supportsBloom} {isLocked} {toggleLock} bind:renderMode />
+    <ResolutionSection {config} {RESOLUTION_PRESETS} applyResolutionPreset={applyResolutionPreset} />
+    <ExportSection bind:exportFormat {isExporting} {handleExport} />
+    <CliSection {cliCommand} {copyCliCommand} bind:cliViewMode />
+  </InspectorColumn>
+</div>

@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { WallpaperConfig, WallpaperType } from '@wallpaper-maker/core';
+  import CollapsiblePanel from '$lib/ui/inspector/CollapsiblePanel.svelte';
 
   type Props = {
     config: WallpaperConfig;
@@ -7,19 +8,27 @@
   };
 
   let { config, switchType }: Props = $props();
+
+  // Keep a local value bound to the <select> so it updates when config.type changes
+  // (e.g. randomize actions). Setting the `value` attribute alone does not reliably
+  // update the selected option after initial render.
+  let selectedType: WallpaperType = $state('popsicle');
+
+  $effect(() => {
+    selectedType = config.type;
+  });
+
+  function onChangeType(e: Event) {
+    const value = (e.currentTarget as HTMLSelectElement).value as WallpaperType;
+    selectedType = value;
+    switchType(value);
+  }
 </script>
 
-<section class="control-section">
-  <h3>Type</h3>
+<CollapsiblePanel id="type" title="Type" icon="shapes" defaultOpen={true}>
   <label class="control-row">
     <span class="setting-title">Generator</span>
-    <select
-      value={config.type}
-      onchange={(e) => {
-        const value = (e.currentTarget as HTMLSelectElement).value as WallpaperType;
-        switchType(value);
-      }}
-    >
+    <select bind:value={selectedType} onchange={onChangeType}>
       <option value="popsicle">Popsicle</option>
       <option value="spheres3d">Spheres (3D)</option>
       <option value="bands2d">Bands (2D)</option>
@@ -35,4 +44,4 @@
       <option value="hexgrid2d">Hex Grid (2D)</option>
     </select>
   </label>
-</section>
+</CollapsiblePanel>

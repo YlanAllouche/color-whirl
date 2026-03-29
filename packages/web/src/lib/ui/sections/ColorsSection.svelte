@@ -3,6 +3,7 @@
   import type { ColorPreset } from '$lib/color-presets';
 
   import PaletteOverrides from '$lib/ui/inspector/colors/PaletteOverrides.svelte';
+  import CollapsiblePanel from '$lib/ui/inspector/CollapsiblePanel.svelte';
 
   type Props = {
     config: WallpaperConfig;
@@ -46,8 +47,8 @@
   }: Props = $props();
 </script>
 
-<section class="control-section">
-  <h3>
+<CollapsiblePanel id="colors" title="Colors" icon="palette" defaultOpen={true}>
+  <label class="control-row">
     <button
       type="button"
       class="setting-title"
@@ -55,9 +56,10 @@
       onclick={() => toggleLock('colors')}
       title="Click to lock/unlock for randomize"
     >
-      Colors
+      Lock colors
     </button>
-  </h3>
+    <span class="setting-hint">Presets + palette overrides</span>
+  </label>
   <div class="palette-controls">
     <div class="palette-row">
       <button type="button" class="palette-nav" onclick={() => cycleColorPreset(-1)} title="Previous preset">Prev</button>
@@ -99,4 +101,4 @@
     {updatePaletteOverride}
     {togglePaletteBlock}
   />
-</section>
+</CollapsiblePanel>

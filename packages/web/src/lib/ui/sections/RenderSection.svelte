@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { WallpaperConfig } from '@wallpaper-maker/core';
   import type { PreviewRenderMode } from '$lib/popsicle/preview';
+  import CollapsiblePanel from '$lib/ui/inspector/CollapsiblePanel.svelte';
 
   type Props = {
     config: WallpaperConfig;
@@ -14,9 +15,7 @@
   let { config, is3DType, supportsBloom, isLocked, toggleLock, renderMode = $bindable() }: Props = $props();
 </script>
 
-<!-- Render -->
-<section class="control-section">
-  <h3>Render</h3>
+<CollapsiblePanel id="render" title="Render" icon="sparkles" defaultOpen={true}>
 
   {#if is3DType}
     <label class="control-row slider">
@@ -301,4 +300,4 @@
       </details>
     </div>
   {/if}
-</section>
+</CollapsiblePanel>

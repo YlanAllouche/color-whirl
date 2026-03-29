@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { WallpaperConfig } from '@wallpaper-maker/core';
+  import CollapsiblePanel from '$lib/ui/inspector/CollapsiblePanel.svelte';
 
   type Props = {
     config: WallpaperConfig;
@@ -11,8 +12,7 @@
   let { config, is3DType, isLocked, toggleLock }: Props = $props();
 </script>
 
-<section class="control-section">
-  <h3>Appearance</h3>
+<CollapsiblePanel id="appearance" title="Appearance" icon="sliders-horizontal" defaultOpen={true}>
   {#if is3DType}
     <label class="control-row">
       <button
@@ -506,4 +506,4 @@
     </button>
     <input type="color" bind:value={config.backgroundColor} />
   </label>
-</section>
+</CollapsiblePanel>

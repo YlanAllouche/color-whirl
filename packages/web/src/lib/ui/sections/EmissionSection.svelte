@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { WallpaperConfig } from '@wallpaper-maker/core';
+  import CollapsiblePanel from '$lib/ui/inspector/CollapsiblePanel.svelte';
 
   type Props = {
     config: WallpaperConfig;
@@ -12,8 +13,7 @@
 </script>
 
 {#if showEmissionSection}
-  <section class="control-section">
-    <h3>Emission</h3>
+  <CollapsiblePanel id="emission" title="Emission" icon="zap" defaultOpen={false}>
     <label class="control-row checkbox">
       <input type="checkbox" bind:checked={config.emission.enabled} />
       <button
@@ -59,5 +59,5 @@
       </button>
       <input type="range" bind:value={config.emission.intensity} min="0" max="20" step="0.05" disabled={!config.emission.enabled} />
     </label>
-  </section>
+  </CollapsiblePanel>
 {/if}

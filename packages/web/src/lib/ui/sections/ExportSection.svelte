@@ -1,4 +1,6 @@
 <script lang="ts">
+  import CollapsiblePanel from '$lib/ui/inspector/CollapsiblePanel.svelte';
+
   type ExportFormat = 'png' | 'jpg' | 'webp' | 'svg';
 
   type Props = {
@@ -10,9 +12,7 @@
   let { exportFormat = $bindable(), isExporting, handleExport }: Props = $props();
 </script>
 
-<!-- Export Section -->
-<section class="control-section">
-  <h3>Export</h3>
+<CollapsiblePanel id="export" title="Export" icon="download" defaultOpen={true}>
   <div class="export-controls">
     <select bind:value={exportFormat}>
       <option value="png">PNG</option>
@@ -20,6 +20,6 @@
       <option value="webp">WebP</option>
       <option value="svg">SVG</option>
     </select>
-    <button onclick={handleExport} disabled={isExporting}>{isExporting ? 'Exporting...' : 'Export'}</button>
+    <button type="button" onclick={handleExport} disabled={isExporting}>{isExporting ? 'Exporting...' : 'Export'}</button>
   </div>
-</section>
+</CollapsiblePanel>

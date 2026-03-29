@@ -1,4 +1,6 @@
 <script lang="ts">
+  import CollapsiblePanel from '$lib/ui/inspector/CollapsiblePanel.svelte';
+
   type Props = {
     generateRandomGeneratedColors: () => void;
     generateRandomIncludingType: () => void;
@@ -7,8 +9,7 @@
   let { generateRandomGeneratedColors, generateRandomIncludingType }: Props = $props();
 </script>
 
-<section class="control-section">
-  <h3>Randomize</h3>
+<CollapsiblePanel id="randomize" title="Randomize" icon="dice-5" defaultOpen={true}>
   <div class="randomize-buttons">
     <button
       type="button"
@@ -25,4 +26,4 @@
       all
     </button>
   </div>
-</section>
+</CollapsiblePanel>
