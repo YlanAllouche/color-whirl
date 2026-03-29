@@ -134,7 +134,13 @@
 
   let is3DType = $derived(config.type === 'popsicle' || config.type === 'spheres3d' || config.type === 'triangles3d' || config.type === 'svg3d');
   let supportsOutlineOnly = $derived(config.type === 'spheres3d' || config.type === 'triangles3d' || config.type === 'svg3d');
-  let supportsBloom = $derived(config.type !== 'hexgrid2d' && config.type !== 'ridges2d');
+  let supportsBloom = $derived(
+    config.type !== 'hexgrid2d' &&
+      config.type !== 'ridges2d' &&
+      config.type !== 'bands2d' &&
+      config.type !== 'flowlines2d' &&
+      config.type !== 'diamondgrid2d'
+  );
   let supportsCollisions = $derived(
     config.type === 'popsicle' ||
       config.type === 'circles2d' ||
@@ -795,6 +801,120 @@
           geometry: { ...src.geometry },
           spheres: { ...src.spheres, colorWeights: [...src.spheres.colorWeights], shape: { ...src.spheres.shape } }
         };
+      case 'bands2d':
+        return {
+          ...src,
+          colors: [...src.colors],
+          palette,
+          textureParams: {
+            drywall: { ...src.textureParams.drywall },
+            glass: { ...src.textureParams.glass },
+            cel: { ...src.textureParams.cel }
+          },
+          facades: {
+            side: { ...src.facades.side },
+            grazing: { ...src.facades.grazing },
+            outline: { ...src.facades.outline }
+          },
+          voronoi,
+          edge: { ...src.edge, seam: { ...src.edge.seam }, band: { ...src.edge.band } },
+          bubbles: { ...(src as any).bubbles },
+          emission: { ...src.emission },
+          bloom: { ...src.bloom },
+          collisions: { ...src.collisions, carve: { ...src.collisions.carve } },
+          lighting: {
+            ...src.lighting,
+            position: { ...src.lighting.position }
+          },
+          camera: { ...src.camera },
+          environment: { ...src.environment },
+          shadows: { ...src.shadows },
+          rendering: { ...src.rendering },
+          geometry: { ...src.geometry },
+          bands: {
+            ...src.bands,
+            fill: { ...src.bands.fill },
+            stroke: { ...src.bands.stroke },
+            waves: { ...src.bands.waves },
+            chevron: { ...src.bands.chevron },
+            colorWeights: [...(src.bands.colorWeights ?? [])]
+          }
+        };
+      case 'flowlines2d':
+        return {
+          ...src,
+          colors: [...src.colors],
+          palette,
+          textureParams: {
+            drywall: { ...src.textureParams.drywall },
+            glass: { ...src.textureParams.glass },
+            cel: { ...src.textureParams.cel }
+          },
+          facades: {
+            side: { ...src.facades.side },
+            grazing: { ...src.facades.grazing },
+            outline: { ...src.facades.outline }
+          },
+          voronoi,
+          edge: { ...src.edge, seam: { ...src.edge.seam }, band: { ...src.edge.band } },
+          bubbles: { ...(src as any).bubbles },
+          emission: { ...src.emission },
+          bloom: { ...src.bloom },
+          collisions: { ...src.collisions, carve: { ...src.collisions.carve } },
+          lighting: {
+            ...src.lighting,
+            position: { ...src.lighting.position }
+          },
+          camera: { ...src.camera },
+          environment: { ...src.environment },
+          shadows: { ...src.shadows },
+          rendering: { ...src.rendering },
+          geometry: { ...src.geometry },
+          flowlines: {
+            ...src.flowlines,
+            stroke: { ...src.flowlines.stroke },
+            colorWeights: [...(src.flowlines.colorWeights ?? [])]
+          }
+        };
+      case 'diamondgrid2d':
+        return {
+          ...src,
+          colors: [...src.colors],
+          palette,
+          textureParams: {
+            drywall: { ...src.textureParams.drywall },
+            glass: { ...src.textureParams.glass },
+            cel: { ...src.textureParams.cel }
+          },
+          facades: {
+            side: { ...src.facades.side },
+            grazing: { ...src.facades.grazing },
+            outline: { ...src.facades.outline }
+          },
+          voronoi,
+          edge: { ...src.edge, seam: { ...src.edge.seam }, band: { ...src.edge.band } },
+          bubbles: { ...(src as any).bubbles },
+          emission: { ...src.emission },
+          bloom: { ...src.bloom },
+          collisions: { ...src.collisions, carve: { ...src.collisions.carve } },
+          lighting: {
+            ...src.lighting,
+            position: { ...src.lighting.position }
+          },
+          camera: { ...src.camera },
+          environment: { ...src.environment },
+          shadows: { ...src.shadows },
+          rendering: { ...src.rendering },
+          geometry: { ...src.geometry },
+          diamondgrid: {
+            ...src.diamondgrid,
+            originPx: { ...src.diamondgrid.originPx },
+            stroke: { ...src.diamondgrid.stroke },
+            coloring: { ...src.diamondgrid.coloring, colorWeights: [...(src.diamondgrid.coloring.colorWeights ?? [])] },
+            bevel: { ...src.diamondgrid.bevel },
+            sparkles: { ...src.diamondgrid.sparkles }
+          }
+        };
       case 'circles2d':
         return {
           ...src,
@@ -1150,7 +1270,7 @@
     schedulePreviewRender();
   }
 
-  type WeightTarget = 'spheres' | 'circles' | 'polygons' | 'triangles2d' | 'prisms' | 'hexgrid' | 'ridges' | 'svg';
+  type WeightTarget = 'spheres' | 'circles' | 'polygons' | 'triangles2d' | 'prisms' | 'hexgrid' | 'ridges' | 'svg' | 'bands' | 'flowlines' | 'diamondgrid';
 
   function setEqualWeights(target: WeightTarget) {
     const n = Math.max(0, config.colors.length);
@@ -1164,11 +1284,28 @@
     if (target === 'hexgrid' && config.type === 'hexgrid2d') config.hexgrid.coloring.weights = w;
     if (target === 'ridges' && config.type === 'ridges2d') config.ridges.colorWeights = w;
     if (target === 'svg' && (config.type === 'svg2d' || config.type === 'svg3d')) config.svg.colorWeights = w;
+    if (target === 'bands' && config.type === 'bands2d') config.bands.colorWeights = w;
+    if (target === 'flowlines' && config.type === 'flowlines2d') config.flowlines.colorWeights = w;
+    if (target === 'diamondgrid' && config.type === 'diamondgrid2d') config.diamondgrid.coloring.colorWeights = w;
   }
 
   function setRandomWeights(target: WeightTarget) {
     const n = Math.max(0, config.colors.length);
-    const w = Array.from({ length: n }, () => Number(Math.max(0.01, Math.random()).toFixed(3)));
+    const seed = (config.seed >>> 0) || 1;
+    const hashU32 = (x: number) => {
+      x >>>= 0;
+      x ^= x >>> 16;
+      x = Math.imul(x, 0x7feb352d);
+      x ^= x >>> 15;
+      x = Math.imul(x, 0x846ca68b);
+      x ^= x >>> 16;
+      return x >>> 0;
+    };
+    const rand01 = (i: number) => {
+      const x = (seed ^ hashU32(i * 0x9e3779b1) ^ 0x85ebca6b) >>> 0;
+      return (hashU32(x) >>> 0) / 4294967296;
+    };
+    const w = Array.from({ length: n }, (_, i) => Number(Math.max(0.01, rand01(i)).toFixed(3)));
 
     if (target === 'spheres' && config.type === 'spheres3d') config.spheres.colorWeights = w;
     if (target === 'circles' && config.type === 'circles2d') config.circles.colorWeights = w;
@@ -1178,6 +1315,9 @@
     if (target === 'hexgrid' && config.type === 'hexgrid2d') config.hexgrid.coloring.weights = w;
     if (target === 'ridges' && config.type === 'ridges2d') config.ridges.colorWeights = w;
     if (target === 'svg' && (config.type === 'svg2d' || config.type === 'svg3d')) config.svg.colorWeights = w;
+    if (target === 'bands' && config.type === 'bands2d') config.bands.colorWeights = w;
+    if (target === 'flowlines' && config.type === 'flowlines2d') config.flowlines.colorWeights = w;
+    if (target === 'diamondgrid' && config.type === 'diamondgrid2d') config.diamondgrid.coloring.colorWeights = w;
   }
 
   function updateWeight(target: WeightTarget, index: number, value: number) {
@@ -1231,6 +1371,24 @@
       a[i] = v;
       config.svg.colorWeights = a;
     }
+
+    if (target === 'bands' && config.type === 'bands2d') {
+      const a = [...(config.bands.colorWeights ?? [])];
+      a[i] = v;
+      config.bands.colorWeights = a;
+    }
+
+    if (target === 'flowlines' && config.type === 'flowlines2d') {
+      const a = [...(config.flowlines.colorWeights ?? [])];
+      a[i] = v;
+      config.flowlines.colorWeights = a;
+    }
+
+    if (target === 'diamondgrid' && config.type === 'diamondgrid2d') {
+      const a = [...(config.diamondgrid.coloring.colorWeights ?? [])];
+      a[i] = v;
+      config.diamondgrid.coloring.colorWeights = a;
+    }
   }
 
   function generateRandomGeneratedColors() {
@@ -1242,7 +1400,21 @@
 
   function generateRandomIncludingType() {
     const seed = randomSeedU32();
-    const types: WallpaperType[] = ['popsicle', 'spheres3d', 'svg3d', 'circles2d', 'polygon2d', 'svg2d', 'triangles2d', 'ridges2d', 'triangles3d', 'hexgrid2d'];
+    const types: WallpaperType[] = [
+      'popsicle',
+      'spheres3d',
+      'svg3d',
+      'bands2d',
+      'flowlines2d',
+      'diamondgrid2d',
+      'circles2d',
+      'polygon2d',
+      'svg2d',
+      'triangles2d',
+      'ridges2d',
+      'triangles3d',
+      'hexgrid2d'
+    ];
     const currentType = config.type;
     let nextType = types[seed % types.length] ?? 'popsicle';
     if (types.length > 1 && nextType === currentType) {
@@ -1551,6 +1723,81 @@
       void c.spheres.shape.roundness;
       void c.spheres.shape.faceting;
     }
+    if (c.type === 'bands2d') {
+      void c.bands.mode;
+      void c.bands.seedOffset;
+      void c.bands.angleDeg;
+      void c.bands.bandWidthPx;
+      void c.bands.gapPx;
+      void c.bands.offsetPx;
+      void c.bands.jitterPx;
+      void c.bands.fill.enabled;
+      void c.bands.fill.opacity;
+      void c.bands.stroke.enabled;
+      void c.bands.stroke.widthPx;
+      void c.bands.stroke.color;
+      void c.bands.stroke.opacity;
+      void c.bands.waves.amplitudePx;
+      void c.bands.waves.wavelengthPx;
+      void c.bands.waves.noiseAmount;
+      void c.bands.waves.noiseScale;
+      void c.bands.chevron.amplitudePx;
+      void c.bands.chevron.wavelengthPx;
+      void c.bands.chevron.sharpness;
+      void c.bands.paletteMode;
+      void c.bands.colorWeights.join(',');
+    }
+    if (c.type === 'flowlines2d') {
+      void c.flowlines.seedOffset;
+      void c.flowlines.frequency;
+      void c.flowlines.octaves;
+      void c.flowlines.warpAmount;
+      void c.flowlines.warpFrequency;
+      void c.flowlines.strength;
+      void c.flowlines.epsilonPx;
+      void c.flowlines.spawn;
+      void c.flowlines.density;
+      void c.flowlines.spacingPx;
+      void c.flowlines.marginPx;
+      void c.flowlines.stepPx;
+      void c.flowlines.maxSteps;
+      void c.flowlines.maxLines;
+      void c.flowlines.minLengthPx;
+      void c.flowlines.jitter;
+      void c.flowlines.stroke.widthPx;
+      void c.flowlines.stroke.opacity;
+      void c.flowlines.stroke.taper;
+      void c.flowlines.paletteMode;
+      void c.flowlines.colorWeights.join(',');
+      void c.flowlines.colorJitter;
+    }
+    if (c.type === 'diamondgrid2d') {
+      void c.diamondgrid.tileWidthPx;
+      void c.diamondgrid.tileHeightPx;
+      void c.diamondgrid.marginPx;
+      void c.diamondgrid.originPx.x;
+      void c.diamondgrid.originPx.y;
+      void c.diamondgrid.overscanPx;
+      void c.diamondgrid.fillOpacity;
+      void c.diamondgrid.stroke.enabled;
+      void c.diamondgrid.stroke.widthPx;
+      void c.diamondgrid.stroke.color;
+      void c.diamondgrid.stroke.opacity;
+      void c.diamondgrid.stroke.join;
+      void c.diamondgrid.coloring.paletteMode;
+      void c.diamondgrid.coloring.colorWeights.join(',');
+      void c.diamondgrid.bevel.enabled;
+      void c.diamondgrid.bevel.amount;
+      void c.diamondgrid.bevel.lightDeg;
+      void c.diamondgrid.bevel.variation;
+      void c.diamondgrid.sparkles.enabled;
+      void c.diamondgrid.sparkles.density;
+      void c.diamondgrid.sparkles.countMax;
+      void c.diamondgrid.sparkles.sizeMinPx;
+      void c.diamondgrid.sparkles.sizeMaxPx;
+      void c.diamondgrid.sparkles.opacity;
+      void c.diamondgrid.sparkles.color;
+    }
     if (c.type === 'circles2d') {
       void c.circles.mode;
       void c.circles.count;
@@ -1733,7 +1980,7 @@
       }
     }
 
-    if (config.type === 'hexgrid2d' || config.type === 'ridges2d') {
+    if (config.type === 'hexgrid2d' || config.type === 'ridges2d' || config.type === 'bands2d' || config.type === 'flowlines2d' || config.type === 'diamondgrid2d') {
       if (config.emission.enabled) config.emission.enabled = false;
       if (config.bloom.enabled) config.bloom.enabled = false;
     }
@@ -1883,6 +2130,9 @@
             >
               <option value="popsicle">Popsicle</option>
               <option value="spheres3d">Spheres (3D)</option>
+              <option value="bands2d">Bands (2D)</option>
+              <option value="flowlines2d">Flowlines (2D)</option>
+              <option value="diamondgrid2d">Diamond Grid (2D)</option>
               <option value="circles2d">Circles (2D)</option>
               <option value="polygon2d">Polygon (2D)</option>
               <option value="svg2d">SVG (2D)</option>
@@ -4432,6 +4682,291 @@
                       updateWeight('spheres', i, Number((e.currentTarget as HTMLInputElement).value));
                     }}
                   />
+                </label>
+              {/each}
+            {/if}
+          </details>
+        </section>
+       {:else if config.type === 'bands2d'}
+        <section class="control-section">
+          <h3>Bands (2D)</h3>
+
+          <label class="control-row">
+            <button type="button" class="setting-title" class:locked={isLocked('bands.mode')} onclick={() => toggleLock('bands.mode')} title="Click to lock/unlock for randomize">Mode</button>
+            <select bind:value={config.bands.mode}>
+              <option value="waves">Waves</option>
+              <option value="chevron">Chevron</option>
+              <option value="straight">Straight</option>
+            </select>
+          </label>
+
+          <label class="control-row slider">
+            <button type="button" class="setting-title" class:locked={isLocked('bands.angleDeg')} onclick={() => toggleLock('bands.angleDeg')} title="Click to lock/unlock for randomize">Angle: {Math.round(config.bands.angleDeg)}°</button>
+            <input type="range" bind:value={config.bands.angleDeg} min="0" max="360" step="1" />
+          </label>
+
+          <label class="control-row slider">
+            <button type="button" class="setting-title" class:locked={isLocked('bands.bandWidthPx')} onclick={() => toggleLock('bands.bandWidthPx')} title="Click to lock/unlock for randomize">Band width: {Math.round(config.bands.bandWidthPx)}px</button>
+            <input type="range" bind:value={config.bands.bandWidthPx} min="2" max="600" step="1" />
+          </label>
+          <label class="control-row slider">
+            <button type="button" class="setting-title" class:locked={isLocked('bands.gapPx')} onclick={() => toggleLock('bands.gapPx')} title="Click to lock/unlock for randomize">Gap: {Math.round(config.bands.gapPx)}px</button>
+            <input type="range" bind:value={config.bands.gapPx} min="0" max="300" step="1" />
+          </label>
+
+          <details class="control-details">
+            <summary class="control-details-summary">Fill / Stroke</summary>
+            <label class="control-row checkbox">
+              <input type="checkbox" bind:checked={config.bands.fill.enabled} />
+              <button type="button" class="setting-title" class:locked={isLocked('bands.fill.enabled')} onclick={(e) => { e.preventDefault(); toggleLock('bands.fill.enabled'); }} title="Click to lock/unlock for randomize">Fill</button>
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('bands.fill.opacity')} onclick={() => toggleLock('bands.fill.opacity')} title="Click to lock/unlock for randomize">Fill opacity: {config.bands.fill.opacity.toFixed(2)}</button>
+              <input type="range" bind:value={config.bands.fill.opacity} min="0" max="1" step="0.01" disabled={!config.bands.fill.enabled} />
+            </label>
+
+            <label class="control-row checkbox">
+              <input type="checkbox" bind:checked={config.bands.stroke.enabled} />
+              <button type="button" class="setting-title" class:locked={isLocked('bands.stroke.enabled')} onclick={(e) => { e.preventDefault(); toggleLock('bands.stroke.enabled'); }} title="Click to lock/unlock for randomize">Stroke</button>
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('bands.stroke.widthPx')} onclick={() => toggleLock('bands.stroke.widthPx')} title="Click to lock/unlock for randomize">Stroke width: {Math.round(config.bands.stroke.widthPx)}px</button>
+              <input type="range" bind:value={config.bands.stroke.widthPx} min="0" max="24" step="1" disabled={!config.bands.stroke.enabled} />
+            </label>
+            <label class="control-row">
+              <button type="button" class="setting-title" class:locked={isLocked('bands.stroke.color')} onclick={() => toggleLock('bands.stroke.color')} title="Click to lock/unlock for randomize">Stroke color</button>
+              <input type="color" bind:value={config.bands.stroke.color} disabled={!config.bands.stroke.enabled} />
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('bands.stroke.opacity')} onclick={() => toggleLock('bands.stroke.opacity')} title="Click to lock/unlock for randomize">Stroke opacity: {config.bands.stroke.opacity.toFixed(2)}</button>
+              <input type="range" bind:value={config.bands.stroke.opacity} min="0" max="1" step="0.01" disabled={!config.bands.stroke.enabled} />
+            </label>
+          </details>
+
+          {#if config.bands.mode === 'waves'}
+            <details class="control-details">
+              <summary class="control-details-summary">Waves</summary>
+              <label class="control-row slider">
+                <button type="button" class="setting-title" class:locked={isLocked('bands.waves.amplitudePx')} onclick={() => toggleLock('bands.waves.amplitudePx')} title="Click to lock/unlock for randomize">Amplitude: {Math.round(config.bands.waves.amplitudePx)}px</button>
+                <input type="range" bind:value={config.bands.waves.amplitudePx} min="0" max="240" step="1" />
+              </label>
+              <label class="control-row slider">
+                <button type="button" class="setting-title" class:locked={isLocked('bands.waves.wavelengthPx')} onclick={() => toggleLock('bands.waves.wavelengthPx')} title="Click to lock/unlock for randomize">Wavelength: {Math.round(config.bands.waves.wavelengthPx)}px</button>
+                <input type="range" bind:value={config.bands.waves.wavelengthPx} min="30" max="2400" step="1" />
+              </label>
+              <label class="control-row slider">
+                <button type="button" class="setting-title" class:locked={isLocked('bands.waves.noiseAmount')} onclick={() => toggleLock('bands.waves.noiseAmount')} title="Click to lock/unlock for randomize">Noise: {config.bands.waves.noiseAmount.toFixed(2)}</button>
+                <input type="range" bind:value={config.bands.waves.noiseAmount} min="0" max="1" step="0.01" />
+              </label>
+              <label class="control-row slider">
+                <button type="button" class="setting-title" class:locked={isLocked('bands.waves.noiseScale')} onclick={() => toggleLock('bands.waves.noiseScale')} title="Click to lock/unlock for randomize">Noise scale: {config.bands.waves.noiseScale.toFixed(2)}</button>
+                <input type="range" bind:value={config.bands.waves.noiseScale} min="0.1" max="6" step="0.01" />
+              </label>
+            </details>
+          {:else if config.bands.mode === 'chevron'}
+            <details class="control-details">
+              <summary class="control-details-summary">Chevron</summary>
+              <label class="control-row slider">
+                <button type="button" class="setting-title" class:locked={isLocked('bands.chevron.amplitudePx')} onclick={() => toggleLock('bands.chevron.amplitudePx')} title="Click to lock/unlock for randomize">Amplitude: {Math.round(config.bands.chevron.amplitudePx)}px</button>
+                <input type="range" bind:value={config.bands.chevron.amplitudePx} min="0" max="320" step="1" />
+              </label>
+              <label class="control-row slider">
+                <button type="button" class="setting-title" class:locked={isLocked('bands.chevron.wavelengthPx')} onclick={() => toggleLock('bands.chevron.wavelengthPx')} title="Click to lock/unlock for randomize">Width: {Math.round(config.bands.chevron.wavelengthPx)}px</button>
+                <input type="range" bind:value={config.bands.chevron.wavelengthPx} min="20" max="1200" step="1" />
+              </label>
+              <label class="control-row slider">
+                <button type="button" class="setting-title" class:locked={isLocked('bands.chevron.sharpness')} onclick={() => toggleLock('bands.chevron.sharpness')} title="Click to lock/unlock for randomize">Sharpness: {config.bands.chevron.sharpness.toFixed(2)}</button>
+                <input type="range" bind:value={config.bands.chevron.sharpness} min="0.1" max="8" step="0.05" />
+              </label>
+            </details>
+          {/if}
+
+          <details class="control-details">
+            <summary class="control-details-summary">Palette</summary>
+            <label class="control-row">
+              <button type="button" class="setting-title" class:locked={isLocked('bands.paletteMode')} onclick={() => toggleLock('bands.paletteMode')} title="Click to lock/unlock for randomize">Mode</button>
+              <select bind:value={config.bands.paletteMode}>
+                <option value="cycle">Cycle</option>
+                <option value="weighted">Weighted</option>
+              </select>
+            </label>
+
+            {#if config.bands.paletteMode === 'weighted'}
+              <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-top:0.5rem;">
+                <button type="button" onclick={() => setEqualWeights('bands')}>Equal weights</button>
+                <button type="button" onclick={() => setRandomWeights('bands')}>Random weights</button>
+              </div>
+              {#each config.colors as c, i}
+                <label class="control-row slider">
+                  <button type="button" class="setting-title" class:locked={isLocked('bands.colorWeights')} onclick={() => toggleLock('bands.colorWeights')} title="Click to lock/unlock for randomize">w{i + 1}: {(config.bands.colorWeights[i] ?? 1).toFixed(2)} {c}</button>
+                  <input type="range" min="0" max="5" step="0.05" value={config.bands.colorWeights[i] ?? 1} oninput={(e) => updateWeight('bands', i, Number((e.currentTarget as HTMLInputElement).value))} />
+                </label>
+              {/each}
+            {/if}
+          </details>
+        </section>
+       {:else if config.type === 'flowlines2d'}
+        <section class="control-section">
+          <h3>Flowlines (2D)</h3>
+
+          <label class="control-row slider">
+            <button type="button" class="setting-title" class:locked={isLocked('flowlines.frequency')} onclick={() => toggleLock('flowlines.frequency')} title="Click to lock/unlock for randomize">Frequency: {config.flowlines.frequency.toFixed(2)}</button>
+            <input type="range" bind:value={config.flowlines.frequency} min="0.05" max="12" step="0.05" />
+          </label>
+          <label class="control-row slider">
+            <button type="button" class="setting-title" class:locked={isLocked('flowlines.density')} onclick={() => toggleLock('flowlines.density')} title="Click to lock/unlock for randomize">Density: {config.flowlines.density.toFixed(2)}</button>
+            <input type="range" bind:value={config.flowlines.density} min="0" max="1" step="0.01" />
+          </label>
+          <label class="control-row slider">
+            <button type="button" class="setting-title" class:locked={isLocked('flowlines.spacingPx')} onclick={() => toggleLock('flowlines.spacingPx')} title="Click to lock/unlock for randomize">Spacing: {Math.round(config.flowlines.spacingPx)}px</button>
+            <input type="range" bind:value={config.flowlines.spacingPx} min="2" max="40" step="1" />
+          </label>
+
+          <details class="control-details">
+            <summary class="control-details-summary">Integration</summary>
+            <label class="control-row">
+              <button type="button" class="setting-title" class:locked={isLocked('flowlines.spawn')} onclick={() => toggleLock('flowlines.spawn')} title="Click to lock/unlock for randomize">Spawn</button>
+              <select bind:value={config.flowlines.spawn}>
+                <option value="grid">Grid</option>
+                <option value="random">Random</option>
+              </select>
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('flowlines.stepPx')} onclick={() => toggleLock('flowlines.stepPx')} title="Click to lock/unlock for randomize">Step: {config.flowlines.stepPx.toFixed(2)}px</button>
+              <input type="range" bind:value={config.flowlines.stepPx} min="0.1" max="6" step="0.05" />
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('flowlines.maxSteps')} onclick={() => toggleLock('flowlines.maxSteps')} title="Click to lock/unlock for randomize">Max steps: {config.flowlines.maxSteps}</button>
+              <input type="range" bind:value={config.flowlines.maxSteps} min="20" max="1200" step="10" />
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('flowlines.maxLines')} onclick={() => toggleLock('flowlines.maxLines')} title="Click to lock/unlock for randomize">Max lines: {config.flowlines.maxLines}</button>
+              <input type="range" bind:value={config.flowlines.maxLines} min="0" max="20000" step="50" />
+            </label>
+          </details>
+
+          <details class="control-details">
+            <summary class="control-details-summary">Stroke</summary>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('flowlines.stroke.widthPx')} onclick={() => toggleLock('flowlines.stroke.widthPx')} title="Click to lock/unlock for randomize">Width: {config.flowlines.stroke.widthPx.toFixed(2)}px</button>
+              <input type="range" bind:value={config.flowlines.stroke.widthPx} min="0.05" max="8" step="0.05" />
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('flowlines.stroke.opacity')} onclick={() => toggleLock('flowlines.stroke.opacity')} title="Click to lock/unlock for randomize">Opacity: {config.flowlines.stroke.opacity.toFixed(2)}</button>
+              <input type="range" bind:value={config.flowlines.stroke.opacity} min="0" max="1" step="0.01" />
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('flowlines.stroke.taper')} onclick={() => toggleLock('flowlines.stroke.taper')} title="Click to lock/unlock for randomize">Taper: {config.flowlines.stroke.taper.toFixed(2)}</button>
+              <input type="range" bind:value={config.flowlines.stroke.taper} min="0" max="1" step="0.01" />
+            </label>
+          </details>
+
+          <details class="control-details">
+            <summary class="control-details-summary">Palette</summary>
+            <label class="control-row">
+              <button type="button" class="setting-title" class:locked={isLocked('flowlines.paletteMode')} onclick={() => toggleLock('flowlines.paletteMode')} title="Click to lock/unlock for randomize">Mode</button>
+              <select bind:value={config.flowlines.paletteMode}>
+                <option value="cycle">Cycle</option>
+                <option value="weighted">Weighted</option>
+              </select>
+            </label>
+            {#if config.flowlines.paletteMode === 'weighted'}
+              <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-top:0.5rem;">
+                <button type="button" onclick={() => setEqualWeights('flowlines')}>Equal weights</button>
+                <button type="button" onclick={() => setRandomWeights('flowlines')}>Random weights</button>
+              </div>
+              {#each config.colors as c, i}
+                <label class="control-row slider">
+                  <button type="button" class="setting-title" class:locked={isLocked('flowlines.colorWeights')} onclick={() => toggleLock('flowlines.colorWeights')} title="Click to lock/unlock for randomize">w{i + 1}: {(config.flowlines.colorWeights[i] ?? 1).toFixed(2)} {c}</button>
+                  <input type="range" min="0" max="5" step="0.05" value={config.flowlines.colorWeights[i] ?? 1} oninput={(e) => updateWeight('flowlines', i, Number((e.currentTarget as HTMLInputElement).value))} />
+                </label>
+              {/each}
+            {/if}
+          </details>
+        </section>
+       {:else if config.type === 'diamondgrid2d'}
+        <section class="control-section">
+          <h3>Diamond Grid (2D)</h3>
+
+          <label class="control-row slider">
+            <button type="button" class="setting-title" class:locked={isLocked('diamondgrid.tileWidthPx')} onclick={() => toggleLock('diamondgrid.tileWidthPx')} title="Click to lock/unlock for randomize">Tile width: {Math.round(config.diamondgrid.tileWidthPx)}px</button>
+            <input type="range" bind:value={config.diamondgrid.tileWidthPx} min="8" max="520" step="1" />
+          </label>
+          <label class="control-row slider">
+            <button type="button" class="setting-title" class:locked={isLocked('diamondgrid.tileHeightPx')} onclick={() => toggleLock('diamondgrid.tileHeightPx')} title="Click to lock/unlock for randomize">Tile height: {Math.round(config.diamondgrid.tileHeightPx)}px</button>
+            <input type="range" bind:value={config.diamondgrid.tileHeightPx} min="8" max="360" step="1" />
+          </label>
+          <label class="control-row slider">
+            <button type="button" class="setting-title" class:locked={isLocked('diamondgrid.marginPx')} onclick={() => toggleLock('diamondgrid.marginPx')} title="Click to lock/unlock for randomize">Margin: {Math.round(config.diamondgrid.marginPx)}px</button>
+            <input type="range" bind:value={config.diamondgrid.marginPx} min="0" max="40" step="1" />
+          </label>
+          <label class="control-row slider">
+            <button type="button" class="setting-title" class:locked={isLocked('diamondgrid.fillOpacity')} onclick={() => toggleLock('diamondgrid.fillOpacity')} title="Click to lock/unlock for randomize">Fill opacity: {config.diamondgrid.fillOpacity.toFixed(2)}</button>
+            <input type="range" bind:value={config.diamondgrid.fillOpacity} min="0" max="1" step="0.01" />
+          </label>
+
+          <details class="control-details">
+            <summary class="control-details-summary">Bevel</summary>
+            <label class="control-row checkbox">
+              <input type="checkbox" bind:checked={config.diamondgrid.bevel.enabled} />
+              <button type="button" class="setting-title" class:locked={isLocked('diamondgrid.bevel.enabled')} onclick={(e) => { e.preventDefault(); toggleLock('diamondgrid.bevel.enabled'); }} title="Click to lock/unlock for randomize">Enable</button>
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('diamondgrid.bevel.amount')} onclick={() => toggleLock('diamondgrid.bevel.amount')} title="Click to lock/unlock for randomize">Amount: {config.diamondgrid.bevel.amount.toFixed(2)}</button>
+              <input type="range" bind:value={config.diamondgrid.bevel.amount} min="0" max="1" step="0.01" disabled={!config.diamondgrid.bevel.enabled} />
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('diamondgrid.bevel.lightDeg')} onclick={() => toggleLock('diamondgrid.bevel.lightDeg')} title="Click to lock/unlock for randomize">Light angle: {Math.round(config.diamondgrid.bevel.lightDeg)}°</button>
+              <input type="range" bind:value={config.diamondgrid.bevel.lightDeg} min="0" max="360" step="1" disabled={!config.diamondgrid.bevel.enabled} />
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('diamondgrid.bevel.variation')} onclick={() => toggleLock('diamondgrid.bevel.variation')} title="Click to lock/unlock for randomize">Variation: {config.diamondgrid.bevel.variation.toFixed(2)}</button>
+              <input type="range" bind:value={config.diamondgrid.bevel.variation} min="0" max="1" step="0.01" disabled={!config.diamondgrid.bevel.enabled} />
+            </label>
+          </details>
+
+          <details class="control-details">
+            <summary class="control-details-summary">Sparkles</summary>
+            <label class="control-row checkbox">
+              <input type="checkbox" bind:checked={config.diamondgrid.sparkles.enabled} />
+              <button type="button" class="setting-title" class:locked={isLocked('diamondgrid.sparkles.enabled')} onclick={(e) => { e.preventDefault(); toggleLock('diamondgrid.sparkles.enabled'); }} title="Click to lock/unlock for randomize">Enable</button>
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('diamondgrid.sparkles.density')} onclick={() => toggleLock('diamondgrid.sparkles.density')} title="Click to lock/unlock for randomize">Density: {config.diamondgrid.sparkles.density.toFixed(3)}</button>
+              <input type="range" bind:value={config.diamondgrid.sparkles.density} min="0" max="0.5" step="0.001" disabled={!config.diamondgrid.sparkles.enabled} />
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('diamondgrid.sparkles.countMax')} onclick={() => toggleLock('diamondgrid.sparkles.countMax')} title="Click to lock/unlock for randomize">Count max: {config.diamondgrid.sparkles.countMax}</button>
+              <input type="range" bind:value={config.diamondgrid.sparkles.countMax} min="1" max="12" step="1" disabled={!config.diamondgrid.sparkles.enabled} />
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('diamondgrid.sparkles.sizeMaxPx')} onclick={() => toggleLock('diamondgrid.sparkles.sizeMaxPx')} title="Click to lock/unlock for randomize">Size max: {config.diamondgrid.sparkles.sizeMaxPx.toFixed(1)}px</button>
+              <input type="range" bind:value={config.diamondgrid.sparkles.sizeMaxPx} min="1" max="60" step="0.5" disabled={!config.diamondgrid.sparkles.enabled} />
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('diamondgrid.sparkles.opacity')} onclick={() => toggleLock('diamondgrid.sparkles.opacity')} title="Click to lock/unlock for randomize">Opacity: {config.diamondgrid.sparkles.opacity.toFixed(2)}</button>
+              <input type="range" bind:value={config.diamondgrid.sparkles.opacity} min="0" max="1" step="0.01" disabled={!config.diamondgrid.sparkles.enabled} />
+            </label>
+          </details>
+
+          <details class="control-details">
+            <summary class="control-details-summary">Palette</summary>
+            <label class="control-row">
+              <button type="button" class="setting-title" class:locked={isLocked('diamondgrid.coloring.paletteMode')} onclick={() => toggleLock('diamondgrid.coloring.paletteMode')} title="Click to lock/unlock for randomize">Mode</button>
+              <select bind:value={config.diamondgrid.coloring.paletteMode}>
+                <option value="cycle">Cycle</option>
+                <option value="weighted">Weighted</option>
+              </select>
+            </label>
+            {#if config.diamondgrid.coloring.paletteMode === 'weighted'}
+              <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-top:0.5rem;">
+                <button type="button" onclick={() => setEqualWeights('diamondgrid')}>Equal weights</button>
+                <button type="button" onclick={() => setRandomWeights('diamondgrid')}>Random weights</button>
+              </div>
+              {#each config.colors as c, i}
+                <label class="control-row slider">
+                  <button type="button" class="setting-title" class:locked={isLocked('diamondgrid.coloring.colorWeights')} onclick={() => toggleLock('diamondgrid.coloring.colorWeights')} title="Click to lock/unlock for randomize">w{i + 1}: {(config.diamondgrid.coloring.colorWeights[i] ?? 1).toFixed(2)} {c}</button>
+                  <input type="range" min="0" max="5" step="0.05" value={config.diamondgrid.coloring.colorWeights[i] ?? 1} oninput={(e) => updateWeight('diamondgrid', i, Number((e.currentTarget as HTMLInputElement).value))} />
                 </label>
               {/each}
             {/if}
