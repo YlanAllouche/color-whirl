@@ -172,7 +172,16 @@ export function buildFlowlines2D(config: Flowlines2DConfig): FlowlineInstance[] 
 
   const baseScale = Math.max(1, Math.min(w, h));
 
-  const psiAt = (xPx: number, yPx: number): number => {
+  // Cache the expensive scalar field on a coarse grid and bilinear-sample.
+  // This keeps the curl field deterministic while reducing noise calls per step.
+  const psiGridStepPx = clamp(spacingPx * 1.6, 6, 28);
+  const psiGridW = Math.max(2, Math.ceil(w / psiGridStepPx) + 2);
+  const psiGridH = Math.max(2, Math.ceil(h / psiGridStepPx) + 2);
+  const psiGrid = new Float32Array(psiGridW * psiGridH);
+  psiGrid.fill(Number.NaN);
+  const psiIdx = (gx: number, gy: number) => gy * psiGridW + gx;
+
+  const psiNoiseAt = (xPx: number, yPx: number): number => {
     const nx0 = (xPx / baseScale) * frequency;
     const ny0 = (yPx / baseScale) * frequency;
 
@@ -185,6 +194,40 @@ export function buildFlowlines2D(config: Flowlines2DConfig): FlowlineInstance[] 
     const nx = nx0 + wx * warpAmount;
     const ny = ny0 + wy * warpAmount;
     return fbm2D(seedU32, nx, ny, 1.0, octaves, 1001);
+  };
+
+  const psiGridAt = (gx: number, gy: number): number => {
+    const x = gx * psiGridStepPx;
+    const y = gy * psiGridStepPx;
+    const i = psiIdx(gx, gy);
+    const cur = psiGrid[i];
+    if (!Number.isNaN(cur)) return cur;
+    const v = psiNoiseAt(x, y);
+    psiGrid[i] = v;
+    return v;
+  };
+
+  const psiAt = (xPx: number, yPx: number): number => {
+    const x = clamp(xPx, 0, w);
+    const y = clamp(yPx, 0, h);
+    const gx0 = Math.floor(x / psiGridStepPx);
+    const gy0 = Math.floor(y / psiGridStepPx);
+    const gx1 = Math.max(0, Math.min(psiGridW - 1, gx0 + 1));
+    const gy1 = Math.max(0, Math.min(psiGridH - 1, gy0 + 1));
+    const gx = Math.max(0, Math.min(psiGridW - 1, gx0));
+    const gy = Math.max(0, Math.min(psiGridH - 1, gy0));
+
+    const fx = (x - gx * psiGridStepPx) / psiGridStepPx;
+    const fy = (y - gy * psiGridStepPx) / psiGridStepPx;
+
+    const v00 = psiGridAt(gx, gy);
+    const v10 = psiGridAt(gx1, gy);
+    const v01 = psiGridAt(gx, gy1);
+    const v11 = psiGridAt(gx1, gy1);
+
+    const a = lerp(v00, v10, fx);
+    const b = lerp(v01, v11, fx);
+    return lerp(a, b, fy);
   };
 
   const fieldAt = (xPx: number, yPx: number): Vec2 => {

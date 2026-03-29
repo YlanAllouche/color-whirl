@@ -242,7 +242,26 @@
 
     const aspect = config.width / config.height;
     const { previewWidth, previewHeight, cssWidth, cssHeight } = getFallbackPreviewSize(aspect, quality);
-    const effective: WallpaperConfig = { ...config, width: previewWidth, height: previewHeight } as any;
+    let effective: WallpaperConfig = { ...config, width: previewWidth, height: previewHeight } as any;
+
+    // Performance knobs for heavy 2D generators.
+    // We intentionally bias the interactive preview toward responsiveness.
+    if (quality === 'interactive' && effective.type === 'flowlines2d') {
+      const f: any = (effective as any).flowlines ?? {};
+      effective = {
+        ...(effective as any),
+        flowlines: {
+          ...f,
+          // Reduce work per frame; final render runs shortly after.
+          octaves: Math.max(1, Math.min(2, Math.round(Number(f.octaves) || 1))),
+          maxLines: Math.max(0, Math.min(700, Math.round(Number(f.maxLines) || 0))),
+          maxSteps: Math.max(1, Math.min(220, Math.round(Number(f.maxSteps) || 0))),
+          // Favor fewer streamlines.
+          spacingPx: Math.max(Number(f.spacingPx) || 2, 8),
+          stepPx: Math.max(Number(f.stepPx) || 0.05, 1.2)
+        }
+      } as any;
+    }
 
     try {
       const next = renderWallpaperToCanvas(effective, fallbackCanvas ?? undefined);
