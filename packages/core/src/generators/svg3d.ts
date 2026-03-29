@@ -505,6 +505,8 @@ export function createSvg3DScene(
   const spread = Math.max(0, Number(config.svg.spread) || 0);
   const depth = Math.max(0, Number(config.svg.depth) || 0);
   const tiltRad = degToRad(clamp(Number(config.svg.tiltDeg) || 0, 0, 80));
+  const baseRotRad = degToRad(Number(config.svg.rotateDeg) || 0);
+  const rotJitterRad = degToRad(Math.max(0, Number(config.svg.rotateJitterDeg) || 0));
   const sizeMin = Math.max(0.0001, Number(config.svg.sizeMin) || 0.0001);
   const sizeMax = Math.max(sizeMin, Number(config.svg.sizeMax) || sizeMin);
   const fillOpacity = doFill ? clamp01(Number(config.svg.opacity) || 1) : 0;
@@ -589,7 +591,7 @@ export function createSvg3DScene(
     const x = (rng() - 0.5) * 2 * spread;
     const y = (rng() - 0.5) * 2 * spread;
     const z = (rng() - 0.5) * depth;
-    const theta = rng() * Math.PI * 2;
+    const theta = baseRotRad + (rotJitterRad > 0 ? (rng() - 0.5) * rotJitterRad : 0);
     const tiltX = tiltRad > 0 ? (rng() - 0.5) * 2 * tiltRad : 0;
     const tiltY = tiltRad > 0 ? (rng() - 0.5) * 2 * tiltRad : 0;
 

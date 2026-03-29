@@ -375,6 +375,9 @@ export interface GeometryConfig {
 export type WallpaperType =
   | 'popsicle'
   | 'spheres3d'
+  | 'bands2d'
+  | 'flowlines2d'
+  | 'diamondgrid2d'
   | 'circles2d'
   | 'polygon2d'
   | 'triangles2d'
@@ -693,6 +696,136 @@ export interface Ridges2DConfig extends BaseWallpaperConfig {
   };
 }
 
+export type Bands2DMode = 'straight' | 'waves' | 'chevron';
+
+export interface Bands2DConfig extends BaseWallpaperConfig {
+  type: 'bands2d';
+  bands: {
+    mode: Bands2DMode;
+    seedOffset: number;
+    angleDeg: number;
+    bandWidthPx: number;
+    gapPx: number;
+    offsetPx: number;
+    jitterPx: number;
+    fill: {
+      enabled: boolean;
+      /** 0..1 */
+      opacity: number;
+    };
+    stroke: {
+      enabled: boolean;
+      widthPx: number;
+      color: string;
+      /** 0..1 */
+      opacity: number;
+    };
+    waves: {
+      amplitudePx: number;
+      wavelengthPx: number;
+      /** 0..1 */
+      noiseAmount: number;
+      noiseScale: number;
+    };
+    chevron: {
+      amplitudePx: number;
+      wavelengthPx: number;
+      /** 0.1..8 */
+      sharpness: number;
+    };
+    paletteMode: PaletteAssignMode;
+    /** Per-palette weights (used when paletteMode=weighted). Length may be < colors.length. */
+    colorWeights: number[];
+  };
+}
+
+export type Flowlines2DSpawn = 'grid' | 'random';
+
+export interface Flowlines2DConfig extends BaseWallpaperConfig {
+  type: 'flowlines2d';
+  flowlines: {
+    seedOffset: number;
+    frequency: number;
+    octaves: number;
+    warpAmount: number;
+    warpFrequency: number;
+    strength: number;
+    epsilonPx: number;
+
+    spawn: Flowlines2DSpawn;
+    /** 0..1: higher = more seeds */
+    density: number;
+    /** Scene units in pixels: coarse collision/packing control */
+    spacingPx: number;
+    marginPx: number;
+    stepPx: number;
+    maxSteps: number;
+    maxLines: number;
+    minLengthPx: number;
+    /** 0..1 */
+    jitter: number;
+
+    stroke: {
+      widthPx: number;
+      /** 0..1 */
+      opacity: number;
+      /** 0..1 */
+      taper: number;
+    };
+
+    paletteMode: PaletteAssignMode;
+    /** Per-palette weights (used when paletteMode=weighted). Length may be < colors.length. */
+    colorWeights: number[];
+    /** 0..1 */
+    colorJitter: number;
+  };
+}
+
+export interface DiamondGrid2DConfig extends BaseWallpaperConfig {
+  type: 'diamondgrid2d';
+  diamondgrid: {
+    tileWidthPx: number;
+    tileHeightPx: number;
+    marginPx: number;
+    originPx: { x: number; y: number };
+    overscanPx: number;
+    /** 0..1 */
+    fillOpacity: number;
+    stroke: {
+      enabled: boolean;
+      widthPx: number;
+      color: string;
+      /** 0..1 */
+      opacity: number;
+      join: 'round' | 'miter' | 'bevel';
+    };
+    coloring: {
+      paletteMode: PaletteAssignMode;
+      /** Per-palette weights (used when paletteMode=weighted). Length may be < colors.length. */
+      colorWeights: number[];
+    };
+    bevel: {
+      enabled: boolean;
+      /** 0..1 */
+      amount: number;
+      lightDeg: number;
+      /** 0..1 */
+      variation: number;
+    };
+    sparkles: {
+      enabled: boolean;
+      /** 0..1 */
+      density: number;
+      countMax: number;
+      sizeMinPx: number;
+      sizeMaxPx: number;
+      /** 0..1 */
+      opacity: number;
+      color: string;
+    };
+  };
+}
+
 export interface Svg2DConfig extends BaseWallpaperConfig {
   type: 'svg2d';
   svg: {
@@ -742,6 +875,10 @@ export interface Svg3DConfig extends BaseWallpaperConfig {
     depth: number;
     /** 0..80: per-instance random tilt range (degrees); 0 = upright */
     tiltDeg: number;
+    /** Base rotation around Z axis (degrees) */
+    rotateDeg: number;
+    /** 0..3600: per-instance random Z rotation range (degrees); 0 = fixed */
+    rotateJitterDeg: number;
     /** Scene units: overall XY size */
     sizeMin: number;
     /** Scene units: overall XY size */
@@ -774,6 +911,9 @@ export interface Svg3DConfig extends BaseWallpaperConfig {
 export type WallpaperConfig =
   | PopsicleConfig
   | Spheres3DConfig
+  | Bands2DConfig
+  | Flowlines2DConfig
+  | DiamondGrid2DConfig
   | Circles2DConfig
   | Polygon2DConfig
   | Triangles2DConfig
@@ -1107,6 +1247,96 @@ export const DEFAULT_RIDGES2D_CONFIG: Ridges2DConfig = {
   }
 };
 
+export const DEFAULT_BANDS2D_CONFIG: Bands2DConfig = {
+  ...DEFAULT_POPSICLE_CONFIG,
+  type: 'bands2d',
+  // Keep this generator crisp by default.
+  emission: { ...DEFAULT_POPSICLE_CONFIG.emission, enabled: false, intensity: 0 },
+  bloom: { ...DEFAULT_POPSICLE_CONFIG.bloom, enabled: false },
+  collisions: { ...DEFAULT_POPSICLE_CONFIG.collisions, mode: 'none', carve: { ...DEFAULT_POPSICLE_CONFIG.collisions.carve } },
+  bands: {
+    mode: 'waves',
+    seedOffset: 0,
+    angleDeg: 22,
+    bandWidthPx: 120,
+    gapPx: 28,
+    offsetPx: 0,
+    jitterPx: 0,
+    fill: { enabled: true, opacity: 1.0 },
+    stroke: { enabled: false, widthPx: 2, color: '#0b0b10', opacity: 0.65 },
+    waves: {
+      amplitudePx: 36,
+      wavelengthPx: 520,
+      noiseAmount: 0.25,
+      noiseScale: 0.9
+    },
+    chevron: {
+      amplitudePx: 68,
+      wavelengthPx: 260,
+      sharpness: 1.4
+    },
+    paletteMode: 'cycle',
+    colorWeights: [0.34, 0.28, 0.18, 0.12, 0.08]
+  }
+};
+
+export const DEFAULT_FLOWLINES2D_CONFIG: Flowlines2DConfig = {
+  ...DEFAULT_POPSICLE_CONFIG,
+  type: 'flowlines2d',
+  emission: { ...DEFAULT_POPSICLE_CONFIG.emission, enabled: false, intensity: 0 },
+  bloom: { ...DEFAULT_POPSICLE_CONFIG.bloom, enabled: false },
+  collisions: { ...DEFAULT_POPSICLE_CONFIG.collisions, mode: 'none', carve: { ...DEFAULT_POPSICLE_CONFIG.collisions.carve } },
+  flowlines: {
+    seedOffset: 0,
+    frequency: 2.4,
+    octaves: 3,
+    warpAmount: 0.55,
+    warpFrequency: 1.8,
+    strength: 1.0,
+    epsilonPx: 1.0,
+
+    spawn: 'grid',
+    density: 0.9,
+    spacingPx: 6,
+    marginPx: 18,
+    stepPx: 1.15,
+    maxSteps: 240,
+    maxLines: 2600,
+    minLengthPx: 26,
+    jitter: 1.0,
+
+    stroke: {
+      widthPx: 1.2,
+      opacity: 0.22,
+      taper: 0.25
+    },
+
+    paletteMode: 'weighted',
+    colorWeights: [0.34, 0.28, 0.18, 0.12, 0.08],
+    colorJitter: 0.12
+  }
+};
+
+export const DEFAULT_DIAMONDGRID2D_CONFIG: DiamondGrid2DConfig = {
+  ...DEFAULT_POPSICLE_CONFIG,
+  type: 'diamondgrid2d',
+  emission: { ...DEFAULT_POPSICLE_CONFIG.emission, enabled: false, intensity: 0 },
+  bloom: { ...DEFAULT_POPSICLE_CONFIG.bloom, enabled: false },
+  collisions: { ...DEFAULT_POPSICLE_CONFIG.collisions, mode: 'none', carve: { ...DEFAULT_POPSICLE_CONFIG.collisions.carve } },
+  diamondgrid: {
+    tileWidthPx: 120,
+    tileHeightPx: 60,
+    marginPx: 2,
+    originPx: { x: 0, y: 0 },
+    overscanPx: 64,
+    fillOpacity: 0.96,
+    stroke: { enabled: false, widthPx: 2, color: '#0b0b10', opacity: 0.6, join: 'round' },
+    coloring: { paletteMode: 'weighted', colorWeights: [0.34, 0.28, 0.18, 0.12, 0.08] },
+    bevel: { enabled: true, amount: 0.48, lightDeg: 315, variation: 0.15 },
+    sparkles: { enabled: false, density: 0.03, countMax: 2, sizeMinPx: 1.0, sizeMaxPx: 10.0, opacity: 0.28, color: '#ffffff' }
+  }
+};
+
 export const DEFAULT_SVG_SOURCE =
   `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-app-window-icon lucide-app-window"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M10 4v4"/><path d="M2 8h20"/><path d="M6 4v4"/></svg>`;
 
@@ -1143,6 +1373,8 @@ export const DEFAULT_SVG3D_CONFIG: Svg3DConfig = {
     spread: 4.4,
     depth: 4.0,
     tiltDeg: 0,
+    rotateDeg: 0,
+    rotateJitterDeg: 360,
     sizeMin: 0.14,
     sizeMax: 0.5,
     extrudeDepth: 0.22,
@@ -1157,6 +1389,9 @@ export const DEFAULT_SVG3D_CONFIG: Svg3DConfig = {
 export const DEFAULT_CONFIG_BY_TYPE: Record<WallpaperType, WallpaperConfig> = {
   popsicle: DEFAULT_POPSICLE_CONFIG,
   spheres3d: DEFAULT_SPHERES3D_CONFIG,
+  bands2d: DEFAULT_BANDS2D_CONFIG,
+  flowlines2d: DEFAULT_FLOWLINES2D_CONFIG,
+  diamondgrid2d: DEFAULT_DIAMONDGRID2D_CONFIG,
   circles2d: DEFAULT_CIRCLES2D_CONFIG,
   polygon2d: DEFAULT_POLYGON2D_CONFIG,
   triangles2d: DEFAULT_TRIANGLES2D_CONFIG,
@@ -1469,6 +1704,11 @@ export function normalizeWallpaperConfig(input: any): WallpaperConfig {
           ? clamp(tilt, 0, 80)
           : clamp(Number(baseSvg?.tiltDeg) || 0, 0, 80);
 
+        const rot = Number(sAny.rotateDeg);
+        sAny.rotateDeg = Number.isFinite(rot) ? rot : Number(baseSvg?.rotateDeg) || 0;
+        const rj = Number(sAny.rotateJitterDeg);
+        sAny.rotateJitterDeg = Number.isFinite(rj) ? clamp(rj, 0, 3600) : clamp(Number(baseSvg?.rotateJitterDeg) || 0, 0, 3600);
+
         const sMin = Number(sAny.sizeMin);
         const sMax = Number(sAny.sizeMax);
         sAny.sizeMin = Number.isFinite(sMin) ? Math.max(0.0001, sMin) : Math.max(0.0001, Number(baseSvg?.sizeMin) || 0.0001);
@@ -1496,6 +1736,179 @@ export function normalizeWallpaperConfig(input: any): WallpaperConfig {
         const op = Number(sAny.opacity);
         sAny.opacity = Number.isFinite(op) ? clamp(op, 0, 1) : clamp(Number(baseSvg?.opacity) || 1, 0, 1);
       }
+    }
+  }
+
+  // Basic bands2d config validation.
+  if ((merged as any).type === 'bands2d') {
+    const baseBands: any = (base as any).bands;
+    const bAny: any = (merged as any).bands;
+    if (!bAny || typeof bAny !== 'object') {
+      (merged as any).bands = cloneJson(baseBands);
+    } else {
+      const modeRaw = String(bAny.mode ?? baseBands?.mode ?? 'straight');
+      bAny.mode = modeRaw === 'waves' || modeRaw === 'chevron' ? modeRaw : 'straight';
+      const so = Number(bAny.seedOffset);
+      bAny.seedOffset = Number.isFinite(so) ? Math.round(so) : Math.round(Number(baseBands?.seedOffset) || 0);
+      const ang = Number(bAny.angleDeg);
+      bAny.angleDeg = Number.isFinite(ang) ? ang : Number(baseBands?.angleDeg) || 0;
+      const bw = Number(bAny.bandWidthPx);
+      bAny.bandWidthPx = Number.isFinite(bw) ? Math.max(0.1, bw) : Math.max(0.1, Number(baseBands?.bandWidthPx) || 1);
+      const gp = Number(bAny.gapPx);
+      bAny.gapPx = Number.isFinite(gp) ? Math.max(0, gp) : Math.max(0, Number(baseBands?.gapPx) || 0);
+      const off = Number(bAny.offsetPx);
+      bAny.offsetPx = Number.isFinite(off) ? off : Number(baseBands?.offsetPx) || 0;
+      const jit = Number(bAny.jitterPx);
+      bAny.jitterPx = Number.isFinite(jit) ? Math.max(0, jit) : Math.max(0, Number(baseBands?.jitterPx) || 0);
+
+      if (!bAny.fill || typeof bAny.fill !== 'object') bAny.fill = cloneJson(baseBands?.fill);
+      bAny.fill.enabled = typeof bAny.fill.enabled === 'boolean' ? bAny.fill.enabled : !!bAny.fill.enabled;
+      const fo = Number(bAny.fill.opacity);
+      bAny.fill.opacity = Number.isFinite(fo) ? clamp(fo, 0, 1) : clamp(Number(baseBands?.fill?.opacity) || 0, 0, 1);
+
+      if (!bAny.stroke || typeof bAny.stroke !== 'object') bAny.stroke = cloneJson(baseBands?.stroke);
+      bAny.stroke.enabled = typeof bAny.stroke.enabled === 'boolean' ? bAny.stroke.enabled : !!bAny.stroke.enabled;
+      const sw = Number(bAny.stroke.widthPx);
+      bAny.stroke.widthPx = Number.isFinite(sw) ? Math.max(0, sw) : Math.max(0, Number(baseBands?.stroke?.widthPx) || 0);
+      if (typeof bAny.stroke.color !== 'string') bAny.stroke.color = String(bAny.stroke.color ?? baseBands?.stroke?.color ?? '#000000');
+      const sop = Number(bAny.stroke.opacity);
+      bAny.stroke.opacity = Number.isFinite(sop) ? clamp(sop, 0, 1) : clamp(Number(baseBands?.stroke?.opacity) || 0, 0, 1);
+
+      if (!bAny.waves || typeof bAny.waves !== 'object') bAny.waves = cloneJson(baseBands?.waves);
+      const wa = Number(bAny.waves.amplitudePx);
+      bAny.waves.amplitudePx = Number.isFinite(wa) ? Math.max(0, wa) : Math.max(0, Number(baseBands?.waves?.amplitudePx) || 0);
+      const wl = Number(bAny.waves.wavelengthPx);
+      bAny.waves.wavelengthPx = Number.isFinite(wl) ? Math.max(1, wl) : Math.max(1, Number(baseBands?.waves?.wavelengthPx) || 1);
+      const na = Number(bAny.waves.noiseAmount);
+      bAny.waves.noiseAmount = Number.isFinite(na) ? clamp(na, 0, 1) : clamp(Number(baseBands?.waves?.noiseAmount) || 0, 0, 1);
+      const ns = Number(bAny.waves.noiseScale);
+      bAny.waves.noiseScale = Number.isFinite(ns) ? Math.max(0.000001, ns) : Math.max(0.000001, Number(baseBands?.waves?.noiseScale) || 1);
+
+      if (!bAny.chevron || typeof bAny.chevron !== 'object') bAny.chevron = cloneJson(baseBands?.chevron);
+      const ca = Number(bAny.chevron.amplitudePx);
+      bAny.chevron.amplitudePx = Number.isFinite(ca) ? Math.max(0, ca) : Math.max(0, Number(baseBands?.chevron?.amplitudePx) || 0);
+      const cl = Number(bAny.chevron.wavelengthPx);
+      bAny.chevron.wavelengthPx = Number.isFinite(cl) ? Math.max(1, cl) : Math.max(1, Number(baseBands?.chevron?.wavelengthPx) || 1);
+      const cs = Number(bAny.chevron.sharpness);
+      bAny.chevron.sharpness = Number.isFinite(cs) ? clamp(cs, 0.1, 8) : clamp(Number(baseBands?.chevron?.sharpness) || 1, 0.1, 8);
+
+      bAny.paletteMode = bAny.paletteMode === 'cycle' ? 'cycle' : 'weighted';
+      if (!Array.isArray(bAny.colorWeights)) bAny.colorWeights = Array.isArray(baseBands?.colorWeights) ? baseBands.colorWeights.slice() : [];
+    }
+  }
+
+  // Basic flowlines2d config validation.
+  if ((merged as any).type === 'flowlines2d') {
+    const baseFlow: any = (base as any).flowlines;
+    const fAny: any = (merged as any).flowlines;
+    if (!fAny || typeof fAny !== 'object') {
+      (merged as any).flowlines = cloneJson(baseFlow);
+    } else {
+      const so = Number(fAny.seedOffset);
+      fAny.seedOffset = Number.isFinite(so) ? Math.round(so) : Math.round(Number(baseFlow?.seedOffset) || 0);
+      const fr = Number(fAny.frequency);
+      fAny.frequency = Number.isFinite(fr) ? Math.max(0.000001, fr) : Math.max(0.000001, Number(baseFlow?.frequency) || 1);
+      const oc = Number(fAny.octaves);
+      fAny.octaves = Number.isFinite(oc) ? Math.max(1, Math.min(16, Math.round(oc))) : Math.max(1, Math.min(16, Math.round(Number(baseFlow?.octaves) || 1)));
+      const wa = Number(fAny.warpAmount);
+      fAny.warpAmount = Number.isFinite(wa) ? Math.max(0, wa) : Math.max(0, Number(baseFlow?.warpAmount) || 0);
+      const wf = Number(fAny.warpFrequency);
+      fAny.warpFrequency = Number.isFinite(wf) ? Math.max(0.000001, wf) : Math.max(0.000001, Number(baseFlow?.warpFrequency) || 1);
+      const st = Number(fAny.strength);
+      fAny.strength = Number.isFinite(st) ? Math.max(0, st) : Math.max(0, Number(baseFlow?.strength) || 0);
+      const eps = Number(fAny.epsilonPx);
+      fAny.epsilonPx = Number.isFinite(eps) ? Math.max(0.1, eps) : Math.max(0.1, Number(baseFlow?.epsilonPx) || 1);
+      fAny.spawn = fAny.spawn === 'random' ? 'random' : 'grid';
+      const den = Number(fAny.density);
+      fAny.density = Number.isFinite(den) ? clamp(den, 0, 1) : clamp(Number(baseFlow?.density) || 0, 0, 1);
+      const sp = Number(fAny.spacingPx);
+      fAny.spacingPx = Number.isFinite(sp) ? Math.max(2, sp) : Math.max(2, Number(baseFlow?.spacingPx) || 2);
+      const mar = Number(fAny.marginPx);
+      fAny.marginPx = Number.isFinite(mar) ? Math.max(0, mar) : Math.max(0, Number(baseFlow?.marginPx) || 0);
+      const step = Number(fAny.stepPx);
+      fAny.stepPx = Number.isFinite(step) ? Math.max(0.05, step) : Math.max(0.05, Number(baseFlow?.stepPx) || 0.05);
+      const ms = Number(fAny.maxSteps);
+      fAny.maxSteps = Number.isFinite(ms) ? Math.max(1, Math.round(ms)) : Math.max(1, Math.round(Number(baseFlow?.maxSteps) || 1));
+      const ml = Number(fAny.maxLines);
+      fAny.maxLines = Number.isFinite(ml) ? Math.max(0, Math.round(ml)) : Math.max(0, Math.round(Number(baseFlow?.maxLines) || 0));
+      const minL = Number(fAny.minLengthPx);
+      fAny.minLengthPx = Number.isFinite(minL) ? Math.max(0, minL) : Math.max(0, Number(baseFlow?.minLengthPx) || 0);
+      const jit = Number(fAny.jitter);
+      fAny.jitter = Number.isFinite(jit) ? clamp(jit, 0, 1) : clamp(Number(baseFlow?.jitter) || 0, 0, 1);
+
+      if (!fAny.stroke || typeof fAny.stroke !== 'object') fAny.stroke = cloneJson(baseFlow?.stroke);
+      const lw = Number(fAny.stroke.widthPx);
+      fAny.stroke.widthPx = Number.isFinite(lw) ? Math.max(0.05, lw) : Math.max(0.05, Number(baseFlow?.stroke?.widthPx) || 0.05);
+      const lo = Number(fAny.stroke.opacity);
+      fAny.stroke.opacity = Number.isFinite(lo) ? clamp(lo, 0, 1) : clamp(Number(baseFlow?.stroke?.opacity) || 0, 0, 1);
+      const tp = Number(fAny.stroke.taper);
+      fAny.stroke.taper = Number.isFinite(tp) ? clamp(tp, 0, 1) : clamp(Number(baseFlow?.stroke?.taper) || 0, 0, 1);
+
+      fAny.paletteMode = fAny.paletteMode === 'cycle' ? 'cycle' : 'weighted';
+      if (!Array.isArray(fAny.colorWeights)) fAny.colorWeights = Array.isArray(baseFlow?.colorWeights) ? baseFlow.colorWeights.slice() : [];
+      const cj = Number(fAny.colorJitter);
+      fAny.colorJitter = Number.isFinite(cj) ? clamp(cj, 0, 1) : clamp(Number(baseFlow?.colorJitter) || 0, 0, 1);
+    }
+  }
+
+  // Basic diamondgrid2d config validation.
+  if ((merged as any).type === 'diamondgrid2d') {
+    const baseDg: any = (base as any).diamondgrid;
+    const dAny: any = (merged as any).diamondgrid;
+    if (!dAny || typeof dAny !== 'object') {
+      (merged as any).diamondgrid = cloneJson(baseDg);
+    } else {
+      const tw = Number(dAny.tileWidthPx);
+      dAny.tileWidthPx = Number.isFinite(tw) ? Math.max(2, tw) : Math.max(2, Number(baseDg?.tileWidthPx) || 2);
+      const th = Number(dAny.tileHeightPx);
+      dAny.tileHeightPx = Number.isFinite(th) ? Math.max(2, th) : Math.max(2, Number(baseDg?.tileHeightPx) || 2);
+      const m = Number(dAny.marginPx);
+      dAny.marginPx = Number.isFinite(m) ? Math.max(0, m) : Math.max(0, Number(baseDg?.marginPx) || 0);
+      if (!dAny.originPx || typeof dAny.originPx !== 'object') dAny.originPx = cloneJson(baseDg?.originPx);
+      const ox = Number(dAny.originPx.x);
+      const oy = Number(dAny.originPx.y);
+      dAny.originPx.x = Number.isFinite(ox) ? ox : Number(baseDg?.originPx?.x) || 0;
+      dAny.originPx.y = Number.isFinite(oy) ? oy : Number(baseDg?.originPx?.y) || 0;
+      const os = Number(dAny.overscanPx);
+      dAny.overscanPx = Number.isFinite(os) ? Math.max(0, os) : Math.max(0, Number(baseDg?.overscanPx) || 0);
+      const fo = Number(dAny.fillOpacity);
+      dAny.fillOpacity = Number.isFinite(fo) ? clamp(fo, 0, 1) : clamp(Number(baseDg?.fillOpacity) || 0, 0, 1);
+
+      if (!dAny.stroke || typeof dAny.stroke !== 'object') dAny.stroke = cloneJson(baseDg?.stroke);
+      dAny.stroke.enabled = typeof dAny.stroke.enabled === 'boolean' ? dAny.stroke.enabled : !!dAny.stroke.enabled;
+      const sw = Number(dAny.stroke.widthPx);
+      dAny.stroke.widthPx = Number.isFinite(sw) ? Math.max(0, sw) : Math.max(0, Number(baseDg?.stroke?.widthPx) || 0);
+      if (typeof dAny.stroke.color !== 'string') dAny.stroke.color = String(dAny.stroke.color ?? baseDg?.stroke?.color ?? '#000000');
+      const so = Number(dAny.stroke.opacity);
+      dAny.stroke.opacity = Number.isFinite(so) ? clamp(so, 0, 1) : clamp(Number(baseDg?.stroke?.opacity) || 0, 0, 1);
+      dAny.stroke.join = dAny.stroke.join === 'miter' ? 'miter' : dAny.stroke.join === 'bevel' ? 'bevel' : 'round';
+
+      if (!dAny.coloring || typeof dAny.coloring !== 'object') dAny.coloring = cloneJson(baseDg?.coloring);
+      dAny.coloring.paletteMode = dAny.coloring.paletteMode === 'cycle' ? 'cycle' : 'weighted';
+      if (!Array.isArray(dAny.coloring.colorWeights)) dAny.coloring.colorWeights = Array.isArray(baseDg?.coloring?.colorWeights) ? baseDg.coloring.colorWeights.slice() : [];
+
+      if (!dAny.bevel || typeof dAny.bevel !== 'object') dAny.bevel = cloneJson(baseDg?.bevel);
+      dAny.bevel.enabled = typeof dAny.bevel.enabled === 'boolean' ? dAny.bevel.enabled : !!dAny.bevel.enabled;
+      const ba = Number(dAny.bevel.amount);
+      dAny.bevel.amount = Number.isFinite(ba) ? clamp(ba, 0, 1) : clamp(Number(baseDg?.bevel?.amount) || 0, 0, 1);
+      const ld = Number(dAny.bevel.lightDeg);
+      dAny.bevel.lightDeg = Number.isFinite(ld) ? ld : Number(baseDg?.bevel?.lightDeg) || 0;
+      const bv = Number(dAny.bevel.variation);
+      dAny.bevel.variation = Number.isFinite(bv) ? clamp(bv, 0, 1) : clamp(Number(baseDg?.bevel?.variation) || 0, 0, 1);
+
+      if (!dAny.sparkles || typeof dAny.sparkles !== 'object') dAny.sparkles = cloneJson(baseDg?.sparkles);
+      dAny.sparkles.enabled = typeof dAny.sparkles.enabled === 'boolean' ? dAny.sparkles.enabled : !!dAny.sparkles.enabled;
+      const sd = Number(dAny.sparkles.density);
+      dAny.sparkles.density = Number.isFinite(sd) ? clamp(sd, 0, 1) : clamp(Number(baseDg?.sparkles?.density) || 0, 0, 1);
+      const cm = Number(dAny.sparkles.countMax);
+      dAny.sparkles.countMax = Number.isFinite(cm) ? Math.max(1, Math.min(32, Math.round(cm))) : Math.max(1, Math.min(32, Math.round(Number(baseDg?.sparkles?.countMax) || 1)));
+      const smin = Number(dAny.sparkles.sizeMinPx);
+      const smax = Number(dAny.sparkles.sizeMaxPx);
+      dAny.sparkles.sizeMinPx = Number.isFinite(smin) ? Math.max(0.1, smin) : Math.max(0.1, Number(baseDg?.sparkles?.sizeMinPx) || 0.1);
+      dAny.sparkles.sizeMaxPx = Number.isFinite(smax) ? Math.max(dAny.sparkles.sizeMinPx, smax) : Math.max(dAny.sparkles.sizeMinPx, Number(baseDg?.sparkles?.sizeMaxPx) || dAny.sparkles.sizeMinPx);
+      const sop = Number(dAny.sparkles.opacity);
+      dAny.sparkles.opacity = Number.isFinite(sop) ? clamp(sop, 0, 1) : clamp(Number(baseDg?.sparkles?.opacity) || 0, 0, 1);
+      if (typeof dAny.sparkles.color !== 'string') dAny.sparkles.color = String(dAny.sparkles.color ?? baseDg?.sparkles?.color ?? '#ffffff');
     }
   }
 
@@ -2107,6 +2520,105 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
         }
       };
       }
+    case 'bands2d':
+      {
+        const modeRoll = rng();
+        const mode: Bands2DMode = modeRoll < 0.42 ? 'waves' : modeRoll < 0.7 ? 'chevron' : 'straight';
+        const bandWidthPx = Math.max(8, Math.round(randomWeighted(rng, 10, 260, 120)));
+        const gapPx = Math.max(0, Math.round(randomWeighted(rng, 0, 120, 28)));
+        const angleDeg = randomWeighted(rng, 0, 360, 22);
+        return {
+          ...base,
+          type: 'bands2d',
+          emission: { ...base.emission, enabled: false, intensity: 0 },
+          bloom: { ...base.bloom, enabled: false },
+          collisions: { ...base.collisions, mode: 'none', carve: { ...base.collisions.carve, marginPx: 0, featherPx: 0 } },
+          bands: {
+            mode,
+            seedOffset: Math.round(tri(-50, 0, 50)),
+            angleDeg,
+            bandWidthPx,
+            gapPx,
+            offsetPx: Math.round(randomWeighted(rng, -400, 400, 0)),
+            jitterPx: Math.round(randomWeighted(rng, 0, 120, 0)),
+            fill: { enabled: true, opacity: clamp(tri(0.35, 1.0, 1.0), 0, 1) },
+            stroke: { enabled: rng() < 0.22, widthPx: Math.round(randomWeighted(rng, 1, 10, 2)), color: '#0b0b10', opacity: clamp(tri(0.1, 0.65, 1.0), 0, 1) },
+            waves: {
+              amplitudePx: Math.round(randomWeighted(rng, 0, 140, 36)),
+              wavelengthPx: Math.round(randomWeighted(rng, 120, 1200, 520)),
+              noiseAmount: clamp(tri(0, 0.25, 1), 0, 1),
+              noiseScale: clamp(tri(0.2, 0.9, 3.5), 0.01, 50)
+            },
+            chevron: {
+              amplitudePx: Math.round(randomWeighted(rng, 0, 220, 68)),
+              wavelengthPx: Math.round(randomWeighted(rng, 80, 700, 260)),
+              sharpness: clamp(tri(0.6, 1.4, 4.0), 0.1, 8)
+            },
+            paletteMode: rng() < 0.55 ? 'cycle' : 'weighted',
+            colorWeights: [0.34, 0.28, 0.18, 0.12, 0.08]
+          }
+        } as any;
+      }
+    case 'flowlines2d':
+      {
+        return {
+          ...base,
+          type: 'flowlines2d',
+          emission: { ...base.emission, enabled: false, intensity: 0 },
+          bloom: { ...base.bloom, enabled: false },
+          collisions: { ...base.collisions, mode: 'none', carve: { ...base.collisions.carve, marginPx: 0, featherPx: 0 } },
+          flowlines: {
+            seedOffset: Math.round(tri(-50, 0, 50)),
+            frequency: clamp(tri(0.4, 2.4, 6.5), 0.05, 50),
+            octaves: Math.max(1, Math.min(8, Math.round(tri(1, 3, 7)))),
+            warpAmount: clamp(tri(0.0, 0.55, 2.2), 0, 10),
+            warpFrequency: clamp(tri(0.2, 1.8, 4.2), 0.01, 50),
+            strength: clamp(tri(0.25, 1.0, 2.2), 0, 20),
+            epsilonPx: clamp(tri(0.4, 1.0, 2.0), 0.1, 6),
+            spawn: rng() < 0.8 ? 'grid' : 'random',
+            density: clamp(tri(0.2, 0.9, 1.0), 0, 1),
+            spacingPx: clamp(tri(2, 6, 14), 2, 80),
+            marginPx: clamp(tri(0, 18, 80), 0, 400),
+            stepPx: clamp(tri(0.4, 1.15, 2.8), 0.05, 20),
+            maxSteps: Math.max(12, Math.min(1200, Math.round(tri(40, 240, 680)))),
+            maxLines: Math.max(0, Math.min(20000, Math.round(randomWeighted(rng, 50, 6000, 2600)))),
+            minLengthPx: clamp(tri(0, 26, 120), 0, 2000),
+            jitter: clamp(tri(0, 1.0, 1.0), 0, 1),
+            stroke: {
+              widthPx: clamp(tri(0.3, 1.2, 3.6), 0.05, 50),
+              opacity: clamp(tri(0.05, 0.22, 0.55), 0, 1),
+              taper: clamp(tri(0.0, 0.25, 0.7), 0, 1)
+            },
+            paletteMode: rng() < 0.65 ? 'weighted' : 'cycle',
+            colorWeights: [0.34, 0.28, 0.18, 0.12, 0.08],
+            colorJitter: clamp(tri(0, 0.12, 0.45), 0, 1)
+          }
+        } as any;
+      }
+    case 'diamondgrid2d':
+      {
+        const tw = Math.round(randomWeighted(rng, 40, 260, 120));
+        const th = Math.round(clamp(tw * clamp(tri(0.35, 0.5, 0.7), 0.1, 2), 20, 180));
+        return {
+          ...base,
+          type: 'diamondgrid2d',
+          emission: { ...base.emission, enabled: false, intensity: 0 },
+          bloom: { ...base.bloom, enabled: false },
+          collisions: { ...base.collisions, mode: 'none', carve: { ...base.collisions.carve, marginPx: 0, featherPx: 0 } },
+          diamondgrid: {
+            tileWidthPx: tw,
+            tileHeightPx: th,
+            marginPx: Math.round(randomWeighted(rng, 0, 14, 2)),
+            originPx: { x: 0, y: 0 },
+            overscanPx: Math.round(randomWeighted(rng, 0, 220, 64)),
+            fillOpacity: clamp(tri(0.35, 0.96, 1.0), 0, 1),
+            stroke: { enabled: rng() < 0.3, widthPx: Math.round(randomWeighted(rng, 1, 10, 2)), color: '#0b0b10', opacity: clamp(tri(0.15, 0.6, 1.0), 0, 1), join: 'round' },
+            coloring: { paletteMode: rng() < 0.65 ? 'weighted' : 'cycle', colorWeights: [0.34, 0.28, 0.18, 0.12, 0.08] },
+            bevel: { enabled: rng() < 0.92, amount: clamp(tri(0, 0.48, 1.0), 0, 1), lightDeg: randomWeighted(rng, 0, 360, 315), variation: clamp(tri(0, 0.15, 0.6), 0, 1) },
+            sparkles: { enabled: rng() < 0.24, density: clamp(tri(0, 0.035, 0.12), 0, 1), countMax: Math.max(1, Math.min(6, Math.round(tri(1, 2, 6)))), sizeMinPx: clamp(tri(0.75, 1.6, 3.0), 0.1, 200), sizeMaxPx: clamp(tri(3, 9, 18), 0.1, 600), opacity: clamp(tri(0.08, 0.28, 0.75), 0, 1), color: '#ffffff' }
+          }
+        } as any;
+      }
     case 'circles2d':
       return {
         ...base,
@@ -2220,37 +2732,55 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
         }
       };
     case 'svg3d':
-      return {
-        ...base,
-        type: 'svg3d',
-        svg: {
-          source: DEFAULT_SVG_SOURCE,
-          renderMode: 'auto',
-          colorMode: rng() < 0.12 ? 'svg-to-palette' : 'palette',
-          maxTones: Math.max(2, Math.min(12, Math.round(tri(2, 8, 12)))),
-          count: chance(0.15) ? 1 : skewCountLow(2, DEFAULT_SVG3D_CONFIG.svg.count, 360, 1500, 0.03),
-          spread: randomWeighted(rng, 0.8, 6.5, DEFAULT_SVG3D_CONFIG.svg.spread),
-          depth: randomWeighted(rng, 0.5, 7.0, DEFAULT_SVG3D_CONFIG.svg.depth),
-          tiltDeg: chance(0.75) ? 0 : Math.round(clamp(randomWeighted(rng, 0, 45, 8), 0, 80)),
-          sizeMin: randomWeighted(rng, 0.05, 0.32, DEFAULT_SVG3D_CONFIG.svg.sizeMin),
-          sizeMax: randomWeighted(rng, 0.14, 0.9, DEFAULT_SVG3D_CONFIG.svg.sizeMax),
-          extrudeDepth: randomWeighted(rng, 0.02, 0.6, DEFAULT_SVG3D_CONFIG.svg.extrudeDepth),
-          stroke: {
-            enabled: rng() < 0.45,
-            radius: clamp(tri(0.006, DEFAULT_SVG3D_CONFIG.svg.stroke.radius, 0.06), 0.001, 0.2),
-            segments: Math.max(1, Math.min(12, Math.round(tri(2, DEFAULT_SVG3D_CONFIG.svg.stroke.segments, 10)))),
+      {
+        const logoMode = chance(0.18);
+        const colorMode: SvgColorMode = rng() < 0.12 ? 'svg-to-palette' : 'palette';
+        const count = logoMode ? 1 : (chance(0.15) ? 1 : skewCountLow(2, DEFAULT_SVG3D_CONFIG.svg.count, 360, 1500, 0.03));
+        const spread = logoMode ? 0 : randomWeighted(rng, 0.8, 6.5, DEFAULT_SVG3D_CONFIG.svg.spread);
+        const depth = logoMode ? 0 : randomWeighted(rng, 0.5, 7.0, DEFAULT_SVG3D_CONFIG.svg.depth);
+        const tiltDeg = logoMode ? 0 : (chance(0.75) ? 0 : Math.round(clamp(randomWeighted(rng, 0, 45, 8), 0, 80)));
+
+        const rotateDeg = 0;
+        const rotateJitterDeg = logoMode ? 0 : clamp(randomWeighted(rng, 0, 360, DEFAULT_SVG3D_CONFIG.svg.rotateJitterDeg), 0, 3600);
+
+        const logoSize = logoMode ? clamp(randomWeighted(rng, 0.35, 1.8, 0.85), 0.05, 3.0) : 0;
+        const sizeMin = logoMode ? logoSize : randomWeighted(rng, 0.05, 0.32, DEFAULT_SVG3D_CONFIG.svg.sizeMin);
+        const sizeMax = logoMode ? logoSize : randomWeighted(rng, 0.14, 0.9, DEFAULT_SVG3D_CONFIG.svg.sizeMax);
+
+        return {
+          ...base,
+          type: 'svg3d',
+          svg: {
+            source: DEFAULT_SVG_SOURCE,
+            renderMode: 'auto',
+            colorMode,
+            maxTones: Math.max(2, Math.min(12, Math.round(tri(2, 8, 12)))),
+            count,
+            spread,
+            depth,
+            tiltDeg,
+            rotateDeg,
+            rotateJitterDeg,
+            sizeMin,
+            sizeMax,
+            extrudeDepth: randomWeighted(rng, 0.02, 0.6, DEFAULT_SVG3D_CONFIG.svg.extrudeDepth),
+            stroke: {
+              enabled: logoMode ? true : rng() < 0.45,
+              radius: clamp(tri(0.006, DEFAULT_SVG3D_CONFIG.svg.stroke.radius, 0.06), 0.001, 0.2),
+              segments: Math.max(1, Math.min(12, Math.round(tri(2, DEFAULT_SVG3D_CONFIG.svg.stroke.segments, 10)))),
+              opacity: randomStickOpacity()
+            },
+            bevel: {
+              enabled: chance(0.7),
+              size: clamp(tri(0.0, DEFAULT_SVG3D_CONFIG.svg.bevel.size, 0.14), 0, 0.2),
+              segments: Math.max(0, Math.min(6, Math.round(tri(0, DEFAULT_SVG3D_CONFIG.svg.bevel.segments, 4))))
+            },
+            paletteMode: rng() < 0.55 ? 'weighted' : 'cycle',
+            colorWeights: [0.34, 0.28, 0.18, 0.12, 0.08],
             opacity: randomStickOpacity()
-          },
-          bevel: {
-            enabled: chance(0.7),
-            size: clamp(tri(0.0, DEFAULT_SVG3D_CONFIG.svg.bevel.size, 0.14), 0, 0.2),
-            segments: Math.max(0, Math.min(6, Math.round(tri(0, DEFAULT_SVG3D_CONFIG.svg.bevel.segments, 4))))
-          },
-          paletteMode: rng() < 0.55 ? 'weighted' : 'cycle',
-          colorWeights: [0.34, 0.28, 0.18, 0.12, 0.08],
-          opacity: randomStickOpacity()
-        }
-      };
+          }
+        };
+      }
     case 'hexgrid2d':
       return {
         ...base,

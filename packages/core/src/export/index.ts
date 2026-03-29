@@ -1,5 +1,6 @@
-import type { ExportOptions, WallpaperConfig } from '../types.js';
+import type { ExportOptions, WallpaperConfig, PaletteAssignMode } from '../types.js';
 import { extractSvgRootAttributes, inferSvgRenderMode, stripSvgPresentationAttributes, validateSvgSource } from '../svg-utils.js';
+import { buildFlowlines2D } from '../generators/flowlines2d.js';
 
 export interface ExportResult {
   data: Uint8Array | string;
@@ -146,16 +147,22 @@ function generateSVGContent(config: WallpaperConfig): string {
   switch (config.type) {
     case 'popsicle':
       return generatePopsicleSVG(config);
+    case 'bands2d':
+      return generateBands2DSVG(config);
     case 'circles2d':
       return generateCircles2DSVG(config);
     case 'polygon2d':
       return generatePolygon2DSVG(config);
+    case 'diamondgrid2d':
+      return generateDiamondGrid2DSVG(config);
     case 'svg2d':
       return generateSvg2DSVG(config);
     case 'triangles2d':
       return generateTriangles2DSVG(config);
     case 'ridges2d':
       return generateRidges2DSVG(config);
+    case 'flowlines2d':
+      return generateFlowlines2DSVG(config);
     case 'hexgrid2d':
       return generateHexGrid2DSVG(config);
     case 'spheres3d':
@@ -167,6 +174,294 @@ function generateSVGContent(config: WallpaperConfig): string {
     default:
       throw new Error(`SVG export not supported for type: ${(config as any).type}`);
   }
+}
+
+function generateBands2DSVG(config: Extract<WallpaperConfig, { type: 'bands2d' }>): string {
+  const { width, height, colors, backgroundColor } = config;
+  const palette = colors.length > 0 ? colors : ['#ffffff'];
+  const n = Math.max(1, palette.length);
+
+  const b: any = (config as any).bands ?? {};
+  const seed = ((config.seed >>> 0) ^ (Number(b.seedOffset) || 0)) >>> 0;
+  const mode = b.mode === 'waves' || b.mode === 'chevron' || b.mode === 'straight' ? b.mode : 'straight';
+  const angleDeg = Number(b.angleDeg) || 0;
+  const bandWidth = Math.max(0.1, Number(b.bandWidthPx) || 1);
+  const gap = Math.max(0, Number(b.gapPx) || 0);
+  const period = bandWidth + gap;
+  const offsetPx = Number(b.offsetPx) || 0;
+  const jitterPx = Math.max(0, Number(b.jitterPx) || 0);
+
+  const fillEnabled = !!b.fill?.enabled;
+  const fillOpacity = clamp01(Number(b.fill?.opacity) || 0);
+  const strokeEnabled = !!b.stroke?.enabled;
+  const strokeW = Math.max(0, Number(b.stroke?.widthPx) || 0);
+  const strokeOpacity = clamp01(Number(b.stroke?.opacity) || 0);
+  const strokeColor = typeof b.stroke?.color === 'string' ? String(b.stroke.color) : '#000000';
+
+  const weightsNorm = normalizeWeights((b.colorWeights ?? []) as number[], n);
+  const paletteMode: PaletteAssignMode = b.paletteMode === 'cycle' ? 'cycle' : 'weighted';
+
+  const cx = width * 0.5;
+  const cy = height * 0.5;
+  const diag = Math.hypot(width, height);
+  const overscan = Math.max(width, height, diag);
+
+  const xStart = -overscan;
+  const xEnd = width + overscan;
+  const yStart = -overscan + offsetPx;
+  const yEnd = height + overscan;
+  const maxBands = Math.max(1, Math.ceil((yEnd - yStart) / Math.max(1e-6, period)) + 4);
+
+  const frac = (x: number) => x - Math.floor(x);
+  const triWave01 = (t: number) => 1 - 4 * Math.abs(frac(t) - 0.5);
+  const smoothstep = (t: number) => {
+    const x = clamp01(t);
+    return x * x * (3 - 2 * x);
+  };
+  const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+  const valueNoise2D = (x: number, y: number, ch: number): number => {
+    const xi = Math.floor(x);
+    const yi = Math.floor(y);
+    const tx = x - xi;
+    const ty = y - yi;
+    const v00 = cellRand01(seed, xi, yi, ch);
+    const v10 = cellRand01(seed, xi + 1, yi, ch);
+    const v01 = cellRand01(seed, xi, yi + 1, ch);
+    const v11 = cellRand01(seed, xi + 1, yi + 1, ch);
+    const sx = smoothstep(tx);
+    const sy = smoothstep(ty);
+    const a = lerp(v00, v10, sx);
+    const bb = lerp(v01, v11, sx);
+    return lerp(a, bb, sy);
+  };
+
+  const waves: any = b.waves ?? {};
+  const waveAmp = Math.max(0, Number(waves.amplitudePx) || 0);
+  const waveLen = Math.max(1, Number(waves.wavelengthPx) || 1);
+  const waveNoiseAmt = clamp01(Number(waves.noiseAmount) || 0);
+  const waveNoiseScale = Math.max(0.000001, Number(waves.noiseScale) || 1);
+
+  const chevron: any = b.chevron ?? {};
+  const chevAmp = Math.max(0, Number(chevron.amplitudePx) || 0);
+  const chevLen = Math.max(1, Number(chevron.wavelengthPx) || 1);
+  const chevSharp = clamp(Number(chevron.sharpness) || 1, 0.1, 8);
+
+  const bandOffset = (x: number, bandIndex: number): number => {
+    if (mode === 'waves') {
+      const phase = cellRand01(seed, bandIndex, 0, 9101) * Math.PI * 2;
+      const s = Math.sin(((x / waveLen) * Math.PI * 2) + phase);
+      const n0 = (valueNoise2D((x / waveLen) * waveNoiseScale, bandIndex * 0.31, 9201) - 0.5) * 2;
+      return waveAmp * (s + n0 * waveNoiseAmt);
+    }
+    if (mode === 'chevron') {
+      const phase = cellRand01(seed, bandIndex, 0, 9301);
+      const t = (x / chevLen) + phase;
+      const tri = triWave01(t);
+      const shaped = Math.sign(tri) * Math.pow(Math.abs(tri), chevSharp);
+      return shaped * chevAmp;
+    }
+    return 0;
+  };
+
+  const pickIndex = (i: number) => {
+    if (paletteMode === 'cycle') return i % n;
+    return sampleWeightedIndex01(cellRand01(seed, i, 0, 9401), weightsNorm);
+  };
+
+  const stepPx = mode === 'straight' ? Math.max(8, Math.round(period * 0.4)) : Math.max(8, Math.round((mode === 'chevron' ? chevLen : waveLen) / 34));
+
+  let svg = svgStart(width, height, backgroundColor);
+  const groupTransform = `translate(${cx.toFixed(3)} ${cy.toFixed(3)}) rotate(${angleDeg.toFixed(3)}) translate(${(-cx).toFixed(3)} ${(-cy).toFixed(3)})`;
+  svg += `  <g transform="${groupTransform}">\n`;
+
+  for (let bi = 0; bi < maxBands; bi++) {
+    const baseY = yStart + bi * period;
+    const j = jitterPx > 0 ? (cellRand01(seed, bi, 0, 9001) - 0.5) * 2 * jitterPx : 0;
+    const y0 = baseY + j;
+    const y1 = y0 + bandWidth;
+    if (y1 < yStart - period || y0 > yEnd + period) continue;
+
+    const idx = pickIndex(bi);
+    const col = palette[idx] ?? '#ffffff';
+
+    const fillAttr = fillEnabled && fillOpacity > 0 ? ` fill="${col}" fill-opacity="${fillOpacity.toFixed(3)}"` : ' fill="none"';
+    const strokeAttr = strokeEnabled && strokeW > 0 && strokeOpacity > 0
+      ? ` stroke="${strokeColor}" stroke-width="${strokeW}" stroke-opacity="${strokeOpacity.toFixed(3)}" stroke-linejoin="round" stroke-linecap="round"`
+      : '';
+
+    if (mode === 'straight') {
+      svg += `    <rect x="${xStart.toFixed(3)}" y="${y0.toFixed(3)}" width="${(xEnd - xStart).toFixed(3)}" height="${bandWidth.toFixed(3)}"${fillAttr}${strokeAttr}/>\n`;
+      continue;
+    }
+
+    const ptsTop: Array<{ x: number; y: number }> = [];
+    for (let x = xStart; x <= xEnd + 0.1; x += stepPx) {
+      ptsTop.push({ x, y: y0 + bandOffset(x, bi) });
+    }
+    const ptsBot: Array<{ x: number; y: number }> = [];
+    for (let x = xEnd; x >= xStart - 0.1; x -= stepPx) {
+      ptsBot.push({ x, y: y1 + bandOffset(x, bi) });
+    }
+    const pts = ptsTop.concat(ptsBot);
+    const d = 'M ' + pts.map((p, i) => `${i === 0 ? '' : 'L '}${p.x.toFixed(3)} ${p.y.toFixed(3)}`).join(' ') + ' Z';
+    svg += `    <path d="${d}"${fillAttr}${strokeAttr}/>\n`;
+  }
+
+  svg += '  </g>\n';
+  svg += svgEnd();
+  return svg;
+}
+
+function generateDiamondGrid2DSVG(config: Extract<WallpaperConfig, { type: 'diamondgrid2d' }>): string {
+  const { width, height, colors, backgroundColor } = config;
+  const palette = colors.length > 0 ? colors : ['#ffffff'];
+  const n = Math.max(1, palette.length);
+
+  const dg: any = (config as any).diamondgrid ?? {};
+  const seed = (config.seed >>> 0) || 1;
+
+  const tileW = Math.max(2, Number(dg.tileWidthPx) || 2);
+  const tileH = Math.max(2, Number(dg.tileHeightPx) || 2);
+  const a0 = tileW * 0.5;
+  const b0 = tileH * 0.5;
+  const marginPx = Math.max(0, Number(dg.marginPx) || 0);
+  const sw = dg.stroke?.enabled ? Math.max(0, Number(dg.stroke?.widthPx) || 0) : 0;
+  const shrink = marginPx * 0.5 + sw * 0.5;
+  const a = Math.max(0.5, a0 - shrink);
+  const b = Math.max(0.5, b0 - shrink);
+
+  const originX = Number(dg.originPx?.x) || 0;
+  const originY = Number(dg.originPx?.y) || 0;
+  const overscan = Math.max(0, Number(dg.overscanPx) || 0);
+  const fillOpacity = clamp01(Number(dg.fillOpacity) || 0);
+
+  const strokeEnabled = !!dg.stroke?.enabled;
+  const strokeOpacity = strokeEnabled ? clamp01(Number(dg.stroke?.opacity) || 0) : 0;
+  const strokeColor = typeof dg.stroke?.color === 'string' ? String(dg.stroke.color) : '#000000';
+  const strokeJoin = dg.stroke?.join === 'bevel' ? 'bevel' : dg.stroke?.join === 'miter' ? 'miter' : 'round';
+
+  const weightsNorm = normalizeWeights((dg.coloring?.colorWeights ?? []) as number[], n);
+  const paletteMode: PaletteAssignMode = dg.coloring?.paletteMode === 'cycle' ? 'cycle' : 'weighted';
+
+  const xMin = -overscan;
+  const yMin = -overscan;
+  const xMax = width + overscan;
+  const yMax = height + overscan;
+  const invU = (x: number, y: number) => 0.5 * ((x - originX) / a0 + (y - originY) / b0);
+  const invV = (x: number, y: number) => 0.5 * ((y - originY) / b0 - (x - originX) / a0);
+  const corners = [
+    { x: xMin, y: yMin },
+    { x: xMax, y: yMin },
+    { x: xMin, y: yMax },
+    { x: xMax, y: yMax }
+  ];
+  let uMin = Infinity;
+  let uMax = -Infinity;
+  let vMin = Infinity;
+  let vMax = -Infinity;
+  for (const p of corners) {
+    const uu = invU(p.x, p.y);
+    const vv = invV(p.x, p.y);
+    if (uu < uMin) uMin = uu;
+    if (uu > uMax) uMax = uu;
+    if (vv < vMin) vMin = vv;
+    if (vv > vMax) vMax = vv;
+  }
+  const pad = 3;
+  const u0 = Math.floor(uMin) - pad;
+  const u1 = Math.ceil(uMax) + pad;
+  const v0 = Math.floor(vMin) - pad;
+  const v1 = Math.ceil(vMax) + pad;
+
+  const pickIndex = (u: number, v: number): number => {
+    if (paletteMode === 'cycle') return (((u + v) % n) + n) % n;
+    return sampleWeightedIndex01(cellRand01(seed, u, v, 5001), weightsNorm);
+  };
+
+  const strokeAttr = strokeEnabled && sw > 0 && strokeOpacity > 0
+    ? ` stroke="${strokeColor}" stroke-opacity="${strokeOpacity.toFixed(3)}" stroke-width="${sw}" stroke-linejoin="${strokeJoin}"`
+    : '';
+
+  const spark = dg.sparkles ?? {};
+  const sparkEnabled = !!spark.enabled;
+  const sparkDensity = clamp01(Number(spark.density) || 0);
+  const sparkCountMax = Math.max(1, Math.min(12, Math.round(Number(spark.countMax) || 1)));
+  const sparkSizeMin = Math.max(0.1, Number(spark.sizeMinPx) || 0.1);
+  const sparkSizeMax = Math.max(sparkSizeMin, Number(spark.sizeMaxPx) || sparkSizeMin);
+  const sparkOpacity = clamp01(Number(spark.opacity) || 0);
+  const sparkColor = typeof spark.color === 'string' ? String(spark.color) : '#ffffff';
+
+  let svg = svgStart(width, height, backgroundColor);
+
+  for (let v = v0; v <= v1; v++) {
+    for (let u = u0; u <= u1; u++) {
+      const cx = originX + (u - v) * a0;
+      const cy = originY + (u + v) * b0;
+      if (cx < xMin - a0 || cx > xMax + a0 || cy < yMin - b0 || cy > yMax + b0) continue;
+      const idx = pickIndex(u, v);
+      const col = palette[idx] ?? '#ffffff';
+      const pts = [
+        `${cx.toFixed(3)},${(cy - b).toFixed(3)}`,
+        `${(cx + a).toFixed(3)},${cy.toFixed(3)}`,
+        `${cx.toFixed(3)},${(cy + b).toFixed(3)}`,
+        `${(cx - a).toFixed(3)},${cy.toFixed(3)}`
+      ];
+      svg += `  <polygon points="${pts.join(' ')}" fill="${col}" fill-opacity="${fillOpacity.toFixed(3)}"${strokeAttr}/>` + '\n';
+
+      if (sparkEnabled && sparkOpacity > 0 && sparkDensity > 0 && cellRand01(seed, u, v, 7001) < sparkDensity) {
+        const count = 1 + Math.floor(cellRand01(seed, u, v, 7002) * sparkCountMax);
+        for (let si = 0; si < count; si++) {
+          const rx0 = (cellRand01(seed, u * 97 + si, v * 131 + si, 7101) - 0.5) * 2;
+          const ry0 = (cellRand01(seed, u * 97 + si, v * 131 + si, 7102) - 0.5) * 2;
+          const rx = clamp(rx0, -1, 1);
+          const ry = clamp(ry0, -1, 1);
+          const sx = cx + rx * a * 0.75;
+          const sy = cy + ry * b * 0.75;
+          const r = sparkSizeMin + cellRand01(seed, u * 37 + si, v * 41 + si, 7103) * (sparkSizeMax - sparkSizeMin);
+          const rot = cellRand01(seed, u * 17 + si, v * 19 + si, 7104) * Math.PI * 2;
+          // 4-spike star.
+          const spikes = 4;
+          const r2 = r * 0.42;
+          const pts2: string[] = [];
+          for (let k = 0; k < spikes * 2; k++) {
+            const ang = rot + (k / (spikes * 2)) * Math.PI * 2;
+            const rr = k % 2 === 0 ? r : r2;
+            pts2.push(`${(sx + Math.cos(ang) * rr).toFixed(3)} ${(sy + Math.sin(ang) * rr).toFixed(3)}`);
+          }
+          svg += `  <path d="M ${pts2.join(' L ')} Z" fill="${sparkColor}" fill-opacity="${sparkOpacity.toFixed(3)}"/>\n`;
+        }
+      }
+    }
+  }
+
+  svg += svgEnd();
+  return svg;
+}
+
+function generateFlowlines2DSVG(config: Extract<WallpaperConfig, { type: 'flowlines2d' }>): string {
+  const { width, height, colors, backgroundColor } = config;
+  const palette = colors.length > 0 ? colors : ['#ffffff'];
+
+  const flow: any = (config as any).flowlines ?? {};
+  const strokeW = Math.max(0.05, Number(flow.stroke?.widthPx) || 1);
+  const strokeOpacity = clamp01(Number(flow.stroke?.opacity) || 0);
+
+  let svg = svgStart(width, height, backgroundColor);
+  if (!(strokeOpacity > 0) || !(strokeW > 0)) {
+    svg += svgEnd();
+    return svg;
+  }
+
+  const instances = buildFlowlines2D(config as any);
+  for (const inst of instances) {
+    const pts = inst.points;
+    if (!pts || pts.length < 2) continue;
+    const col = palette[inst.colorIndex % palette.length] ?? '#ffffff';
+    const d = 'M ' + pts.map((p, i) => `${i === 0 ? '' : 'L '}${p.x.toFixed(3)} ${p.y.toFixed(3)}`).join(' ');
+    svg += `  <path d="${d}" fill="none" stroke="${col}" stroke-width="${strokeW}" stroke-opacity="${strokeOpacity.toFixed(3)}" stroke-linejoin="round" stroke-linecap="round"/>\n`;
+  }
+  svg += svgEnd();
+  return svg;
 }
 
 function generateRidges2DSVG(config: Extract<WallpaperConfig, { type: 'ridges2d' }>): string {
@@ -893,8 +1188,9 @@ function generateSvg3DSVG(config: Extract<WallpaperConfig, { type: 'svg3d' }>): 
     const r = rMin + rand01(i, 2) * (rMax - rMin);
     const cx = rand01(i, 3) * width;
     const cy = rand01(i, 4) * height;
-    const theta = rand01(i, 8) * Math.PI * 2;
-    const rotDeg = (theta * 180) / Math.PI;
+    const baseRotDeg = Number((config as any).svg?.rotateDeg) || 0;
+    const jitterDeg = Math.max(0, Number((config as any).svg?.rotateJitterDeg) || 0);
+    const rotDeg = baseRotDeg + (rand01(i, 8) - 0.5) * jitterDeg;
     const scale = r / vbMax;
     const idx = pickIndex(i);
     const col = colors[idx] ?? '#ffffff';
