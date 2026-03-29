@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import '$lib/ui/styles/app.css';
   import { 
     DEFAULT_CONFIG, 
     DEFAULT_CONFIG_BY_TYPE,
@@ -9,15 +10,13 @@
     generateRandomConfigNoPresets,
     generateRandomConfigNoPresetsFromSeed,
     normalizeWallpaperConfig,
-    encodeAppStateToBase64Url,
-    decodeAppStateFromBase64Url,
-    type WallpaperAppStateV1,
     exportToPNG,
     exportToJPG,
     exportToWebP,
     exportToSVG,
     downloadFile,
-    renderWallpaperToCanvas
+    renderWallpaperToCanvas,
+    type WallpaperAppStateV1
   } from '@wallpaper-maker/core';
 
   import { PopsiclePreview, type PreviewRenderMode } from '$lib/popsicle/preview';
@@ -29,15 +28,35 @@
 
   import IconPicker from '$lib/icons/IconPicker.svelte';
 
+  import { cloneDefaultConfig } from '$lib/app/config/config';
+  import {
+    mergeWithLocks as mergeWithLocksImpl,
+    isLocked as isLockedImpl,
+    toggleLock as toggleLockImpl,
+    type LockMap
+  } from '$lib/app/config/locks';
+  import { buildAppState, decodeCfgParam, encodeCfgParam, getCfgParamFromSearch, scheduleReplaceCfgInUrl, shouldSkipUrlUpdate } from '$lib/app/url/cfg';
+  import { createPreviewScheduler } from '$lib/app/preview/scheduler';
+  import {
+    disposeBasic3DPreview as disposeBasic3DPreviewImpl,
+    renderCurrentOnce as renderCurrentOnceImpl,
+    type FallbackQuality,
+    type PreviewRefs,
+    type PreviewRendererCtx
+  } from '$lib/app/preview/renderers';
+
   
   // Reactive state using Svelte 5 runes
   let config = $state<WallpaperConfig>(cloneDefaultConfig());
   
-  let canvasContainer: HTMLDivElement;
-  let canvasHost: HTMLDivElement;
-  let preview: PopsiclePreview | null = null;
-  let basic3dPreview: Basic3DPreview | null = null;
-  let fallbackCanvas: HTMLCanvasElement | null = null;
+  let canvasContainer: HTMLDivElement | null = null;
+  let canvasHost: HTMLDivElement | null = null;
+
+  const previewRefs: PreviewRefs = {
+    preview: null,
+    basic3dPreview: null,
+    fallbackCanvas: null
+  };
   let renderMode = $state<PreviewRenderMode>('raster');
 
   // Friendly generator errors (e.g. invalid SVG input).
@@ -47,8 +66,6 @@
   let cameraDragActive = $state(false);
   let canvasHoverActive = $state(false);
 
-  let renderRaf = 0;
-  let renderSettleTimer = 0;
   const RENDER_SETTLE_MS = 280;
   
   // Export format selection
@@ -72,17 +89,15 @@
     }
   }
 
-  type LockMap = Record<string, boolean>;
-
   // UI-only: locks are not synced to URL.
   let locks = $state<LockMap>({});
 
   function isLocked(path: string): boolean {
-    return !!locks[path];
+    return isLockedImpl(locks, path);
   }
 
   function toggleLock(path: string) {
-    locks = { ...locks, [path]: !locks[path] };
+    locks = toggleLockImpl(locks, path);
   }
 
   const colorPresetGroups: Array<{ group: string; presets: ColorPreset[] }> = COLOR_PRESET_GROUPS
@@ -163,165 +178,38 @@
     supportsEmission && (config.type === 'circles2d' || config.type === 'polygon2d' || config.type === 'triangles2d' || config.type === 'svg2d' ? config.bloom.enabled : true)
   );
 
-  type FallbackQuality = 'interactive' | 'final';
-
-  function getFallbackPreviewSize(aspect: number, quality: FallbackQuality): {
-    previewWidth: number;
-    previewHeight: number;
-    cssWidth: number;
-    cssHeight: number;
-  } {
-    const cw = Math.max(1, canvasContainer?.clientWidth ?? 1);
-    const ch = Math.max(1, canvasContainer?.clientHeight ?? 1);
-
-    const safeAspect = Math.max(0.0001, aspect);
-    const cssWidth = Math.min(cw, ch * safeAspect);
-    const cssHeight = cssWidth / safeAspect;
-
-    const scale = quality === 'interactive' ? 0.6 : 1.0;
-    const previewWidth = Math.max(1, Math.round(cssWidth * scale));
-    const previewHeight = Math.max(1, Math.round(cssHeight * scale));
-
-    return { previewWidth, previewHeight, cssWidth, cssHeight };
-  }
-
-  function ensureBasic3DPreview(type: Basic3DType): Basic3DPreview {
-    if (!canvasHost) {
-      // Should not happen; render calls are guarded.
-      throw new Error('canvasHost not ready');
-    }
-    if (!basic3dPreview) {
-      basic3dPreview = new Basic3DPreview(canvasHost, type);
-      return basic3dPreview;
-    }
-    basic3dPreview.setType(type);
-    return basic3dPreview;
-  }
+  const previewRendererCtx: PreviewRendererCtx = {
+    getConfig: () => config,
+    getRenderMode: () => renderMode,
+    setRenderError: (msg) => {
+      renderError = msg;
+    },
+    canvasContainer: () => canvasContainer,
+    canvasHost: () => canvasHost,
+    refs: previewRefs
+  };
 
   function disposeBasic3DPreview() {
-    basic3dPreview?.dispose();
-    basic3dPreview = null;
-  }
-
-  function renderBasic3DOnce(quality: FallbackQuality, opts?: { cameraOnly?: boolean }) {
-    if (!canvasContainer || !canvasHost) return;
-
-    const aspect = config.width / config.height;
-    const { previewWidth, previewHeight, cssWidth, cssHeight } = getFallbackPreviewSize(aspect, quality);
-
-    let effective: WallpaperConfig = { ...config } as any;
-
-    // 3D collision masking is expensive; keep interactive renders snappy by previewing without collisions.
-    if (quality === 'interactive' && effective.collisions?.mode === 'carve') {
-      effective = {
-        ...(effective as any),
-        collisions: { ...effective.collisions, mode: 'none', carve: { ...effective.collisions.carve } }
-      } as any;
-    }
-
-    try {
-      const type = effective.type as Basic3DType;
-      const p = ensureBasic3DPreview(type);
-      p.renderOnce(effective as any, quality, { cameraOnly: !!opts?.cameraOnly, renderSize: { width: previewWidth, height: previewHeight } });
-
-      const el = p.getDomElement();
-      if (el) {
-        el.style.width = `${Math.max(1, Math.round(cssWidth))}px`;
-        el.style.height = `${Math.max(1, Math.round(cssHeight))}px`;
-      }
-
-      renderError = null;
-    } catch (err: any) {
-      renderError = String(err?.message || err);
-      console.error('Render failed:', err);
-    }
-  }
-
-  function render2DOnce(quality: FallbackQuality) {
-    if (!canvasContainer || !canvasHost) return;
-
-    const aspect = config.width / config.height;
-    const { previewWidth, previewHeight, cssWidth, cssHeight } = getFallbackPreviewSize(aspect, quality);
-    let effective: WallpaperConfig = { ...config, width: previewWidth, height: previewHeight } as any;
-
-    // Performance knobs for heavy 2D generators.
-    // We intentionally bias the interactive preview toward responsiveness.
-    if (quality === 'interactive' && effective.type === 'flowlines2d') {
-      const f: any = (effective as any).flowlines ?? {};
-      effective = {
-        ...(effective as any),
-        flowlines: {
-          ...f,
-          // Reduce work per frame; final render runs shortly after.
-          octaves: Math.max(1, Math.min(2, Math.round(Number(f.octaves) || 1))),
-          maxLines: Math.max(0, Math.min(700, Math.round(Number(f.maxLines) || 0))),
-          maxSteps: Math.max(1, Math.min(220, Math.round(Number(f.maxSteps) || 0))),
-          // Favor fewer streamlines.
-          spacingPx: Math.max(Number(f.spacingPx) || 2, 8),
-          stepPx: Math.max(Number(f.stepPx) || 0.05, 1.2)
-        }
-      } as any;
-    }
-
-    try {
-      const next = renderWallpaperToCanvas(effective, fallbackCanvas ?? undefined);
-      next.style.width = `${Math.max(1, Math.round(cssWidth))}px`;
-      next.style.height = `${Math.max(1, Math.round(cssHeight))}px`;
-      fallbackCanvas = next;
-      if (!next.parentElement) {
-        canvasHost.innerHTML = '';
-        canvasHost.appendChild(next);
-      }
-      renderError = null;
-    } catch (err: any) {
-      renderError = String(err?.message || err);
-      console.error('Render failed:', err);
-    }
+    disposeBasic3DPreviewImpl(previewRefs);
   }
 
   function renderCurrentOnce(quality: FallbackQuality, opts?: { cameraOnly?: boolean }) {
-    if (config.type === 'popsicle') {
-      // Popsicle has its own persistent preview.
-      if (quality === 'interactive') {
-        if (config.collisions.mode === 'carve' && config.colors.length <= 8) {
-          const c = {
-            ...(config as any),
-            collisions: { ...config.collisions, mode: 'none', carve: { ...config.collisions.carve } }
-          } as PopsicleConfig;
-          preview?.renderOnce(c, 'interactive');
-        } else {
-          preview?.renderOnce(config as PopsicleConfig, 'interactive');
-        }
-      } else {
-        preview?.renderOnce(config as PopsicleConfig, 'final');
-      }
-      return;
-    }
-
-    if (config.type === 'spheres3d' || config.type === 'triangles3d' || config.type === 'svg3d') {
-      fallbackCanvas = null;
-      renderBasic3DOnce(quality, opts);
-      return;
-    }
-
-    // 2D types
-    disposeBasic3DPreview();
-    render2DOnce(quality);
+    renderCurrentOnceImpl(previewRendererCtx, quality, opts);
   }
 
+  const previewScheduler = createPreviewScheduler({
+    renderCurrentOnce,
+    getCollisionDragActive: () => collisionDragActive,
+    getCameraDragActive: () => cameraDragActive,
+    settleMs: RENDER_SETTLE_MS
+  });
+
   function schedulePreviewRender() {
-    if (renderRaf) cancelAnimationFrame(renderRaf);
-    renderRaf = requestAnimationFrame(() => {
-      renderCurrentOnce('interactive', { cameraOnly: cameraDragActive });
-    });
+    previewScheduler.schedulePreviewRender();
+  }
 
-    if (renderSettleTimer) window.clearTimeout(renderSettleTimer);
-
-    if (!collisionDragActive && !cameraDragActive) {
-      renderSettleTimer = window.setTimeout(() => {
-        renderCurrentOnce('final');
-      }, RENDER_SETTLE_MS);
-    }
+  function clearPreviewSettleTimer() {
+    previewScheduler.clearSettleTimer();
   }
 
   const CAMERA_DISTANCE_MIN = 5;
@@ -375,7 +263,7 @@
     camDragStartElevation = config.camera.elevation;
 
     canvasHoverActive = true;
-    if (renderSettleTimer) window.clearTimeout(renderSettleTimer);
+    clearPreviewSettleTimer();
 
     try {
       (e.currentTarget as HTMLElement)?.setPointerCapture?.(e.pointerId);
@@ -600,142 +488,8 @@
     });
   }
 
-  function cloneDefaultConfig(): WallpaperConfig {
-      return {
-         ...DEFAULT_CONFIG,
-             colors: [...DEFAULT_CONFIG.colors],
-             palette: { overrides: Array.isArray((DEFAULT_CONFIG as any).palette?.overrides) ? (DEFAULT_CONFIG as any).palette.overrides.map((v: any) => (v && typeof v === 'object' ? { ...v } : null)) : [] },
-              textureParams: {
-                drywall: { ...DEFAULT_CONFIG.textureParams.drywall },
-                glass: { ...DEFAULT_CONFIG.textureParams.glass },
-                cel: { ...DEFAULT_CONFIG.textureParams.cel }
-              },
-             voronoi: { ...(DEFAULT_CONFIG as any).voronoi, nucleus: { ...((DEFAULT_CONFIG as any).voronoi?.nucleus ?? { enabled: false }) } } as any,
-             facades: {
-               side: { ...DEFAULT_CONFIG.facades.side },
-               grazing: { ...DEFAULT_CONFIG.facades.grazing },
-               outline: { ...DEFAULT_CONFIG.facades.outline }
-             },
-            edge: { ...DEFAULT_CONFIG.edge, seam: { ...DEFAULT_CONFIG.edge.seam }, band: { ...DEFAULT_CONFIG.edge.band } },
-             bubbles: { ...(DEFAULT_CONFIG as any).bubbles, interior: { ...((DEFAULT_CONFIG as any).bubbles?.interior ?? { enabled: true }) } },
-            emission: { ...DEFAULT_CONFIG.emission },
-            bloom: { ...DEFAULT_CONFIG.bloom },
-            collisions: { ...DEFAULT_CONFIG.collisions, carve: { ...DEFAULT_CONFIG.collisions.carve } },
-            lighting: {
-              ...DEFAULT_CONFIG.lighting,
-              position: { ...DEFAULT_CONFIG.lighting.position }
-            },
-           camera: { ...DEFAULT_CONFIG.camera },
-          environment: { ...DEFAULT_CONFIG.environment },
-          shadows: { ...DEFAULT_CONFIG.shadows },
-          rendering: { ...DEFAULT_CONFIG.rendering },
-          geometry: { ...DEFAULT_CONFIG.geometry }
-        };
-     }
-
   function mergeWithLocks(next: WallpaperConfig): WallpaperConfig {
-    const current = config;
-
-    const cloneAny = <T>(value: T): T => {
-      try {
-        return structuredClone(value);
-      } catch {
-        return JSON.parse(JSON.stringify(value));
-      }
-    };
-
-    const merged: WallpaperConfig = {
-      ...next,
-      colors: [...next.colors],
-      palette: {
-        overrides: Array.isArray((next as any).palette?.overrides) ? cloneAny((next as any).palette.overrides) : []
-      } as any,
-      textureParams: {
-        drywall: { ...next.textureParams.drywall },
-        glass: { ...next.textureParams.glass },
-        cel: { ...next.textureParams.cel }
-      },
-      voronoi: {
-        ...((next as any).voronoi ?? {}),
-        nucleus: { ...(((next as any).voronoi?.nucleus ?? { enabled: false }) as any) }
-      } as any,
-      facades: {
-        side: { ...next.facades.side },
-        grazing: { ...next.facades.grazing },
-        outline: { ...next.facades.outline }
-      },
-      edge: { ...next.edge, seam: { ...next.edge.seam }, band: { ...next.edge.band } },
-       bubbles: { ...(next as any).bubbles, interior: { ...((next as any).bubbles?.interior ?? { enabled: true }) } },
-      emission: { ...next.emission },
-      bloom: { ...next.bloom },
-      collisions: { ...next.collisions, carve: { ...next.collisions.carve } },
-      lighting: {
-        ...next.lighting,
-        position: { ...next.lighting.position }
-      },
-      camera: { ...next.camera },
-      environment: { ...next.environment },
-      shadows: { ...next.shadows },
-      rendering: { ...next.rendering },
-      geometry: { ...next.geometry }
-    };
-
-    // Resolution is not randomized; always preserve the current values.
-    merged.width = current.width;
-    merged.height = current.height;
-
-    // Geometry quality is not randomized; always preserve the current value.
-    merged.geometry = { ...current.geometry };
-
-    const getAtPath = (obj: any, path: string): any => {
-      const parts = path.split('.').filter(Boolean);
-      let cur = obj;
-      for (const p of parts) {
-        if (cur == null) return undefined;
-        cur = cur[p];
-      }
-      return cur;
-    };
-
-    const setAtPath = (obj: any, path: string, value: any) => {
-      const parts = path.split('.').filter(Boolean);
-      if (parts.length === 0) return;
-      let cur = obj;
-      for (let i = 0; i < parts.length - 1; i++) {
-        const p = parts[i];
-        if (cur[p] == null || typeof cur[p] !== 'object') cur[p] = {};
-        cur = cur[p];
-      }
-      cur[parts[parts.length - 1]] = value;
-    };
-
-    // 3D collisions are not randomized; preserve them when the type stays 3D.
-    const currentIs3D = current.type === 'popsicle' || current.type === 'spheres3d' || current.type === 'triangles3d' || current.type === 'svg3d';
-    const nextIs3D = merged.type === 'popsicle' || merged.type === 'spheres3d' || merged.type === 'triangles3d' || merged.type === 'svg3d';
-    if (currentIs3D && nextIs3D) {
-      merged.collisions = cloneAny(current.collisions);
-    }
-
-    // Apply UI locks (by config path). Skip paths that don't exist on either config.
-    for (const [path, locked] of Object.entries(locks)) {
-      if (!locked) continue;
-      const curVal = getAtPath(current as any, path);
-      if (typeof curVal === 'undefined') continue;
-      const nextVal = getAtPath(merged as any, path);
-      if (typeof nextVal === 'undefined') continue;
-      setAtPath(merged as any, path, cloneAny(curVal));
-    }
-
-    // Randomize-current special case: never randomize the SVG source.
-    if ((current.type === 'svg2d' || current.type === 'svg3d') && merged.type === current.type) {
-      try {
-        (merged as any).svg = { ...(merged as any).svg, source: (current as any).svg?.source };
-      } catch {
-        // Ignore.
-      }
-    }
-
-    return merged;
+    return mergeWithLocksImpl(config, next, locks);
   }
 
   function cloneConfigDeep(src: WallpaperConfig): WallpaperConfig {
@@ -1451,12 +1205,7 @@
   }
 
   function getAppState(): WallpaperAppStateV1 {
-    return {
-      v: 1,
-      c: config,
-      f: exportFormat,
-      m: renderMode
-    };
+    return buildAppState({ config, exportFormat, renderMode });
   }
 
   function quoteCliArg(value: string): string {
@@ -1508,21 +1257,12 @@
     if (!urlSyncEnabled) return;
     if (typeof window === 'undefined') return;
 
-    const cfg = encodeAppStateToBase64Url(getAppState());
+    const cfg = encodeCfgParam(getAppState());
     const url = new URL(window.location.href);
-    if (url.searchParams.get('cfg') === cfg && url.searchParams.size === 1) return;
+    if (shouldSkipUrlUpdate(url, cfg)) return;
 
     // Debounce URL updates to avoid spamming history.
-    const handle = window.setTimeout(() => {
-      const u = new URL(window.location.href);
-      u.search = '';
-      u.searchParams.set('cfg', cfg);
-      history.replaceState({}, '', u);
-    }, 120);
-
-    return () => {
-      window.clearTimeout(handle);
-    };
+    return scheduleReplaceCfgInUrl(cfg, { debounceMs: 120 });
   });
 
   $effect(() => {
@@ -1532,21 +1272,21 @@
     void config.type;
 
     if (config.type === 'popsicle') {
-      if (!preview) {
+      if (!previewRefs.preview) {
         disposeBasic3DPreview();
-        fallbackCanvas = null;
+        previewRefs.fallbackCanvas = null;
         canvasHost.innerHTML = '';
-        preview = new PopsiclePreview(canvasHost);
-        preview.setMode(renderMode);
+        previewRefs.preview = new PopsiclePreview(canvasHost);
+        previewRefs.preview.setMode(renderMode);
       }
       return;
     }
 
-    if (preview) {
-      preview.dispose();
-      preview = null;
+    if (previewRefs.preview) {
+      previewRefs.preview.dispose();
+      previewRefs.preview = null;
     }
-    fallbackCanvas = null;
+    previewRefs.fallbackCanvas = null;
     renderMode = 'raster';
     renderCurrentOnce('final');
   });
@@ -2020,16 +1760,16 @@
   });
 
   $effect(() => {
-    if (!preview) return;
+    if (!previewRefs.preview) return;
     if (config.type !== 'popsicle') return;
-    preview.setMode(renderMode);
+    previewRefs.preview.setMode(renderMode);
     schedulePreviewRender();
   });
 
   $effect(() => {
-    if (!basic3dPreview) return;
+    if (!previewRefs.basic3dPreview) return;
     if (config.type !== 'spheres3d' && config.type !== 'triangles3d' && config.type !== 'svg3d') return;
-    basic3dPreview.setMode(renderMode);
+    previewRefs.basic3dPreview.setMode(renderMode);
     schedulePreviewRender();
   });
   
@@ -2038,10 +1778,9 @@
     
     try {
       if (hasUrlParams) {
-        const sp = new URLSearchParams(window.location.search);
-        const cfg = sp.get('cfg');
+        const cfg = getCfgParamFromSearch(window.location.search);
         if (cfg) {
-          const state = decodeAppStateFromBase64Url(cfg);
+          const state = decodeCfgParam(cfg);
           config = normalizeWallpaperConfig(state.c as any);
           exportFormat = state.f;
           renderMode = state.m;
@@ -2059,15 +1798,17 @@
 
     urlSyncEnabled = true;
 
-    preview?.dispose();
-    preview = null;
+    previewRefs.preview?.dispose();
+    previewRefs.preview = null;
     disposeBasic3DPreview();
-    fallbackCanvas = null;
+    previewRefs.fallbackCanvas = null;
     if (canvasHost) canvasHost.innerHTML = '';
 
     if (config.type === 'popsicle') {
-      preview = new PopsiclePreview(canvasHost);
-      preview.setMode(renderMode);
+      if (canvasHost) {
+        previewRefs.preview = new PopsiclePreview(canvasHost);
+        previewRefs.preview.setMode(renderMode);
+      }
     } else {
       renderMode = 'raster';
       renderCurrentOnce('final');
@@ -2114,12 +1855,11 @@
       window.removeEventListener('pointerup', handleGlobalPointerUp);
       window.removeEventListener('pointercancel', handleGlobalPointerUp);
       window.removeEventListener('blur', handleGlobalBlur);
-      if (renderRaf) cancelAnimationFrame(renderRaf);
-      if (renderSettleTimer) window.clearTimeout(renderSettleTimer);
-      preview?.dispose();
-      preview = null;
+      previewScheduler.dispose();
+      previewRefs.preview?.dispose();
+      previewRefs.preview = null;
       disposeBasic3DPreview();
-      fallbackCanvas = null;
+      previewRefs.fallbackCanvas = null;
       if (canvasHost) canvasHost.innerHTML = '';
     };
   });
@@ -6530,7 +6270,7 @@
                   step="1"
                   onpointerdown={() => {
                     collisionDragActive = true;
-                    if (renderSettleTimer) window.clearTimeout(renderSettleTimer);
+                    clearPreviewSettleTimer();
                   }}
                   onpointerup={() => {
                     collisionDragActive = false;
@@ -6564,7 +6304,7 @@
                   disabled={config.collisions.carve.edge !== 'soft'}
                   onpointerdown={() => {
                     collisionDragActive = true;
-                    if (renderSettleTimer) window.clearTimeout(renderSettleTimer);
+                    clearPreviewSettleTimer();
                   }}
                   onpointerup={() => {
                     collisionDragActive = false;
@@ -6721,687 +6461,3 @@
   </main>
 </div>
 
-<style>
-  :global(body) {
-    margin: 0;
-    padding: 0;
-    font-family: system-ui, -apple-system, sans-serif;
-    background: #0a0a0f;
-    color: #fff;
-    overflow: hidden;
-  }
-  
-  :global(*) {
-    box-sizing: border-box;
-  }
-  
-  .app {
-    display: flex;
-    height: 100vh;
-    width: 100vw;
-  }
-  
-  .sidebar {
-    width: 300px;
-    min-width: 300px;
-    background: #111118;
-    border-right: 1px solid #222;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  }
-  
-  .sidebar-header {
-    padding: 1rem;
-    border-bottom: 1px solid #222;
-    background: #0d0d12;
-  }
-  
-  .sidebar-header h1 {
-    margin: 0;
-    font-size: 1.25rem;
-    font-weight: 600;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
-  
-  .sidebar-content {
-    flex: 1;
-    overflow-y: auto;
-    padding: 1rem;
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-  }
-  
-  .sidebar-content::-webkit-scrollbar {
-    width: 6px;
-  }
-  
-  .sidebar-content::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  
-  .sidebar-content::-webkit-scrollbar-thumb {
-    background: #333;
-    border-radius: 3px;
-  }
-  
-  .control-section {
-    background: #1a1a24;
-    border-radius: 8px;
-    padding: 1rem;
-    border: 1px solid #252530;
-  }
-
-  .error-box {
-    background: rgba(220, 38, 38, 0.12);
-    border: 1px solid rgba(220, 38, 38, 0.35);
-    color: #fecaca;
-    padding: 0.6rem 0.75rem;
-    border-radius: 8px;
-    font-size: 0.85rem;
-    line-height: 1.25;
-    white-space: pre-wrap;
-  }
-  
-  .control-section h3 {
-    margin: 0 0 0.75rem 0;
-    font-size: 0.875rem;
-    font-weight: 600;
-    color: #fff;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-  
-  .export-controls {
-    display: flex;
-    gap: 0.5rem;
-  }
-  
-  .export-controls select {
-    flex: 1;
-    padding: 0.5rem;
-    border-radius: 6px;
-    border: 1px solid #333;
-    background: #252530;
-    color: #fff;
-    font-size: 0.875rem;
-    cursor: pointer;
-  }
-  
-  .export-controls button {
-    padding: 0.5rem 1rem;
-    border-radius: 6px;
-    border: none;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: #fff;
-    font-weight: 600;
-    font-size: 0.875rem;
-    cursor: pointer;
-    transition: opacity 0.2s;
-  }
-  
-  .export-controls button:hover:not(:disabled) {
-    opacity: 0.9;
-  }
-  
-  .export-controls button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .randomize-buttons {
-    display: flex;
-    gap: 0.5rem;
-    flex-wrap: nowrap;
-  }
-
-  .randomize-buttons button {
-    flex: 1;
-    min-width: 0;
-    padding: 0.45rem 0.5rem;
-    font-size: 0.8125rem;
-    white-space: nowrap;
-  }
-
-  .cli-controls {
-    display: flex;
-    gap: 0.5rem;
-    align-items: stretch;
-  }
-
-  .cli-text {
-    flex: 1;
-    padding: 0.5rem;
-    border-radius: 6px;
-    border: 1px solid #333;
-    background: #0f0f14;
-    color: #d7d7e3;
-    font-size: 0.75rem;
-    line-height: 1.25;
-    resize: vertical;
-    min-height: 4.5rem;
-  }
-
-  .cli-buttons {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-
-  .cli-toggle {
-    padding: 0.5rem 0.75rem;
-    border-radius: 6px;
-    border: 1px solid #333;
-    background: #1a1a24;
-    color: #d7d7e3;
-    font-weight: 600;
-    font-size: 0.875rem;
-    cursor: pointer;
-    transition: background 0.2s;
-    white-space: nowrap;
-  }
-
-  .cli-toggle:hover {
-    background: #2a2a36;
-  }
-
-  .cli-copy {
-    padding: 0.5rem 0.75rem;
-    border-radius: 6px;
-    border: 1px solid #333;
-    background: #252530;
-    color: #fff;
-    font-weight: 600;
-    font-size: 0.875rem;
-    cursor: pointer;
-    transition: background 0.2s;
-    white-space: nowrap;
-  }
-
-  .cli-copy:hover {
-    background: #333;
-  }
-  
-  .preset-buttons {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.375rem;
-    margin-bottom: 0.75rem;
-  }
-  
-  .preset-buttons button {
-    padding: 0.375rem 0.625rem;
-    border-radius: 4px;
-    border: 1px solid #333;
-    background: #252530;
-    color: #aaa;
-    cursor: pointer;
-    font-size: 0.75rem;
-    transition: all 0.2s;
-  }
-  
-  .preset-buttons button:hover {
-    background: #333;
-    color: #fff;
-    border-color: #444;
-  }
-
-  .palette-controls {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    margin-bottom: 0.75rem;
-  }
-
-  .palette-row {
-    display: flex;
-    gap: 0.5rem;
-    align-items: center;
-  }
-
-  .palette-row select {
-    flex: 1;
-    min-width: 0;
-    padding: 0.375rem 0.5rem;
-    border-radius: 6px;
-    border: 1px solid #333;
-    background: #252530;
-    color: #fff;
-    font-size: 0.8125rem;
-  }
-
-  .palette-nav {
-    padding: 0.375rem 0.5rem;
-    border-radius: 6px;
-    border: 1px solid #333;
-    background: #1b1b24;
-    color: #ddd;
-    cursor: pointer;
-    font-weight: 600;
-    font-size: 0.75rem;
-    transition: background 0.2s, color 0.2s, border-color 0.2s;
-    white-space: nowrap;
-  }
-
-  .palette-nav:hover {
-    background: #333;
-    color: #fff;
-    border-color: #444;
-  }
-
-  .palette-preview {
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
-    flex-wrap: wrap;
-  }
-
-  .swatch {
-    width: 16px;
-    height: 16px;
-    border-radius: 4px;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25) inset;
-  }
-
-  .swatch-bg {
-    width: 22px;
-  }
-  
-  .input-row {
-    display: flex;
-    gap: 0.5rem;
-  }
-  
-  .input-row label {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-  
-  .input-row label span {
-    font-size: 0.75rem;
-    color: #888;
-    min-width: 1rem;
-  }
-  
-  .input-row input[type="number"] {
-    flex: 1;
-    padding: 0.375rem;
-    border-radius: 4px;
-    border: 1px solid #333;
-    background: #252530;
-    color: #fff;
-    font-size: 0.875rem;
-    width: 0;
-  }
-  
-  .colors-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.375rem;
-  }
-  
-  .color-item {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-
-  .palette-overrides {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    margin-top: 0.5rem;
-  }
-
-  .palette-override-item {
-    border: 1px solid #252530;
-    border-radius: 8px;
-    background: #141420;
-    padding: 0.25rem 0.5rem;
-  }
-
-  .palette-override-summary {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-
-  .palette-override-summary .swatch {
-    width: 14px;
-    height: 14px;
-    border-radius: 4px;
-    border: 1px solid rgba(255, 255, 255, 0.14);
-  }
-
-  .mono {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-size: 0.8rem;
-    color: #cbd5e1;
-  }
-  
-  .color-item input[type="color"] {
-    flex: 1;
-    height: 32px;
-    border: 1px solid #333;
-    border-radius: 4px;
-    background: transparent;
-    cursor: pointer;
-  }
-  
-  .remove-btn {
-    width: 28px;
-    height: 28px;
-    border-radius: 4px;
-    border: none;
-    background: #ff4444;
-    color: #fff;
-    cursor: pointer;
-    font-size: 1rem;
-    line-height: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  
-  .remove-btn:hover:not(:disabled) {
-    background: #ff6666;
-  }
-  
-  .remove-btn:disabled {
-    background: #444;
-    cursor: not-allowed;
-  }
-  
-  .add-btn {
-    padding: 0.5rem;
-    border-radius: 4px;
-    border: 1px dashed #444;
-    background: transparent;
-    color: #888;
-    cursor: pointer;
-    font-size: 0.875rem;
-    transition: all 0.2s;
-  }
-  
-  .add-btn:hover {
-    border-color: #666;
-    color: #fff;
-    background: #252530;
-  }
-  
-  .control-row {
-    display: flex;
-    align-items: center;
-    margin-bottom: 0.625rem;
-  }
-  
-  .control-row:last-child {
-    margin-bottom: 0;
-  }
-
-  .control-details {
-    margin-top: 0.5rem;
-    padding-top: 0.25rem;
-  }
-
-  .control-details-summary {
-    cursor: pointer;
-    user-select: none;
-    font-size: 0.8125rem;
-    color: #b6b6c6;
-    margin-bottom: 0.5rem;
-    outline: none;
-  }
-
-  .control-details[open] .control-details-summary {
-    color: #fff;
-  }
-  
-  .control-row .setting-title {
-    min-width: 100px;
-    font-size: 0.875rem;
-    color: #ccc;
-    text-align: left;
-  }
-
-  .setting-title {
-    cursor: pointer;
-    user-select: none;
-    background: transparent;
-    border: none;
-    padding: 0;
-    font: inherit;
-    line-height: inherit;
-    color: inherit;
-    -webkit-appearance: none;
-    appearance: none;
-  }
-
-  .setting-title:not(.locked):hover {
-    color: #fff;
-  }
-
-  .setting-title.locked {
-    display: inline-flex;
-    align-items: center;
-    padding: 0.125rem 0.5rem;
-    border-radius: 999px;
-    background: #3a1111;
-    border: 1px solid #ff5a5a;
-    color: #ffd5d5;
-  }
-
-  .setting-title.locked:hover {
-    background: #4a1616;
-  }
-  
-  .control-row select {
-    flex: 1;
-    padding: 0.375rem;
-    border-radius: 4px;
-    border: 1px solid #333;
-    background: #252530;
-    color: #fff;
-    font-size: 0.875rem;
-    cursor: pointer;
-  }
-  
-  .control-row input[type="color"] {
-    width: 50px;
-    height: 28px;
-    border: 1px solid #333;
-    border-radius: 4px;
-    background: transparent;
-    cursor: pointer;
-  }
-  
-  .control-row.slider {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 0.375rem;
-  }
-  
-  .control-row.slider .setting-title {
-    min-width: auto;
-    font-size: 0.8125rem;
-    color: #aaa;
-  }
-  
-  .control-row input[type="range"] {
-    width: 100%;
-    height: 4px;
-    background: #333;
-    border-radius: 2px;
-    outline: none;
-    appearance: none;
-    -webkit-appearance: none;
-  }
-  
-  .control-row input[type="range"]::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    width: 14px;
-    height: 14px;
-    background: #667eea;
-    border-radius: 50%;
-    cursor: pointer;
-  }
-  
-  .control-row input[type="range"]::-moz-range-thumb {
-    width: 14px;
-    height: 14px;
-    background: #667eea;
-    border-radius: 50%;
-    cursor: pointer;
-    border: none;
-  }
-  
-  .control-row.checkbox {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-  
-  .control-row.checkbox input[type="checkbox"] {
-    width: 18px;
-    height: 18px;
-    accent-color: #667eea;
-    cursor: pointer;
-  }
-  
-  .control-row.checkbox .setting-title {
-    min-width: auto;
-  }
-
-  .preview-area {
-    flex: 1;
-    background: #0a0a0f;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 2rem;
-    position: relative;
-  }
-  
-  .canvas-container {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: #0f0f15;
-    border-radius: 12px;
-    border: 1px solid #1a1a24;
-    position: relative;
-    overflow: hidden;
-  }
-
-  .canvas-host {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  
-  .canvas-container :global(canvas) {
-    max-width: 100%;
-    max-height: 100%;
-    object-fit: contain;
-    border-radius: 4px;
-    touch-action: none;
-  }
-
-  .camera-overlay {
-    position: absolute;
-    right: 14px;
-    bottom: 14px;
-    display: grid;
-    gap: 8px;
-    padding: 10px;
-    border-radius: 12px;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    background: rgba(10, 10, 15, 0.72);
-    backdrop-filter: blur(10px);
-    opacity: 0;
-    transform: translateY(6px);
-    pointer-events: none;
-    transition: opacity 140ms ease, transform 160ms ease;
-    user-select: none;
-  }
-
-  .camera-overlay.visible {
-    opacity: 1;
-    transform: translateY(0);
-    pointer-events: auto;
-  }
-
-  .camera-overlay-row {
-    display: flex;
-    gap: 8px;
-    justify-content: center;
-  }
-
-  .camera-overlay-zoom {
-    justify-content: space-between;
-  }
-
-  .camera-btn {
-    min-width: 72px;
-    padding: 8px 10px;
-    border-radius: 10px;
-    border: 1px solid rgba(255, 255, 255, 0.14);
-    background: rgba(255, 255, 255, 0.08);
-    color: #fff;
-    font-size: 0.85rem;
-    cursor: pointer;
-  }
-
-  .camera-btn:hover {
-    background: rgba(255, 255, 255, 0.12);
-  }
-
-  .camera-btn:active {
-    background: rgba(255, 255, 255, 0.16);
-  }
-
-  .camera-overlay-hint {
-    font-size: 0.72rem;
-    opacity: 0.78;
-    text-align: center;
-  }
-
-  @media (hover: none) {
-    .camera-overlay {
-      opacity: 1;
-      transform: none;
-      pointer-events: auto;
-    }
-  }
-  
-  @media (max-width: 768px) {
-    .sidebar {
-      position: fixed;
-      left: 0;
-      top: 0;
-      bottom: 0;
-      z-index: 100;
-      transform: translateX(-100%);
-      transition: transform 0.3s;
-    }
-    
-    .sidebar.open {
-      transform: translateX(0);
-    }
-    
-    .preview-area {
-      padding: 1rem;
-    }
-  }
-</style>
