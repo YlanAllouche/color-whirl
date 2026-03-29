@@ -852,6 +852,11 @@
           geometry: { ...src.geometry },
           bands: {
             ...src.bands,
+            panel: {
+              ...src.bands.panel,
+              rectFrac: { ...src.bands.panel.rectFrac },
+              fill: { ...src.bands.panel.fill }
+            },
             fill: { ...src.bands.fill },
             stroke: { ...src.bands.stroke },
             waves: { ...src.bands.waves },
@@ -4741,6 +4746,74 @@
             <button type="button" class="setting-title" class:locked={isLocked('bands.gapPx')} onclick={() => toggleLock('bands.gapPx')} title="Click to lock/unlock for randomize">Gap: {Math.round(config.bands.gapPx)}px</button>
             <input type="range" bind:value={config.bands.gapPx} min="0" max="300" step="1" />
           </label>
+
+          <details class="control-details">
+            <summary class="control-details-summary">Panel / Clip</summary>
+            <label class="control-row checkbox">
+              <input type="checkbox" bind:checked={config.bands.panel.enabled} />
+              <button
+                type="button"
+                class="setting-title"
+                class:locked={isLocked('bands.panel.enabled')}
+                onclick={(e) => {
+                  e.preventDefault();
+                  toggleLock('bands.panel.enabled');
+                }}
+                title="Click to lock/unlock for randomize"
+              >
+                Enable
+              </button>
+            </label>
+
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('bands.panel.rectFrac.x')} onclick={() => toggleLock('bands.panel.rectFrac.x')} title="Click to lock/unlock for randomize">X: {Math.round(config.bands.panel.rectFrac.x * 100)}%</button>
+              <input type="range" bind:value={config.bands.panel.rectFrac.x} min="0" max="1" step="0.01" disabled={!config.bands.panel.enabled} />
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('bands.panel.rectFrac.y')} onclick={() => toggleLock('bands.panel.rectFrac.y')} title="Click to lock/unlock for randomize">Y: {Math.round(config.bands.panel.rectFrac.y * 100)}%</button>
+              <input type="range" bind:value={config.bands.panel.rectFrac.y} min="0" max="1" step="0.01" disabled={!config.bands.panel.enabled} />
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('bands.panel.rectFrac.w')} onclick={() => toggleLock('bands.panel.rectFrac.w')} title="Click to lock/unlock for randomize">Width: {Math.round(config.bands.panel.rectFrac.w * 100)}%</button>
+              <input type="range" bind:value={config.bands.panel.rectFrac.w} min="0.02" max="1" step="0.01" disabled={!config.bands.panel.enabled} />
+            </label>
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('bands.panel.rectFrac.h')} onclick={() => toggleLock('bands.panel.rectFrac.h')} title="Click to lock/unlock for randomize">Height: {Math.round(config.bands.panel.rectFrac.h * 100)}%</button>
+              <input type="range" bind:value={config.bands.panel.rectFrac.h} min="0.02" max="1" step="0.01" disabled={!config.bands.panel.enabled} />
+            </label>
+
+            <label class="control-row slider">
+              <button type="button" class="setting-title" class:locked={isLocked('bands.panel.radiusPx')} onclick={() => toggleLock('bands.panel.radiusPx')} title="Click to lock/unlock for randomize">Radius: {Math.round(config.bands.panel.radiusPx)}px</button>
+              <input type="range" bind:value={config.bands.panel.radiusPx} min="0" max="400" step="1" disabled={!config.bands.panel.enabled} />
+            </label>
+
+            <details class="control-details" style="margin-top:0.5rem;">
+              <summary class="control-details-summary">Panel Fill</summary>
+              <label class="control-row checkbox">
+                <input type="checkbox" bind:checked={config.bands.panel.fill.enabled} disabled={!config.bands.panel.enabled} />
+                <button
+                  type="button"
+                  class="setting-title"
+                  class:locked={isLocked('bands.panel.fill.enabled')}
+                  onclick={(e) => {
+                    e.preventDefault();
+                    toggleLock('bands.panel.fill.enabled');
+                  }}
+                  title="Click to lock/unlock for randomize"
+                >
+                  Enabled
+                </button>
+              </label>
+              <label class="control-row">
+                <button type="button" class="setting-title" class:locked={isLocked('bands.panel.fill.color')} onclick={() => toggleLock('bands.panel.fill.color')} title="Click to lock/unlock for randomize">Color</button>
+                <input type="color" bind:value={config.bands.panel.fill.color} disabled={!config.bands.panel.enabled || !config.bands.panel.fill.enabled} />
+              </label>
+              <label class="control-row slider">
+                <button type="button" class="setting-title" class:locked={isLocked('bands.panel.fill.opacity')} onclick={() => toggleLock('bands.panel.fill.opacity')} title="Click to lock/unlock for randomize">Opacity: {config.bands.panel.fill.opacity.toFixed(2)}</button>
+                <input type="range" bind:value={config.bands.panel.fill.opacity} min="0" max="1" step="0.01" disabled={!config.bands.panel.enabled || !config.bands.panel.fill.enabled} />
+              </label>
+            </details>
+          </details>
 
           <details class="control-details">
             <summary class="control-details-summary">Fill / Stroke</summary>
