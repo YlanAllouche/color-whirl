@@ -206,9 +206,10 @@ export function buildFlowlines2D(config: Flowlines2DConfig): FlowlineInstance[] 
   };
 
   const integrate = (seed: Vec2): Vec2[] => {
+    // IMPORTANT: do not mark occupancy while integrating, otherwise the line blocks itself
+    // (stepPx is typically < spacingPx). We only commit occupancy after the line is accepted.
     let p: Vec2 = { x: seed.x, y: seed.y };
     const pts: Vec2[] = [{ x: p.x, y: p.y }];
-    markOccupied(p.x, p.y);
     for (let s = 0; s < maxSteps; s++) {
       const v1 = fieldAt(p.x, p.y);
       if (Math.hypot(v1.x, v1.y) < 1e-7) break;
@@ -219,9 +220,25 @@ export function buildFlowlines2D(config: Flowlines2DConfig): FlowlineInstance[] 
       if (isNearOccupied(next.x, next.y)) break;
       p = next;
       pts.push({ x: p.x, y: p.y });
-      markOccupied(p.x, p.y);
     }
     return pts;
+  };
+
+  const commitOccupancy = (pts: Vec2[]) => {
+    // Mark points along the path at roughly `spacingPx` arc-length intervals.
+    if (pts.length === 0) return;
+    let acc = 0;
+    markOccupied(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1];
+      const b = pts[i];
+      const d = Math.hypot(b.x - a.x, b.y - a.y);
+      acc += d;
+      if (acc >= spacingPx * 0.75) {
+        acc = 0;
+        markOccupied(b.x, b.y);
+      }
+    }
   };
 
   const instances: FlowlineInstance[] = [];
@@ -239,6 +256,7 @@ export function buildFlowlines2D(config: Flowlines2DConfig): FlowlineInstance[] 
     if (len < minLengthPx) return;
 
     const colorIndex = pickPaletteIndex(seedU32, paletteMode, weightsNorm, lineIndex, 9001);
+    commitOccupancy(pts);
     instances.push({ points: pts, colorIndex });
   };
 

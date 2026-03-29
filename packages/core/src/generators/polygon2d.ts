@@ -93,6 +93,23 @@ function buildPolygonPath(cx: number, cy: number, r: number, edges: number, thet
   return path;
 }
 
+function buildStarPath(cx: number, cy: number, rOuter: number, edges: number, thetaRad: number, innerScale: number): Path2D {
+  const spikes = Math.max(3, Math.round(edges));
+  const rIn = Math.max(0.1, rOuter * clamp(innerScale, 0.05, 0.95));
+  const path = new Path2D();
+  const n = spikes * 2;
+  for (let i = 0; i < n; i++) {
+    const a = thetaRad + (i / n) * Math.PI * 2;
+    const rr = i % 2 === 0 ? rOuter : rIn;
+    const x = cx + Math.cos(a) * rr;
+    const y = cy + Math.sin(a) * rr;
+    if (i === 0) path.moveTo(x, y);
+    else path.lineTo(x, y);
+  }
+  path.closePath();
+  return path;
+}
+
 export function renderPolygon2DToCanvas(config: Polygon2DConfig, canvas?: HTMLCanvasElement): HTMLCanvasElement {
   const c = canvas ?? document.createElement('canvas');
   c.width = Math.max(1, Math.round(config.width));
@@ -132,6 +149,8 @@ export function renderPolygon2DToCanvas(config: Polygon2DConfig, canvas?: HTMLCa
   const strokeW = Math.max(0, config.polygons.stroke.widthPx);
   const strokeOpacity = clamp(config.polygons.stroke.opacity, 0, 1);
   const edges = Math.max(3, Math.round(config.polygons.edges));
+  const shape = config.polygons.shape === 'star' ? 'star' : 'polygon';
+  const starInner = clamp(Number(config.polygons.star?.innerScale) || 0.5, 0.05, 0.95);
 
   const carveMargin = Math.max(0, Number(config.collisions.carve.marginPx) || 0);
   const carveFeather = config.collisions.carve.edge === 'soft' ? Math.max(0, Number(config.collisions.carve.featherPx) || 0) : 0;
@@ -239,7 +258,9 @@ export function renderPolygon2DToCanvas(config: Polygon2DConfig, canvas?: HTMLCa
     const e = Math.max(0, Number(emit) || 0);
     if (!(e > 0)) return;
     const s = 1.0 + clamp(e * 0.03, 0, 0.8);
-    const glowPath = buildPolygonPath(cx, cy, r * s, edges, theta);
+    const glowPath = shape === 'star'
+      ? buildStarPath(cx, cy, r * s, edges, theta, starInner)
+      : buildPolygonPath(cx, cy, r * s, edges, theta);
     target.fillStyle = rgba(fill, clamp(0.06 + e * 0.02, 0, 1));
     target.fill(glowPath);
   };
@@ -257,7 +278,9 @@ export function renderPolygon2DToCanvas(config: Polygon2DConfig, canvas?: HTMLCa
 
   const renderAt = (cxJ: number, cyJ: number, r: number, theta: number, paletteIndex: number) => {
     const color = config.colors[paletteIndex] ?? '#ffffff';
-    const path = buildPolygonPath(cxJ, cyJ, r, edges, theta);
+    const path = shape === 'star'
+      ? buildStarPath(cxJ, cyJ, r, edges, theta, starInner)
+      : buildPolygonPath(cxJ, cyJ, r, edges, theta);
 
     if (!collisionsEnabled) {
       drawTo(sctx, path, color);
@@ -309,19 +332,114 @@ export function renderPolygon2DToCanvas(config: Polygon2DConfig, canvas?: HTMLCa
     }
   };
 
-  for (let i = 0; i < count; i++) {
-    const r = rMin + rng() * (rMax - rMin);
-    const cx = rng() * c.width;
-    const cy = rng() * c.height;
-    const cxJ = cx + (rng() - 0.5) * r * 2 * j;
-    const cyJ = cy + (rng() - 0.5) * r * 2 * j;
-    const theta = (rng() - 0.5) * rotJ;
+  if (config.polygons.mode === 'grid') {
+    const grid = config.polygons.grid;
+    const cell = Math.max(6, Number(grid?.cellPx) || 6);
+    const gJ = clamp(Number(grid?.jitter) || 0, 0, 1);
+    const kind = grid?.kind === 'diamond' ? 'diamond' : 'square';
 
-    const paletteIndex = pickIndex(i);
-    if (oneWayPriority) {
-      instances.push({ order: order++, cx: cxJ, cy: cyJ, r, theta, paletteIndex });
+    // Use `count` as a cap to avoid huge renders.
+    const max = count;
+    let i = 0;
+
+    if (kind === 'square') {
+      const cols = Math.ceil(c.width / cell) + 2;
+      const rows = Math.ceil(c.height / cell) + 2;
+      for (let gy = -1; gy <= rows; gy++) {
+        for (let gx = -1; gx <= cols; gx++) {
+          if (i >= max) break;
+          const baseX = (gx + 0.5) * cell;
+          const baseY = (gy + 0.5) * cell;
+          const jx = (rng() - 0.5) * cell * 0.9 * gJ;
+          const jy = (rng() - 0.5) * cell * 0.9 * gJ;
+          const r0 = rMin + rng() * (rMax - rMin);
+          const r = Math.min(r0, cell * 0.55);
+          const cx0 = baseX + jx;
+          const cy0 = baseY + jy;
+          const cxJ = cx0 + (rng() - 0.5) * r * 2 * j;
+          const cyJ = cy0 + (rng() - 0.5) * r * 2 * j;
+          const theta = (rng() - 0.5) * rotJ;
+          const paletteIndex = pickIndex(i);
+          if (oneWayPriority) instances.push({ order: order++, cx: cxJ, cy: cyJ, r, theta, paletteIndex });
+          else renderAt(cxJ, cyJ, r, theta, paletteIndex);
+          i++;
+        }
+        if (i >= max) break;
+      }
     } else {
-      renderAt(cxJ, cyJ, r, theta, paletteIndex);
+      const a = cell * 0.5;
+      const b = cell * 0.5;
+      const originX = 0;
+      const originY = 0;
+
+      const xMin = -cell;
+      const yMin = -cell;
+      const xMax = c.width + cell;
+      const yMax = c.height + cell;
+      const invU = (x: number, y: number) => 0.5 * ((x - originX) / a + (y - originY) / b);
+      const invV = (x: number, y: number) => 0.5 * ((y - originY) / b - (x - originX) / a);
+      const corners = [
+        { x: xMin, y: yMin },
+        { x: xMax, y: yMin },
+        { x: xMin, y: yMax },
+        { x: xMax, y: yMax }
+      ];
+      let uMin = Infinity;
+      let uMax = -Infinity;
+      let vMin = Infinity;
+      let vMax = -Infinity;
+      for (const p of corners) {
+        const uu = invU(p.x, p.y);
+        const vv = invV(p.x, p.y);
+        if (uu < uMin) uMin = uu;
+        if (uu > uMax) uMax = uu;
+        if (vv < vMin) vMin = vv;
+        if (vv > vMax) vMax = vv;
+      }
+      const pad = 2;
+      const u0 = Math.floor(uMin) - pad;
+      const u1 = Math.ceil(uMax) + pad;
+      const v0 = Math.floor(vMin) - pad;
+      const v1 = Math.ceil(vMax) + pad;
+
+      for (let vv = v0; vv <= v1; vv++) {
+        for (let uu = u0; uu <= u1; uu++) {
+          if (i >= max) break;
+          const baseX = originX + (uu - vv) * a;
+          const baseY = originY + (uu + vv) * b;
+          if (baseX < xMin - a || baseX > xMax + a || baseY < yMin - b || baseY > yMax + b) continue;
+          const jx = (rng() - 0.5) * cell * 0.9 * gJ;
+          const jy = (rng() - 0.5) * cell * 0.9 * gJ;
+          const r0 = rMin + rng() * (rMax - rMin);
+          const r = Math.min(r0, cell * 0.55);
+          const cx0 = baseX + jx;
+          const cy0 = baseY + jy;
+          const cxJ = cx0 + (rng() - 0.5) * r * 2 * j;
+          const cyJ = cy0 + (rng() - 0.5) * r * 2 * j;
+          const theta = (rng() - 0.5) * rotJ;
+          const paletteIndex = pickIndex(i);
+          if (oneWayPriority) instances.push({ order: order++, cx: cxJ, cy: cyJ, r, theta, paletteIndex });
+          else renderAt(cxJ, cyJ, r, theta, paletteIndex);
+          i++;
+        }
+        if (i >= max) break;
+      }
+    }
+  } else {
+    for (let i = 0; i < count; i++) {
+      const r = rMin + rng() * (rMax - rMin);
+      const cx = rng() * c.width;
+      const cy = rng() * c.height;
+      const cxJ = cx + (rng() - 0.5) * r * 2 * j;
+      const cyJ = cy + (rng() - 0.5) * r * 2 * j;
+      const theta = (rng() - 0.5) * rotJ;
+
+      const paletteIndex = pickIndex(i);
+      if (oneWayPriority) {
+        instances.push({ order: order++, cx: cxJ, cy: cyJ, r, theta, paletteIndex });
+      } else {
+        renderAt(cxJ, cyJ, r, theta, paletteIndex);
+      }
     }
   }
 

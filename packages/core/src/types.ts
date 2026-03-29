@@ -524,6 +524,8 @@ export interface Circles2DConfig extends BaseWallpaperConfig {
 export interface Polygon2DConfig extends BaseWallpaperConfig {
   type: 'polygon2d';
   polygons: {
+    mode: 'scatter' | 'grid';
+    shape: 'polygon' | 'star';
     count: number;
     /** Polygon edge count (>= 3) */
     edges: number;
@@ -532,6 +534,16 @@ export interface Polygon2DConfig extends BaseWallpaperConfig {
     /** 0..1 */
     jitter: number;
     rotateJitterDeg: number;
+    grid: {
+      kind: 'square' | 'diamond';
+      cellPx: number;
+      /** 0..1 */
+      jitter: number;
+    };
+    star: {
+      /** 0.05..0.95: inner radius as fraction of outer radius */
+      innerScale: number;
+    };
     /** 0..1 */
     fillOpacity: number;
     stroke: {
@@ -732,6 +744,8 @@ export interface Bands2DConfig extends BaseWallpaperConfig {
       wavelengthPx: number;
       /** 0.1..8 */
       sharpness: number;
+      /** If true, align chevrons across all bands */
+      sharedPhase: boolean;
     };
     paletteMode: PaletteAssignMode;
     /** Per-palette weights (used when paletteMode=weighted). Length may be < colors.length. */
@@ -1151,12 +1165,22 @@ export const DEFAULT_POLYGON2D_CONFIG: Polygon2DConfig = {
   ...DEFAULT_POPSICLE_CONFIG,
   type: 'polygon2d',
   polygons: {
+    mode: 'scatter',
+    shape: 'polygon',
     count: 200,
     edges: 6,
     rMinPx: 18,
     rMaxPx: 130,
     jitter: 1.0,
     rotateJitterDeg: 180,
+    grid: {
+      kind: 'square',
+      cellPx: 80,
+      jitter: 1.0
+    },
+    star: {
+      innerScale: 0.5
+    },
     fillOpacity: 0.95,
     stroke: { enabled: false, widthPx: 2, color: '#0b0b10', opacity: 0.7 },
     paletteMode: 'weighted',
@@ -1273,7 +1297,8 @@ export const DEFAULT_BANDS2D_CONFIG: Bands2DConfig = {
     chevron: {
       amplitudePx: 68,
       wavelengthPx: 260,
-      sharpness: 1.4
+      sharpness: 1.4,
+      sharedPhase: true
     },
     paletteMode: 'cycle',
     colorWeights: [0.34, 0.28, 0.18, 0.12, 0.08]
@@ -1791,6 +1816,7 @@ export function normalizeWallpaperConfig(input: any): WallpaperConfig {
       bAny.chevron.wavelengthPx = Number.isFinite(cl) ? Math.max(1, cl) : Math.max(1, Number(baseBands?.chevron?.wavelengthPx) || 1);
       const cs = Number(bAny.chevron.sharpness);
       bAny.chevron.sharpness = Number.isFinite(cs) ? clamp(cs, 0.1, 8) : clamp(Number(baseBands?.chevron?.sharpness) || 1, 0.1, 8);
+      bAny.chevron.sharedPhase = typeof bAny.chevron.sharedPhase === 'boolean' ? bAny.chevron.sharedPhase : !!(baseBands?.chevron?.sharedPhase);
 
       bAny.paletteMode = bAny.paletteMode === 'cycle' ? 'cycle' : 'weighted';
       if (!Array.isArray(bAny.colorWeights)) bAny.colorWeights = Array.isArray(baseBands?.colorWeights) ? baseBands.colorWeights.slice() : [];
@@ -2552,7 +2578,8 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
             chevron: {
               amplitudePx: Math.round(randomWeighted(rng, 0, 220, 68)),
               wavelengthPx: Math.round(randomWeighted(rng, 80, 700, 260)),
-              sharpness: clamp(tri(0.6, 1.4, 4.0), 0.1, 8)
+              sharpness: clamp(tri(0.6, 1.4, 4.0), 0.1, 8),
+              sharedPhase: chance(0.75)
             },
             paletteMode: rng() < 0.55 ? 'cycle' : 'weighted',
             colorWeights: [0.34, 0.28, 0.18, 0.12, 0.08]
@@ -2643,23 +2670,42 @@ export function generateRandomConfigNoPresetsFromSeed(seed: number, type: Wallpa
         }
       };
     case 'polygon2d':
-      return {
-        ...base,
-        bloom: base.emission.enabled ? { ...base.bloom, enabled: true } : { ...base.bloom },
-        type: 'polygon2d',
-        polygons: {
-          count: skewCountLow(10, DEFAULT_POLYGON2D_CONFIG.polygons.count, 420, 1600, 0.03),
-          edges: Math.max(3, Math.min(16, Math.round(randomWeighted(rng, 3, 12, 6)))),
-          rMinPx: Math.round(randomWeighted(rng, 6, 40, 18)),
-          rMaxPx: Math.round(randomWeighted(rng, 30, 280, 130)),
-          jitter: clamp(randomWeighted(rng, 0, 1, 1), 0, 1),
-          rotateJitterDeg: randomWeighted(rng, 0, 360, 180),
-          fillOpacity: clamp(randomWeighted(rng, 0.2, 1, 0.95), 0, 1),
-          stroke: { enabled: rng() < 0.25, widthPx: 2, color: '#0b0b10', opacity: 0.7 },
-          paletteMode: rng() < 0.65 ? 'weighted' : 'cycle',
-          colorWeights: [0.34, 0.28, 0.18, 0.12, 0.08]
-        }
-      };
+      {
+        const starGrid = chance(0.22);
+        const mode = starGrid ? 'grid' : 'scatter';
+        const shape = starGrid ? 'star' : (rng() < 0.12 ? 'star' : 'polygon');
+        const edges = Math.max(3, Math.min(16, Math.round(randomWeighted(rng, 3, 12, 6))));
+        const rMinPx = Math.round(randomWeighted(rng, 6, 40, 18));
+        const rMaxPx = Math.round(randomWeighted(rng, 30, 280, 130));
+        const cellPx = Math.round(randomWeighted(rng, 18, 140, 54));
+        return {
+          ...base,
+          bloom: base.emission.enabled ? { ...base.bloom, enabled: true } : { ...base.bloom },
+          type: 'polygon2d',
+          polygons: {
+            mode,
+            shape,
+            count: starGrid ? skewCountLow(20, 900, 2600, 9000, 0.02) : skewCountLow(10, DEFAULT_POLYGON2D_CONFIG.polygons.count, 420, 1600, 0.03),
+            edges,
+            rMinPx,
+            rMaxPx,
+            jitter: clamp(randomWeighted(rng, 0, 1, 1), 0, 1),
+            rotateJitterDeg: starGrid ? randomWeighted(rng, 0, 25, 6) : randomWeighted(rng, 0, 360, 180),
+            grid: {
+              kind: starGrid ? 'diamond' : (rng() < 0.4 ? 'diamond' : 'square'),
+              cellPx,
+              jitter: clamp(randomWeighted(rng, 0, 1, 0.65), 0, 1)
+            },
+            star: {
+              innerScale: clamp(tri(0.25, 0.5, 0.8), 0.05, 0.95)
+            },
+            fillOpacity: clamp(randomWeighted(rng, starGrid ? 0.05 : 0.2, 1, starGrid ? 0.32 : 0.95), 0, 1),
+            stroke: { enabled: rng() < (starGrid ? 0.75 : 0.25), widthPx: starGrid ? 1 : 2, color: '#ffffff', opacity: clamp(tri(0.08, 0.55, 1.0), 0, 1) },
+            paletteMode: rng() < 0.65 ? 'weighted' : 'cycle',
+            colorWeights: [0.34, 0.28, 0.18, 0.12, 0.08]
+          }
+        };
+      }
     case 'triangles2d':
       return {
         ...base,

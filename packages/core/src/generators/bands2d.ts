@@ -152,6 +152,8 @@ export function renderBands2DToCanvas(config: Bands2DConfig, canvas?: HTMLCanvas
   const chevAmp = Math.max(0, Number(chevron.amplitudePx) || 0);
   const chevLen = Math.max(1, Number(chevron.wavelengthPx) || 1);
   const chevSharp = clamp(Number(chevron.sharpness) || 1, 0.1, 8);
+  const chevShared = typeof chevron.sharedPhase === 'boolean' ? chevron.sharedPhase : true;
+  const chevSharedPhase = cellRand01(seedU32, 0x51a, 0x9b1, 9301);
 
   const bandOffset = (x: number, bandIndex: number): number => {
     if (mode === 'waves') {
@@ -162,7 +164,7 @@ export function renderBands2DToCanvas(config: Bands2DConfig, canvas?: HTMLCanvas
     }
 
     if (mode === 'chevron') {
-      const phase = cellRand01(seedU32, bandIndex, 0, 9301);
+      const phase = chevShared ? chevSharedPhase : cellRand01(seedU32, bandIndex, 0, 9301);
       const t = (x / chevLen) + phase;
       const tri = triWave01(t);
       const shaped = Math.sign(tri) * Math.pow(Math.abs(tri), chevSharp);
