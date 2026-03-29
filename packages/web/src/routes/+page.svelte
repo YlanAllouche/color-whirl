@@ -985,6 +985,8 @@
           polygons: {
             ...src.polygons,
             stroke: { ...src.polygons.stroke },
+            grid: { ...src.polygons.grid },
+            star: { ...src.polygons.star },
             colorWeights: [...src.polygons.colorWeights]
           }
         };
@@ -1744,6 +1746,7 @@
       void c.bands.chevron.amplitudePx;
       void c.bands.chevron.wavelengthPx;
       void c.bands.chevron.sharpness;
+      void c.bands.chevron.sharedPhase;
       void c.bands.paletteMode;
       void c.bands.colorWeights.join(',');
     }
@@ -1817,12 +1820,18 @@
       void c.circles.croissant.angleJitterDeg;
     }
     if (c.type === 'polygon2d') {
+      void c.polygons.mode;
+      void c.polygons.shape;
       void c.polygons.count;
       void c.polygons.edges;
       void c.polygons.rMinPx;
       void c.polygons.rMaxPx;
       void c.polygons.jitter;
       void c.polygons.rotateJitterDeg;
+      void c.polygons.grid.kind;
+      void c.polygons.grid.cellPx;
+      void c.polygons.grid.jitter;
+      void c.polygons.star.innerScale;
       void c.polygons.fillOpacity;
       void c.polygons.stroke.enabled;
       void c.polygons.stroke.widthPx;
@@ -4778,6 +4787,11 @@
                 <button type="button" class="setting-title" class:locked={isLocked('bands.chevron.sharpness')} onclick={() => toggleLock('bands.chevron.sharpness')} title="Click to lock/unlock for randomize">Sharpness: {config.bands.chevron.sharpness.toFixed(2)}</button>
                 <input type="range" bind:value={config.bands.chevron.sharpness} min="0.1" max="8" step="0.05" />
               </label>
+
+              <label class="control-row checkbox">
+                <input type="checkbox" bind:checked={config.bands.chevron.sharedPhase} />
+                <button type="button" class="setting-title" class:locked={isLocked('bands.chevron.sharedPhase')} onclick={(e) => { e.preventDefault(); toggleLock('bands.chevron.sharedPhase'); }} title="Click to lock/unlock for randomize">Shared phase (align)</button>
+              </label>
             </details>
           {/if}
 
@@ -5110,6 +5124,54 @@
        {:else if config.type === 'polygon2d'}
         <section class="control-section">
           <h3>Polygon (2D)</h3>
+
+          <label class="control-row">
+            <button type="button" class="setting-title" class:locked={isLocked('polygons.mode')} onclick={() => toggleLock('polygons.mode')} title="Click to lock/unlock for randomize">Mode</button>
+            <select bind:value={config.polygons.mode}>
+              <option value="scatter">Scatter</option>
+              <option value="grid">Grid</option>
+            </select>
+          </label>
+
+          <label class="control-row">
+            <button type="button" class="setting-title" class:locked={isLocked('polygons.shape')} onclick={() => toggleLock('polygons.shape')} title="Click to lock/unlock for randomize">Shape</button>
+            <select bind:value={config.polygons.shape}>
+              <option value="polygon">Polygon</option>
+              <option value="star">Star</option>
+            </select>
+          </label>
+
+          {#if config.polygons.mode === 'grid'}
+            <details class="control-details">
+              <summary class="control-details-summary">Grid</summary>
+              <label class="control-row">
+                <button type="button" class="setting-title" class:locked={isLocked('polygons.grid.kind')} onclick={() => toggleLock('polygons.grid.kind')} title="Click to lock/unlock for randomize">Kind</button>
+                <select bind:value={config.polygons.grid.kind}>
+                  <option value="square">Square</option>
+                  <option value="diamond">Diamond</option>
+                </select>
+              </label>
+
+              <label class="control-row slider">
+                <button type="button" class="setting-title" class:locked={isLocked('polygons.grid.cellPx')} onclick={() => toggleLock('polygons.grid.cellPx')} title="Click to lock/unlock for randomize">Cell: {Math.round(config.polygons.grid.cellPx)}px</button>
+                <input type="range" bind:value={config.polygons.grid.cellPx} min="6" max="240" step="1" />
+              </label>
+              <label class="control-row slider">
+                <button type="button" class="setting-title" class:locked={isLocked('polygons.grid.jitter')} onclick={() => toggleLock('polygons.grid.jitter')} title="Click to lock/unlock for randomize">Grid jitter: {config.polygons.grid.jitter.toFixed(2)}</button>
+                <input type="range" bind:value={config.polygons.grid.jitter} min="0" max="1" step="0.01" />
+              </label>
+            </details>
+          {/if}
+
+          {#if config.polygons.shape === 'star'}
+            <details class="control-details">
+              <summary class="control-details-summary">Star</summary>
+              <label class="control-row slider">
+                <button type="button" class="setting-title" class:locked={isLocked('polygons.star.innerScale')} onclick={() => toggleLock('polygons.star.innerScale')} title="Click to lock/unlock for randomize">Inner scale: {config.polygons.star.innerScale.toFixed(2)}</button>
+                <input type="range" bind:value={config.polygons.star.innerScale} min="0.05" max="0.95" step="0.01" />
+              </label>
+            </details>
+          {/if}
 
           <label class="control-row slider">
             <button type="button" class="setting-title" class:locked={isLocked('polygons.count')} onclick={() => toggleLock('polygons.count')} title="Click to lock/unlock for randomize">Count: {config.polygons.count}</button>
