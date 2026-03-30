@@ -44,9 +44,11 @@
     <LucideIcon name="chevron-down" size={16} class="panel-chevron" />
   </button>
 
-  <div class="panel-body">
-    <div class="panel-body-inner">
-      <slot />
+  {#if open}
+    <div class="panel-body">
+      <div class="panel-body-inner">
+        <slot />
+      </div>
     </div>
-  </div>
+  {/if}
 </section>

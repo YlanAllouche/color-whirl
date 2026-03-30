@@ -9,9 +9,11 @@
     title: string;
     icon: string;
     defaultColumns?: 1 | 2;
+    columns?: 1 | 2;
     searchPlaceholder?: string;
     searchQuery?: string;
     showSearch?: boolean;
+    showColumnsToggle?: boolean;
   };
 
   let {
@@ -19,13 +21,14 @@
     title,
     icon,
     defaultColumns = 1,
+    columns = $bindable(defaultColumns),
     searchPlaceholder = 'Search settings…',
     searchQuery = $bindable(''),
-    showSearch = true
+    showSearch = true,
+    showColumnsToggle = true
   }: Props = $props();
 
   const colsKey = $derived(`ui.inspector.${id}.columns`);
-  let columns = $state<1 | 2>(defaultColumns);
 
   onMount(() => {
     const stored = readLocalStorageNumber(colsKey);
@@ -61,21 +64,23 @@
         <div class="inspector-search" aria-hidden="true"></div>
       {/if}
 
-      <button
-        type="button"
-        class="inspector-cols"
-        title={columns === 2 ? 'Single column' : 'Two columns'}
-        onclick={() => {
-          columns = columns === 2 ? 1 : 2;
-        }}
-      >
-        <LucideIcon name={columns === 2 ? 'columns-2' : 'columns'} size={16} />
-      </button>
+      {#if showColumnsToggle}
+        <button
+          type="button"
+          class="inspector-cols"
+          title={columns === 2 ? 'Single column' : 'Two columns'}
+          onclick={() => {
+            columns = columns === 2 ? 1 : 2;
+          }}
+        >
+          <LucideIcon name={columns === 2 ? 'columns-2' : 'columns'} size={16} />
+        </button>
+      {/if}
     </div>
   </div>
 
   <div class="inspector-scroll" use:filterDom={searchQuery}>
-    <div class="inspector-content" class:cols2={columns === 2}>
+    <div class="inspector-content inspector-content-scroll" class:cols2={columns === 2}>
       <slot />
     </div>
   </div>

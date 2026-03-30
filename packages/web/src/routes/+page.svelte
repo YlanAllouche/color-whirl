@@ -1,5 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import '@fontsource/geist-sans/latin.css';
+  import '@fontsource/geist-mono/latin.css';
   import '$lib/ui/styles/app.css';
   import { 
     DEFAULT_CONFIG, 
@@ -63,6 +65,9 @@
 
   // UI-only: shared search/filter for both inspector columns.
   let inspectorSearch = $state('');
+
+  // UI-only: look inspector layout (1/2 columns), persisted by InspectorColumn.
+  let lookColumns = $state<1 | 2>(2);
   
   let canvasContainer: HTMLDivElement | null = null;
   let canvasHost: HTMLDivElement | null = null;
@@ -857,7 +862,16 @@
   <title>ColorWhirl</title>
 </svelte:head>
 
-<EditorShell appTitle="ColorWhirl" quickRandomize={generateRandomGeneratedColors} quickExport={handleExport} bind:searchQuery={inspectorSearch}>
+<EditorShell
+  appTitle="ColorWhirl"
+  quickRandomize={generateRandomGeneratedColors}
+  quickExport={handleExport}
+  lookColumns={lookColumns}
+  toggleLookColumns={() => {
+    lookColumns = lookColumns === 2 ? 1 : 2;
+  }}
+  bind:searchQuery={inspectorSearch}
+>
   <svelte:fragment slot="left">
     <GlobalInspector
       {config}
@@ -935,6 +949,7 @@
       {supportsEmission}
       {showEmissionSection}
       {supportsCollisions}
+      bind:columns={lookColumns}
       bind:searchQuery={inspectorSearch}
       {schedulePreviewRender}
       {clearPreviewSettleTimer}
