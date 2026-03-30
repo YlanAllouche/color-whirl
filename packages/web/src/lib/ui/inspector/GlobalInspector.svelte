@@ -73,10 +73,13 @@
     searchPlaceholder="Search global…"
     bind:searchQuery
     showSearch={false}
+    showColumnsToggle={false}
   >
     <RandomizeSection {generateRandomGeneratedColors} {generateRandomIncludingType} />
     <TypeSection {config} {switchType} />
-    <RenderSection {config} {is3DType} {supportsBloom} {isLocked} {toggleLock} bind:renderMode />
+    {#if is3DType || supportsBloom}
+      <RenderSection {config} {is3DType} {supportsBloom} {isLocked} {toggleLock} bind:renderMode />
+    {/if}
     <ResolutionSection {config} {RESOLUTION_PRESETS} applyResolutionPreset={applyResolutionPreset} />
     <ExportSection bind:exportFormat {isExporting} {handleExport} />
     <CliSection {cliCommand} {copyCliCommand} bind:cliViewMode />

@@ -5,6 +5,7 @@
   import InspectorColumn from '$lib/ui/inspector/InspectorColumn.svelte';
   import ColorsSection from '$lib/ui/sections/ColorsSection.svelte';
   import AppearanceSection from '$lib/ui/sections/AppearanceSection.svelte';
+  import VoronoiSection from '$lib/ui/sections/VoronoiSection.svelte';
   import EmissionSection from '$lib/ui/sections/EmissionSection.svelte';
   import GeneratorSection from '$lib/ui/inspector/GeneratorSection.svelte';
   import CameraSection from '$lib/ui/sections/CameraSection.svelte';
@@ -19,6 +20,8 @@
     supportsCollisions: boolean;
 
     searchQuery: string;
+
+    columns?: 1 | 2;
 
     schedulePreviewRender: () => void;
     clearPreviewSettleTimer: () => void;
@@ -55,6 +58,7 @@
     showEmissionSection,
     supportsCollisions,
     searchQuery = $bindable(),
+    columns = $bindable(2),
     schedulePreviewRender,
     clearPreviewSettleTimer,
     isLocked,
@@ -87,6 +91,8 @@
     searchPlaceholder="Search look…"
     bind:searchQuery
     showSearch={false}
+    bind:columns
+    showColumnsToggle={false}
   >
     <ColorsSection
       {config}
@@ -108,6 +114,7 @@
     />
 
     <AppearanceSection {config} {is3DType} {isLocked} {toggleLock} />
+    <VoronoiSection {config} {is3DType} {isLocked} {toggleLock} />
     <EmissionSection {config} {showEmissionSection} {isLocked} {toggleLock} />
     <GeneratorSection {config} {isLocked} {toggleLock} {renderError} {schedulePreviewRender} {setEqualWeights} {setRandomWeights} {updateWeight} />
     <CameraSection {config} {is3DType} {isLocked} {toggleLock} />

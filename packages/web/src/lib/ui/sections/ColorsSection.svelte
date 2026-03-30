@@ -60,6 +60,19 @@
     </button>
     <span class="setting-hint">Presets + palette overrides</span>
   </label>
+
+  <label class="control-row">
+    <button
+      type="button"
+      class="setting-title"
+      class:locked={isLocked('backgroundColor')}
+      onclick={() => toggleLock('backgroundColor')}
+      title="Click to lock/unlock for randomize"
+    >
+      Background (scheme)
+    </button>
+    <input type="color" bind:value={config.backgroundColor} />
+  </label>
   <div class="palette-controls">
     <div class="palette-row">
       <button type="button" class="palette-nav" onclick={() => cycleColorPreset(-1)} title="Previous preset">Prev</button>
