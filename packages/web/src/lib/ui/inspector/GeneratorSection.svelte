@@ -13,6 +13,7 @@
   import Circles2DPanel from '$lib/ui/inspector/generator/Circles2DPanel.svelte';
   import Polygon2DPanel from '$lib/ui/inspector/generator/Polygon2DPanel.svelte';
   import Svg2DPanel from '$lib/ui/inspector/generator/Svg2DPanel.svelte';
+  import SvgIconPickerPanel from '$lib/ui/inspector/generator/SvgIconPickerPanel.svelte';
   import Triangles2DPanel from '$lib/ui/inspector/generator/Triangles2DPanel.svelte';
   import Ridges2DPanel from '$lib/ui/inspector/generator/Ridges2DPanel.svelte';
   import Triangles3DPanel from '$lib/ui/inspector/generator/Triangles3DPanel.svelte';
@@ -63,6 +64,7 @@
 {:else if config.type === 'polygon2d'}
   <Polygon2DPanel config={config as any} {isLocked} {toggleLock} {setEqualWeights} {setRandomWeights} {updateWeight} />
 {:else if config.type === 'svg2d'}
+  <SvgIconPickerPanel config={config as any} {schedulePreviewRender} />
   <Svg2DPanel
     config={config as any}
     {renderError}
@@ -80,6 +82,7 @@
 {:else if config.type === 'triangles3d'}
   <Triangles3DPanel config={config as any} {isLocked} {toggleLock} {setEqualWeights} {setRandomWeights} {updateWeight} />
 {:else if config.type === 'svg3d'}
+  <SvgIconPickerPanel config={config as any} {schedulePreviewRender} />
   <Svg3DPanel
     config={config as any}
     {renderError}
