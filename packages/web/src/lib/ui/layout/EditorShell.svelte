@@ -7,10 +7,19 @@
     appTitle?: string;
     quickRandomize?: () => void;
     quickExport?: () => void;
+    lookColumns?: 1 | 2;
+    toggleLookColumns?: () => void;
     searchQuery?: string;
   };
 
-  let { appTitle = 'ColorWhirl', quickRandomize, quickExport, searchQuery = $bindable('') }: Props = $props();
+  let {
+    appTitle = 'ColorWhirl',
+    quickRandomize,
+    quickExport,
+    lookColumns,
+    toggleLookColumns,
+    searchQuery = $bindable('')
+  }: Props = $props();
 
   const leftKey = 'ui.layout.leftWidth';
   const rightKey = 'ui.layout.rightWidth';
@@ -75,14 +84,29 @@
   aria-label="Wallpaper editor"
 >
   <header class="app-topbar">
-    <div class="topbar-left"></div>
-
-    <div class="topbar-center">
+    <div class="topbar-left">
       <div class="topbar-brand" title={appTitle}>
-        <span class="mobile-dot" aria-hidden="true"></span>
+        <img class="brand-mark" src="/favicon.svg" alt="" aria-hidden="true" />
         <span class="topbar-title">{appTitle}</span>
       </div>
 
+      <div class="topbar-actions">
+        <button
+          type="button"
+          class="topbar-btn topbar-btn-primary"
+          onclick={() => {
+            mobileOpen = !mobileOpen;
+          }}
+          aria-expanded={mobileOpen}
+          title="Settings"
+          data-mobile-only
+        >
+          <LucideIcon name={mobileOpen ? 'x' : 'sliders-horizontal'} size={18} />
+        </button>
+      </div>
+    </div>
+
+    <div class="topbar-right">
       <label class="topbar-search">
         <LucideIcon name="search" size={16} class="inspector-search-icon" />
         <input
@@ -94,27 +118,6 @@
           spellcheck="false"
         />
       </label>
-    </div>
-
-    <div class="topbar-right">
-      <button type="button" class="mobile-btn" onclick={quickRandomize} disabled={!quickRandomize} title="Randomize">
-        <LucideIcon name="dice-5" size={18} />
-      </button>
-      <button type="button" class="mobile-btn" onclick={quickExport} disabled={!quickExport} title="Export">
-        <LucideIcon name="download" size={18} />
-      </button>
-      <button
-        type="button"
-        class="mobile-btn mobile-btn-primary"
-        onclick={() => {
-          mobileOpen = !mobileOpen;
-        }}
-        aria-expanded={mobileOpen}
-        title="Settings"
-        data-mobile-only
-      >
-        <LucideIcon name={mobileOpen ? 'x' : 'sliders-horizontal'} size={18} />
-      </button>
     </div>
   </header>
 
