@@ -36,6 +36,10 @@
   let previewCache = $state<Record<string, string>>({});
   let previewLoading = $state<Record<string, boolean>>({});
 
+  const entryByNode = new WeakMap<Element, IconEntry>();
+  const observerByRoot = new WeakMap<Element, IntersectionObserver>();
+  let viewportObserver: IntersectionObserver | null = null;
+
   let expanded = $state(false);
   let dialogEl: HTMLDialogElement | null = null;
   let expandedSearchEl: HTMLInputElement | null = null;
@@ -137,26 +141,71 @@
   });
 
   $effect(() => {
+    // Cheap eager prefetch for the top of the list.
     const first = prefetchIcons.slice(0, 48);
-    for (const entry of first) {
-      const key = cacheKey(entry);
-      if (previewCache[key] || previewLoading[key]) continue;
-
-      previewLoading = { ...previewLoading, [key]: true };
-      void getProviderIconPreviewSvg(entry.providerId, entry.name, 18)
-        .then((svg) => {
-          previewCache = { ...previewCache, [key]: svg };
-        })
-        .catch(() => {
-          // Ignore preview failures; picking uses full SVG.
-        })
-        .finally(() => {
-          const next = { ...previewLoading };
-          delete next[key];
-          previewLoading = next;
-        });
-    }
+    for (const entry of first) maybeLoadPreview(entry);
   });
+
+  function maybeLoadPreview(entry: IconEntry): void {
+    const key = cacheKey(entry);
+    if (previewCache[key] || previewLoading[key]) return;
+
+    previewLoading = { ...previewLoading, [key]: true };
+    void getProviderIconPreviewSvg(entry.providerId, entry.name, 18)
+      .then((svg) => {
+        previewCache = { ...previewCache, [key]: svg };
+      })
+      .catch(() => {
+        // Ignore preview failures; picking uses full SVG.
+      })
+      .finally(() => {
+        const next = { ...previewLoading };
+        delete next[key];
+        previewLoading = next;
+      });
+  }
+
+  function getObserver(root: Element | null): IntersectionObserver {
+    const cb: IntersectionObserverCallback = (entries) => {
+      for (const e of entries) {
+        if (!e.isIntersecting) continue;
+        const entry = entryByNode.get(e.target);
+        if (!entry) continue;
+        maybeLoadPreview(entry);
+      }
+    };
+
+    if (!root) {
+      if (!viewportObserver) {
+        viewportObserver = new IntersectionObserver(cb, { root: null, rootMargin: '280px 0px' });
+      }
+      return viewportObserver;
+    }
+
+    const existing = observerByRoot.get(root);
+    if (existing) return existing;
+    const next = new IntersectionObserver(cb, { root, rootMargin: '280px 0px' });
+    observerByRoot.set(root, next);
+    return next;
+  }
+
+  function observePreview(node: HTMLElement, entry: IconEntry) {
+    entryByNode.set(node, entry);
+    const root = node.closest('.icon-picker-results');
+    const observer = getObserver(root);
+    observer.observe(node);
+
+    return {
+      destroy() {
+        try {
+          observer.unobserve(node);
+        } catch {
+          // Ignore.
+        }
+        entryByNode.delete(node);
+      }
+    };
+  }
 
   function getPreviewMarkup(entry: IconEntry): string | null {
     return previewCache[cacheKey(entry)] ?? null;
@@ -270,6 +319,7 @@
           class="icon-picker-item"
           title={`${entry.name} (${meta.label})`}
           onclick={() => pick(entry)}
+          use:observePreview={entry}
         >
           <span class="icon-picker-preview" aria-hidden="true">
             {@html getPreviewMarkup(entry) ?? '<span class="icon-picker-preview-fallback"></span>'}
@@ -358,6 +408,7 @@
                 class="icon-picker-item"
                 title={`${entry.name} (${meta.label})`}
                 onclick={() => pick(entry)}
+                use:observePreview={entry}
               >
                 <span class="icon-picker-preview" aria-hidden="true">
                   {@html getPreviewMarkup(entry) ?? '<span class="icon-picker-preview-fallback"></span>'}
@@ -404,15 +455,15 @@
     height: 36px;
     padding: 0 0.75rem;
     border-radius: 10px;
-    border: 1px solid #2b2b3a;
-    background: linear-gradient(180deg, #151525 0%, #0f0f18 100%);
-    color: #fff;
+    border: 1px solid var(--stroke0);
+    background: rgba(20, 20, 22, 0.55);
+    color: var(--text0);
     cursor: pointer;
   }
 
   .icon-expand:hover {
-    border-color: #3b4f76;
-    background: #191928;
+    border-color: var(--stroke1);
+    background: rgba(255, 255, 255, 0.06);
   }
 
   .icon-provider-filters {
@@ -427,23 +478,23 @@
     align-items: center;
     gap: 0.4rem;
     padding: 0.32rem 0.55rem;
-    border-radius: 999px;
-    border: 1px solid #2b2b3a;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--stroke0);
     background: rgba(255, 255, 255, 0.04);
-    color: #cbd5e1;
+    color: var(--text1);
     cursor: pointer;
     user-select: none;
   }
 
   .provider-chip.subtle {
     padding: 0.32rem 0.6rem;
-    color: #a9a9b3;
+    color: var(--text2);
   }
 
   .provider-chip.is-on {
-    border-color: rgba(88, 132, 219, 0.55);
-    background: rgba(88, 132, 219, 0.12);
-    color: #e5e7eb;
+    border-color: var(--accent-stroke);
+    background: var(--accent-soft);
+    color: var(--text0);
   }
 
   .provider-chip-label {
@@ -456,7 +507,7 @@
     justify-content: center;
     min-width: 2.5rem;
     padding: 0.22rem 0.45rem;
-    border-radius: 999px;
+    border-radius: var(--radius-sm);
     border: 1px solid transparent;
     font-size: 0.68rem;
     font-weight: 700;
@@ -530,10 +581,10 @@
     align-content: start;
     gap: 0.55rem;
     padding: 0.7rem 0.55rem 0.65rem;
-    border-radius: 12px;
-    border: 1px solid #2b2b3a;
-    background: linear-gradient(180deg, #141420 0%, #10101a 100%);
-    color: #fff;
+    border-radius: 10px;
+    border: 1px solid var(--stroke0);
+    background: rgba(20, 20, 22, 0.55);
+    color: var(--text0);
     text-align: center;
     cursor: pointer;
     transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease, box-shadow 0.16s ease;
@@ -541,10 +592,10 @@
 
   .icon-picker-item:hover,
   .icon-picker-item:focus-visible {
-    border-color: #3b4f76;
-    background: #191928;
+    border-color: var(--stroke1);
+    background: rgba(255, 255, 255, 0.06);
     transform: translateY(-1px);
-    box-shadow: 0 0 0 1px rgba(88, 132, 219, 0.2), 0 10px 18px rgba(4, 7, 17, 0.32);
+    box-shadow: 0 0 0 1px rgba(249, 115, 22, 0.12), 0 10px 18px rgba(0, 0, 0, 0.35);
     outline: none;
   }
 
@@ -554,10 +605,10 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border-radius: 10px;
+    border-radius: 8px;
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
     border: 1px solid rgba(255, 255, 255, 0.08);
-    color: #f8fafc;
+    color: var(--text0);
   }
 
   .icon-picker-preview :global(svg) {
@@ -597,10 +648,10 @@
 
   .icon-picker-dialog {
     padding: 0;
-    border: 1px solid #2b2b3a;
-    border-radius: 14px;
-    background: #0f0f18;
-    color: #fff;
+    border: 1px solid var(--stroke0);
+    border-radius: 12px;
+    background: rgba(12, 12, 14, 0.96);
+    color: var(--text0);
     width: min(1080px, 92vw);
   }
 
@@ -629,15 +680,15 @@
   .dialog-close {
     height: 34px;
     padding: 0 0.75rem;
-    border-radius: 10px;
-    border: 1px solid #2b2b3a;
+    border-radius: 8px;
+    border: 1px solid var(--stroke0);
     background: rgba(255, 255, 255, 0.04);
-    color: #fff;
+    color: var(--text0);
     cursor: pointer;
   }
 
   .dialog-close:hover {
-    border-color: #3b4f76;
+    border-color: var(--stroke1);
     background: rgba(255, 255, 255, 0.06);
   }
 

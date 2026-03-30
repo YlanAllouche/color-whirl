@@ -1122,7 +1122,7 @@ void wmApplyCollisionMask(inout vec4 col) {
 
   private async initPathTracer(): Promise<void> {
     const mod = await import('three-gpu-pathtracer');
-    const WebGLPathTracer = (mod as any).WebGLPathTracer;
+    const WebGLPathTracer = (mod as any).WebGLPathTracer ?? (mod as any).default?.WebGLPathTracer;
     if (!WebGLPathTracer) {
       throw new Error('WebGLPathTracer export not found in three-gpu-pathtracer');
     }

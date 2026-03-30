@@ -31,6 +31,24 @@
   });
 </script>
 
-<span class={className} aria-hidden={title ? undefined : 'true'} title={title}>
+<span
+  class={['lucide-icon', className].filter(Boolean).join(' ')}
+  aria-hidden={title ? undefined : 'true'}
+  title={title}
+>
   {@html svg}
 </span>
+
+<style>
+  .lucide-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 0;
+  }
+
+  .lucide-icon :global(svg) {
+    display: block;
+    overflow: visible;
+  }
+</style>

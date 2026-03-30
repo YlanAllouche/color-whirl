@@ -78,7 +78,16 @@ export async function getProviderIconSvg(id: IconProviderId, name: string): Prom
   const icon = loaded.json?.icons?.[name];
   if (!icon) throw new Error(`Icon not found: ${id}:${name}`);
 
-  const out = iconToSVG(icon, {
+  // Iconify JSON packs often store default width/height at the set level,
+  // while individual icons omit it. iconToSVG defaults missing dims to 16,
+  // which can produce a wrong viewBox (and clipped icons).
+  const iconData = {
+    ...(icon as any),
+    width: (icon as any)?.width ?? loaded.json.width ?? 24,
+    height: (icon as any)?.height ?? loaded.json.height ?? 24
+  };
+
+  const out = iconToSVG(iconData, {
     width: loaded.json.width ?? 24,
     height: loaded.json.height ?? 24
   });
