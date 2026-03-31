@@ -1440,10 +1440,20 @@ void wmApplyCollisionMask(inout vec4 col) {
     // Always draw at least one frame after resizing/clearing the canvas.
     // If we are already at the sample budget and we don't render a new frame,
     // the resized canvas can remain blank until the next user interaction.
+    let didRenderSample = false;
     try {
       this.pathTracer.renderSample();
+      didRenderSample = true;
     } catch {
       // Ignore; loop below may still recover.
+    }
+
+    if (!didRenderSample) {
+      try {
+        if (this.pathScene && this.pathCamera) this.renderer.render(this.pathScene, this.pathCamera);
+      } catch {
+        // Ignore.
+      }
     }
 
     if ((this.pathTracer.samples ?? 0) >= sampleBudget) {
