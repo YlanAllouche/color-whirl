@@ -166,6 +166,7 @@ export class Basic3DPreview {
 
   // Path tracing state
   private pathTracer: any = null;
+  private bvhWorker: any = null;
   private pathInitPromise: Promise<void> | null = null;
   private pathRenderToken = 0;
   private pathScene: THREE.Scene | null = null;
@@ -230,6 +231,14 @@ export class Basic3DPreview {
       // Ignore.
     }
     this.pathTracer = null;
+
+    try {
+      this.bvhWorker?.dispose?.();
+    } catch {
+      // Ignore.
+    }
+    this.bvhWorker = null;
+
     this.pathInitPromise = null;
     this.pathScene = null;
     this.pathCamera = null;
@@ -342,7 +351,17 @@ export class Basic3DPreview {
     }
 
     if (this.mode === 'path') {
-      void this.renderPath(config, quality, renderW, renderH);
+      void this.renderPath(config, quality, renderW, renderH).catch((err) => {
+        // Never leave the UI blank if path tracing setup fails.
+        console.error('Path traced preview failed:', err);
+        try {
+          this.stopPathTracingLoop();
+          this.mode = 'raster';
+          this.renderOnce(config, quality, opts);
+        } catch {
+          // Ignore.
+        }
+      });
       return;
     }
 
@@ -375,6 +394,22 @@ export class Basic3DPreview {
     if (!WebGLPathTracer) throw new Error('WebGLPathTracer export not found in three-gpu-pathtracer');
     if (!this.renderer) return;
     this.pathTracer = new WebGLPathTracer(this.renderer);
+
+    // Required for setSceneAsync.
+    if (!this.bvhWorker) {
+      const bvhMod = await import('three-mesh-bvh/src/workers/GenerateMeshBVHWorker.js');
+      const GenerateMeshBVHWorker = (bvhMod as any).GenerateMeshBVHWorker ?? (bvhMod as any).default;
+      if (!GenerateMeshBVHWorker) {
+        throw new Error('GenerateMeshBVHWorker export not found in three-mesh-bvh');
+      }
+      this.bvhWorker = new GenerateMeshBVHWorker();
+    }
+    try {
+      this.pathTracer.setBVHWorker?.(this.bvhWorker);
+    } catch {
+      // Ignore; setSceneAsync will throw if unsupported.
+    }
+
     this.pathTracer.renderToCanvas = true;
     this.pathTracer.dynamicLowRes = true;
     this.pathTracer.lowResScale = 0.5;
@@ -385,6 +420,13 @@ export class Basic3DPreview {
     this.pathTracer.bounces = 4;
     this.pathTracer.transmissiveBounces = 2;
     this.pathTracer.filterGlossyFactor = 0.5;
+
+    // Reduce internal texture atlas size for previews.
+    try {
+      this.pathTracer.textureSize?.set?.(512, 512);
+    } catch {
+      // Ignore.
+    }
   }
 
   private stopPathTracingLoop(): void {
@@ -511,6 +553,13 @@ export class Basic3DPreview {
       this.lastPathKey = null;
       this.lastPathQuality = null;
     }
+
+    try {
+      this.bvhWorker?.dispose?.();
+    } catch {
+      // Ignore.
+    }
+    this.bvhWorker = null;
 
     // Recreate composer wiring lazily after rebuild.
     this.composer = null;

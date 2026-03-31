@@ -178,13 +178,17 @@ export class PopsiclePreview {
 
   // Path tracing state
   private pathTracer: any = null;
+  private bvhWorker: any = null;
   private pathTracingLoopId = 0;
-  private lastPathConfigKey = '';
+  private lastPathSceneKey = '';
+  private lastPathCameraKey = '';
   private lastPathQuality: PreviewQuality = 'final';
   private pathScene: THREE.Scene | null = null;
   private pathCamera: THREE.PerspectiveCamera | null = null;
   private pathInitPromise: Promise<void> | null = null;
   private pathRenderToken = 0;
+  private pathSceneBuilding = false;
+  private pendingPathRequest: { config: PopsicleConfig; quality: PreviewQuality } | null = null;
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -252,6 +256,17 @@ export class PopsiclePreview {
     this.stopPathTracingLoop();
     this.pathTracer?.dispose?.();
     this.pathTracer = null;
+
+    this.pathSceneBuilding = false;
+    this.pendingPathRequest = null;
+
+    try {
+      this.bvhWorker?.dispose?.();
+    } catch {
+      // Ignore.
+    }
+    this.bvhWorker = null;
+
     this.pathScene = null;
     this.pathCamera = null;
 
@@ -288,7 +303,29 @@ export class PopsiclePreview {
 
   renderOnce(config: PopsicleConfig, quality: PreviewQuality): void {
     if (this.mode === 'path') {
-      void this.renderOncePath(config, quality);
+      // While dragging / scrubbing controls, path tracing scene rebuilds can be expensive.
+      // Use the raster pipeline for interactive frames and only path trace on the settled (final) frame.
+      if (quality === 'interactive') {
+        try {
+          this.stopPathTracingLoop();
+        } catch {
+          // Ignore.
+        }
+        this.renderOnceRaster(config, quality);
+        return;
+      }
+
+      void this.renderOncePath(config, quality).catch((err) => {
+        // Never leave the UI blank if path tracing setup fails.
+        console.error('Path traced preview failed:', err);
+        try {
+          this.stopPathTracingLoop();
+          this.mode = 'raster';
+          this.renderOnceRaster(config, quality);
+        } catch {
+          // Ignore.
+        }
+      });
       return;
     }
 
@@ -1118,6 +1155,47 @@ void wmApplyCollisionMask(inout vec4 col) {
     return next;
   }
 
+  private applyPathTracingOverrides(config: PopsicleConfig): PopsicleConfig {
+    // Path tracing requires baking a BVH over de-instanced geometry.
+    // Popsicle meshes can be extremely dense at high geometry quality, so cap it to keep
+    // previews responsive and memory usage bounded.
+    const maxQ = 0.18;
+    const qIn = Number(config.geometry?.quality ?? 1);
+    const q = Number.isFinite(qIn) ? Math.max(0, Math.min(1, qIn)) : 1;
+    const nextQ = Math.min(q, maxQ);
+
+    const next: PopsicleConfig = {
+      ...config,
+      colors: [...config.colors],
+      textureParams: {
+        drywall: { ...config.textureParams.drywall },
+        glass: { ...config.textureParams.glass },
+        cel: { ...config.textureParams.cel }
+      },
+      facades: {
+        side: { ...config.facades.side },
+        grazing: { ...config.facades.grazing },
+        outline: { ...config.facades.outline }
+      },
+      edge: { ...config.edge, seam: { ...config.edge.seam }, band: { ...config.edge.band } },
+      emission: { ...config.emission },
+      bloom: { ...config.bloom },
+      lighting: { ...config.lighting, position: { ...config.lighting.position } },
+      camera: { ...config.camera },
+      environment: { ...config.environment },
+      shadows: { ...config.shadows },
+      rendering: { ...config.rendering },
+      geometry: { ...config.geometry, quality: nextQ }
+    };
+
+    // Bubble carving in the path-traced preview is very expensive; keep it off.
+    if ((next as any).bubbles) {
+      (next as any).bubbles = { ...(next as any).bubbles, enabled: false };
+    }
+
+    return next;
+  }
+
   // ---------------------- Path tracing ----------------------
 
   private async initPathTracer(): Promise<void> {
@@ -1127,6 +1205,21 @@ void wmApplyCollisionMask(inout vec4 col) {
       throw new Error('WebGLPathTracer export not found in three-gpu-pathtracer');
     }
     this.pathTracer = new WebGLPathTracer(this.renderer);
+
+    // Required for setSceneAsync.
+    if (!this.bvhWorker) {
+      const bvhMod = await import('three-mesh-bvh/src/workers/GenerateMeshBVHWorker.js');
+      const GenerateMeshBVHWorker = (bvhMod as any).GenerateMeshBVHWorker ?? (bvhMod as any).default;
+      if (!GenerateMeshBVHWorker) {
+        throw new Error('GenerateMeshBVHWorker export not found in three-mesh-bvh');
+      }
+      this.bvhWorker = new GenerateMeshBVHWorker();
+    }
+    try {
+      this.pathTracer.setBVHWorker?.(this.bvhWorker);
+    } catch {
+      // Ignore; setSceneAsync will throw if unsupported.
+    }
 
     // Sensible defaults; overridden per-quality in renderOncePath.
     this.pathTracer.renderToCanvas = true;
@@ -1140,6 +1233,13 @@ void wmApplyCollisionMask(inout vec4 col) {
     this.pathTracer.bounces = 4;
     this.pathTracer.transmissiveBounces = 2;
     this.pathTracer.filterGlossyFactor = 0.5;
+
+    // Reduce internal texture atlas size for previews.
+    try {
+      this.pathTracer.textureSize?.set?.(512, 512);
+    } catch {
+      // Ignore.
+    }
   }
 
   private stopPathTracingLoop(): void {
@@ -1168,8 +1268,8 @@ void wmApplyCollisionMask(inout vec4 col) {
     this.pathTracingLoopId = requestAnimationFrame(loop);
   }
 
-  private getPathConfigKey(config: PopsicleConfig): string {
-    // Keep it stable and cheap.
+  private getPathSceneKey(config: PopsicleConfig): string {
+    // Keep it stable and cheap. Excludes camera so we can update it without rebuilding BVH.
     const keyObj = {
       w: config.width,
       h: config.height,
@@ -1191,7 +1291,6 @@ void wmApplyCollisionMask(inout vec4 col) {
       chipJagged: (config as any).stickChipJaggedness,
       bevel: config.stickBevel,
       so: config.stickOpacity,
-      cam: config.camera,
       light: config.lighting,
       env: config.environment,
       tm: config.rendering,
@@ -1201,29 +1300,54 @@ void wmApplyCollisionMask(inout vec4 col) {
     return JSON.stringify(keyObj);
   }
 
+  private getPathCameraKey(config: PopsicleConfig): string {
+    return JSON.stringify({ cam: config.camera });
+  }
+
   private async renderOncePath(config: PopsicleConfig, quality: PreviewQuality): Promise<void> {
     const token = ++this.pathRenderToken;
     if (!this.pathInitPromise) this.pathInitPromise = this.initPathTracer();
     await this.pathInitPromise;
     if (token !== this.pathRenderToken) return;
 
-    const aspect = config.width / config.height;
+    const effective = this.applyPathTracingOverrides(config);
+
+    // Build / update scene if needed.
+    const sceneKey = this.getPathSceneKey(effective);
+    const cameraKey = this.getPathCameraKey(effective);
+    const sceneChanged = sceneKey !== this.lastPathSceneKey;
+    const cameraChanged = cameraKey !== this.lastPathCameraKey;
+    const qualityChanged = quality !== this.lastPathQuality;
+    this.lastPathQuality = quality;
+
+    // If a BVH build is already in flight, coalesce *before* touching the renderer.
+    // Resizing the canvas clears it and would cause a blank frame.
+    if (sceneChanged && this.pathSceneBuilding) {
+      this.pendingPathRequest = { config, quality };
+      return;
+    }
+
+    const aspect = effective.width / effective.height;
 
     // Set renderer size (path tracer synchronizes render size if enabled).
     const { previewWidth, previewHeight } = this.getPreviewSize(aspect, quality);
     this.renderer.setPixelRatio(1);
     this.renderer.setSize(previewWidth, previewHeight, false);
-    applyToneMapping(this.renderer, config);
-    this.renderer.setClearColor(new THREE.Color(config.backgroundColor), 1);
+    applyToneMapping(this.renderer, effective);
+    this.renderer.setClearColor(new THREE.Color(effective.backgroundColor), 1);
 
-    // Build / update scene if needed.
-    const key = this.getPathConfigKey(config);
-    const changed = key !== this.lastPathConfigKey;
-    const qualityChanged = quality !== this.lastPathQuality;
-    this.lastPathQuality = quality;
+    // Ensure we can resume after interactive raster frames.
+    try {
+      this.pathTracer.pausePathTracing = false;
+    } catch {
+      // Ignore.
+    }
 
-    if (changed) {
-      this.lastPathConfigKey = key;
+    if (sceneChanged) {
+      this.pathSceneBuilding = true;
+
+      this.lastPathSceneKey = sceneKey;
+      this.lastPathCameraKey = cameraKey;
       this.pathScene?.traverse((obj) => {
         const mesh = obj as any;
         if (mesh.geometry?.dispose) mesh.geometry.dispose();
@@ -1233,33 +1357,101 @@ void wmApplyCollisionMask(inout vec4 col) {
         }
       });
 
-      this.pathCamera = this.buildPathCamera(config);
-      this.pathScene = this.buildPathScene(config, this.pathCamera);
+      // Build synchronously first (keeps previous frame visible until we're ready).
+      this.pathCamera = this.buildPathCamera(effective);
+      this.pathScene = this.buildPathScene(effective, this.pathCamera);
+
+      // Render a single raster frame immediately so the canvas doesn't appear blank
+      // while the BVH is being generated in the worker.
+      try {
+        this.renderer.render(this.pathScene, this.pathCamera);
+      } catch {
+        // Ignore.
+      }
 
       // Async BVH generation to avoid long main-thread stalls.
-      await this.pathTracer.setSceneAsync(this.pathScene, this.pathCamera);
-      if (token !== this.pathRenderToken) return;
+      try {
+        this.pathTracer.pausePathTracing = false;
+      } catch {
+        // Ignore.
+      }
+      try {
+        await this.pathTracer.setSceneAsync(this.pathScene, this.pathCamera);
+        if (token !== this.pathRenderToken) return;
+        this.pathTracer.reset();
+      } finally {
+        this.pathSceneBuilding = false;
+
+        // If something changed while we were building the BVH, render the latest request.
+        const pending = this.pendingPathRequest;
+        this.pendingPathRequest = null;
+        if (pending) {
+          // Fire and forget; renderOncePath increments the token internally.
+          void this.renderOncePath(pending.config, pending.quality);
+        }
+      }
+    } else if (cameraChanged) {
+      // Camera-only update: avoid rebuilding the BVH.
+      this.lastPathCameraKey = cameraKey;
+      this.pathCamera = this.buildPathCamera(effective);
+      try {
+        this.pathTracer.pausePathTracing = false;
+      } catch {
+        // Ignore.
+      }
+      if (typeof this.pathTracer.setCamera === 'function') {
+        this.pathTracer.setCamera(this.pathCamera);
+      } else if (typeof this.pathTracer.updateCamera === 'function') {
+        // Best-effort.
+        this.pathTracer.updateCamera();
+      }
+
+      // Keep something on screen while accumulation restarts.
+      try {
+        if (this.pathScene) this.renderer.render(this.pathScene, this.pathCamera);
+      } catch {
+        // Ignore.
+      }
       this.pathTracer.reset();
     } else if (qualityChanged) {
       // Quality change: keep scene, reset accumulation.
+      try {
+        this.pathTracer.pausePathTracing = false;
+      } catch {
+        // Ignore.
+      }
+
+      // Render a raster frame so reset doesn't look like a blank flash.
+      try {
+        if (this.pathScene && this.pathCamera) this.renderer.render(this.pathScene, this.pathCamera);
+      } catch {
+        // Ignore.
+      }
       this.pathTracer.reset();
     }
 
-    if (quality === 'interactive') {
-      this.pathTracer.dynamicLowRes = true;
-      this.pathTracer.lowResScale = 0.5;
-      this.pathTracer.renderScale = 0.65;
-      this.pathTracer.minSamples = 1;
-      this.pathTracer.renderDelay = 0;
-      this.startPathTracingLoop(2);
-    } else {
-      this.pathTracer.dynamicLowRes = true;
-      this.pathTracer.lowResScale = 0.5;
-      this.pathTracer.renderScale = 1.0;
-      this.pathTracer.minSamples = 1;
-      this.pathTracer.renderDelay = 0;
-      this.startPathTracingLoop(48);
+    const sampleBudget = quality === 'interactive' ? 2 : 48;
+    this.pathTracer.dynamicLowRes = true;
+    this.pathTracer.lowResScale = 0.5;
+    this.pathTracer.renderScale = quality === 'interactive' ? 0.65 : 1.0;
+    this.pathTracer.minSamples = 1;
+    this.pathTracer.renderDelay = 0;
+
+    // Always draw at least one frame after resizing/clearing the canvas.
+    // If we are already at the sample budget and we don't render a new frame,
+    // the resized canvas can remain blank until the next user interaction.
+    try {
+      this.pathTracer.renderSample();
+    } catch {
+      // Ignore; loop below may still recover.
     }
+
+    if ((this.pathTracer.samples ?? 0) >= sampleBudget) {
+      this.stopPathTracingLoop();
+      return;
+    }
+
+    this.startPathTracingLoop(sampleBudget);
   }
 
   private buildPathCamera(config: PopsicleConfig): THREE.PerspectiveCamera {
