@@ -189,6 +189,8 @@ export class PopsiclePreview {
   private pathRenderToken = 0;
   private pathSceneBuilding = false;
   private pendingPathRequest: { config: PopsicleConfig; quality: PreviewQuality } | null = null;
+  private lastPathPreviewW = 0;
+  private lastPathPreviewH = 0;
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -269,6 +271,8 @@ export class PopsiclePreview {
 
     this.pathScene = null;
     this.pathCamera = null;
+    this.lastPathPreviewW = 0;
+    this.lastPathPreviewH = 0;
 
     for (const g of this.stickGeometryCache.values()) g.dispose();
     this.stickGeometryCache.clear();
@@ -1332,7 +1336,11 @@ void wmApplyCollisionMask(inout vec4 col) {
     // Set renderer size (path tracer synchronizes render size if enabled).
     const { previewWidth, previewHeight } = this.getPreviewSize(aspect, quality);
     this.renderer.setPixelRatio(1);
-    this.renderer.setSize(previewWidth, previewHeight, false);
+    if (previewWidth !== this.lastPathPreviewW || previewHeight !== this.lastPathPreviewH) {
+      this.renderer.setSize(previewWidth, previewHeight, false);
+      this.lastPathPreviewW = previewWidth;
+      this.lastPathPreviewH = previewHeight;
+    }
     applyToneMapping(this.renderer, effective);
     this.renderer.setClearColor(new THREE.Color(effective.backgroundColor), 1);
 
