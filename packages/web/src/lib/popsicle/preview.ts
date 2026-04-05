@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 import { buildBubbles, buildBubblesSeed, createStickMeshMaterial, resolvePaletteConfig } from '@wallpaper-maker/core';
 import type { WallpaperConfig, EnvironmentStyle, ShadowType, TextureType } from '@wallpaper-maker/core';
 import { Brush, Evaluator, SUBTRACTION } from 'three-bvh-csg';
@@ -191,6 +192,7 @@ export class PopsiclePreview {
   private pendingPathRequest: { config: PopsicleConfig; quality: PreviewQuality } | null = null;
   private lastPathPreviewW = 0;
   private lastPathPreviewH = 0;
+  private pathToneMapQuad: FullScreenQuad | null = null;
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -273,6 +275,8 @@ export class PopsiclePreview {
     this.pathCamera = null;
     this.lastPathPreviewW = 0;
     this.lastPathPreviewH = 0;
+    this.pathToneMapQuad?.dispose();
+    this.pathToneMapQuad = null;
 
     for (const g of this.stickGeometryCache.values()) g.dispose();
     this.stickGeometryCache.clear();
@@ -1342,6 +1346,10 @@ void wmApplyCollisionMask(inout vec4 col) {
       this.lastPathPreviewH = previewHeight;
     }
     applyToneMapping(this.renderer, effective);
+    const wantsAces = effective.rendering.toneMapping === 'aces';
+    if (wantsAces) {
+      this.renderer.toneMapping = THREE.NoToneMapping;
+    }
     this.renderer.setClearColor(new THREE.Color(effective.backgroundColor), 1);
 
     // Ensure we can resume after interactive raster frames.
@@ -1456,6 +1464,16 @@ void wmApplyCollisionMask(inout vec4 col) {
       // Ignore; loop below may still recover.
     }
 
+    if (wantsAces && this.pathTracer?.target?.texture) {
+      const quad = this.getPathToneMapQuad();
+      const material = quad.material as THREE.ShaderMaterial;
+      material.uniforms.map.value = this.pathTracer.target.texture;
+      const prevToneMapping = this.renderer.toneMapping;
+      this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      quad.render(this.renderer);
+      this.renderer.toneMapping = prevToneMapping;
+    }
+
     if (!didRenderSample) {
       try {
         if (this.pathScene && this.pathCamera) this.renderer.render(this.pathScene, this.pathCamera);
@@ -1550,6 +1568,39 @@ void wmApplyCollisionMask(inout vec4 col) {
     camera.lookAt(0, 0, 0);
     camera.updateProjectionMatrix();
     return camera;
+  }
+
+  private getPathToneMapQuad(): FullScreenQuad {
+    if (this.pathToneMapQuad) return this.pathToneMapQuad;
+    const material = new THREE.ShaderMaterial({
+      uniforms: { map: { value: null } },
+      vertexShader: /* glsl */`
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: /* glsl */`
+        uniform sampler2D map;
+        varying vec2 vUv;
+
+        void main() {
+          vec4 col = texture2D(map, vUv);
+          #if defined( TONE_MAPPING )
+            col.rgb = toneMapping(col.rgb);
+          #endif
+          gl_FragColor = linearToOutputTexel(col);
+        }
+      `
+    });
+    material.toneMapped = true;
+    material.depthWrite = false;
+    material.depthTest = false;
+    material.transparent = false;
+    material.blending = THREE.NoBlending;
+    this.pathToneMapQuad = new FullScreenQuad(material);
+    return this.pathToneMapQuad;
   }
 
   private buildPathScene(config: PopsicleConfig, camera: THREE.PerspectiveCamera): THREE.Scene {
