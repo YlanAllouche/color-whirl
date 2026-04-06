@@ -10,6 +10,8 @@
     lookColumns?: 1 | 2;
     toggleLookColumns?: () => void;
     searchQuery?: string;
+    settingsMaximized?: boolean;
+    settingsOverlayVisible?: boolean;
   };
 
   let {
@@ -18,7 +20,9 @@
     quickExport,
     lookColumns,
     toggleLookColumns,
-    searchQuery = $bindable('')
+    searchQuery = $bindable(''),
+    settingsMaximized = false,
+    settingsOverlayVisible = false
   }: Props = $props();
 
   const leftKey = 'ui.layout.leftWidth';
@@ -76,6 +80,8 @@
 
 <div
   class="editor-shell"
+  class:settings-maximized={settingsMaximized}
+  class:settings-overlay-visible={settingsOverlayVisible}
   style={`--left-w:${leftW}px;--right-w:${rightW}px`}
   onpointermove={onResizeMove}
   onpointerup={stopResize}
@@ -122,7 +128,7 @@
   </header>
 
   <div class="desktop-grid">
-    <div class="panel-left">
+    <div class="panel-left" data-settings-overlay>
       <slot name="left" />
     </div>
 
@@ -134,7 +140,7 @@
 
     <div class="panel-handle" data-handle="right" onpointerdown={(e) => startResize('right', e)} aria-hidden="true"></div>
 
-    <div class="panel-right">
+    <div class="panel-right" data-settings-overlay>
       <slot name="right" />
     </div>
   </div>

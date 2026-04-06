@@ -3,8 +3,7 @@
   import '@fontsource/geist-sans/latin.css';
   import '@fontsource/geist-mono/latin.css';
   import '$lib/ui/styles/app.css';
-  import { 
-    DEFAULT_CONFIG, 
+  import {
     DEFAULT_CONFIG_BY_TYPE,
     type WallpaperConfig,
     type WallpaperType,
@@ -29,6 +28,7 @@
   import { COLOR_PRESETS, COLOR_PRESET_GROUPS, type ColorPreset } from '$lib/color-presets';
 
   import EditorShell from '$lib/ui/layout/EditorShell.svelte';
+  import PreviewCanvas from '$lib/ui/layout/PreviewCanvas.svelte';
   import GlobalInspector from '$lib/ui/inspector/GlobalInspector.svelte';
   import LookInspector from '$lib/ui/inspector/LookInspector.svelte';
 
@@ -84,7 +84,8 @@
 
   let collisionDragActive = $state(false);
   let cameraDragActive = $state(false);
-  let canvasHoverActive = $state(false);
+  let settingsMaximized = $state(false);
+  let settingsOverlayVisible = $state(false);
 
   const RENDER_SETTLE_MS = 280;
   
@@ -230,108 +231,6 @@
 
   function clearPreviewSettleTimer() {
     previewScheduler.clearSettleTimer();
-  }
-
-  const CAMERA_DISTANCE_MIN = 5;
-  const CAMERA_DISTANCE_MAX = 50;
-  const CAMERA_ELEVATION_MIN = -80;
-  const CAMERA_ELEVATION_MAX = 80;
-
-  function clamp(n: number, min: number, max: number): number {
-    return Math.max(min, Math.min(max, n));
-  }
-
-  function wrapDeg360(deg: number): number {
-    const d = deg % 360;
-    return d < 0 ? d + 360 : d;
-  }
-
-  let camDragPointerId = -1;
-  let camDragStartX = 0;
-  let camDragStartY = 0;
-  let camDragStartAzimuth = 0;
-  let camDragStartElevation = 0;
-
-  function resetCamera() {
-    config.camera.distance = DEFAULT_CONFIG.camera.distance;
-    config.camera.azimuth = DEFAULT_CONFIG.camera.azimuth;
-    config.camera.elevation = DEFAULT_CONFIG.camera.elevation;
-  }
-
-  function nudgeCamera(kind: 'azimuth' | 'elevation' | 'distance', delta: number, e?: MouseEvent) {
-    const mult = e?.shiftKey ? 10 : 1;
-    if (kind === 'azimuth') {
-      config.camera.azimuth = wrapDeg360(config.camera.azimuth + delta * mult);
-    } else if (kind === 'elevation') {
-      config.camera.elevation = clamp(config.camera.elevation + delta * mult, CAMERA_ELEVATION_MIN, CAMERA_ELEVATION_MAX);
-    } else {
-      config.camera.distance = clamp(config.camera.distance + delta * mult, CAMERA_DISTANCE_MIN, CAMERA_DISTANCE_MAX);
-    }
-  }
-
-  function handleCanvasPointerDown(e: PointerEvent) {
-    if (!is3DType) return;
-    if (e.button !== 0) return;
-    const target = e.target as HTMLElement | null;
-    if (target?.closest?.('.camera-overlay')) return;
-
-    cameraDragActive = true;
-    camDragPointerId = e.pointerId;
-    camDragStartX = e.clientX;
-    camDragStartY = e.clientY;
-    camDragStartAzimuth = config.camera.azimuth;
-    camDragStartElevation = config.camera.elevation;
-
-    canvasHoverActive = true;
-    clearPreviewSettleTimer();
-
-    try {
-      (e.currentTarget as HTMLElement)?.setPointerCapture?.(e.pointerId);
-    } catch {
-      // Ignore.
-    }
-    e.preventDefault();
-  }
-
-  function handleCanvasPointerMove(e: PointerEvent) {
-    if (!cameraDragActive) return;
-    if (e.pointerId !== camDragPointerId) return;
-
-    const dx = e.clientX - camDragStartX;
-    const dy = e.clientY - camDragStartY;
-
-    const sensitivity = e.shiftKey ? 0.08 : 0.22; // deg/px
-    config.camera.azimuth = wrapDeg360(camDragStartAzimuth + dx * sensitivity);
-    config.camera.elevation = clamp(camDragStartElevation - dy * sensitivity, CAMERA_ELEVATION_MIN, CAMERA_ELEVATION_MAX);
-
-    // Rendering is scheduled via reactive effects.
-    e.preventDefault();
-  }
-
-  function handleCanvasPointerUp(e: PointerEvent) {
-    if (!cameraDragActive) return;
-    if (camDragPointerId !== -1 && e.pointerId !== camDragPointerId) return;
-    cameraDragActive = false;
-    camDragPointerId = -1;
-    try {
-      (e.currentTarget as HTMLElement)?.releasePointerCapture?.(e.pointerId);
-    } catch {
-      // Ignore.
-    }
-    schedulePreviewRender();
-    e.preventDefault();
-  }
-
-  function handleCanvasWheel(e: WheelEvent) {
-    if (!is3DType) return;
-    const target = e.target as HTMLElement | null;
-    if (target?.closest?.('.camera-overlay')) return;
-
-    // Smooth, multiplicative zoom.
-    const factor = Math.pow(1.0015, e.deltaY);
-    const next = clamp(config.camera.distance * factor, CAMERA_DISTANCE_MIN, CAMERA_DISTANCE_MAX);
-    config.camera.distance = next;
-    e.preventDefault();
   }
   
   // 3D rendering is handled by PopsiclePreview.
@@ -871,6 +770,8 @@
     lookColumns = lookColumns === 2 ? 1 : 2;
   }}
   bind:searchQuery={inspectorSearch}
+  {settingsMaximized}
+  settingsOverlayVisible={settingsOverlayVisible}
 >
   <svelte:fragment slot="left">
     <GlobalInspector
@@ -897,49 +798,17 @@
   </svelte:fragment>
 
   <svelte:fragment slot="center">
-    <main class="preview-area">
-      <div
-        bind:this={canvasContainer}
-        class="canvas-container"
-        role="application"
-        aria-label="Preview canvas"
-        style={`background: ${config.backgroundColor}`}
-        onmouseenter={() => {
-          canvasHoverActive = true;
-        }}
-        onmouseleave={() => {
-          canvasHoverActive = false;
-        }}
-        onpointerdown={handleCanvasPointerDown}
-        onpointermove={handleCanvasPointerMove}
-        onpointerup={handleCanvasPointerUp}
-        onpointercancel={handleCanvasPointerUp}
-        onwheel={handleCanvasWheel}
-      >
-        <div bind:this={canvasHost} class="canvas-host"></div>
-
-        {#if is3DType}
-          <div class="camera-overlay" class:visible={canvasHoverActive || cameraDragActive} aria-hidden={!(canvasHoverActive || cameraDragActive)}>
-            <div class="camera-overlay-row">
-              <button type="button" class="camera-btn" onclick={(e) => nudgeCamera('elevation', +1, e)} title="Tilt up (Shift = 10x)">Up</button>
-            </div>
-            <div class="camera-overlay-row">
-              <button type="button" class="camera-btn" onclick={(e) => nudgeCamera('azimuth', -1, e)} title="Rotate left (Shift = 10x)">Left</button>
-              <button type="button" class="camera-btn" onclick={() => resetCamera()} title="Reset camera">Reset</button>
-              <button type="button" class="camera-btn" onclick={(e) => nudgeCamera('azimuth', +1, e)} title="Rotate right (Shift = 10x)">Right</button>
-            </div>
-            <div class="camera-overlay-row">
-              <button type="button" class="camera-btn" onclick={(e) => nudgeCamera('elevation', -1, e)} title="Tilt down (Shift = 10x)">Down</button>
-            </div>
-            <div class="camera-overlay-row camera-overlay-zoom">
-              <button type="button" class="camera-btn" onclick={(e) => nudgeCamera('distance', -0.2, e)} title="Zoom in (Shift = 10x)">+</button>
-              <button type="button" class="camera-btn" onclick={(e) => nudgeCamera('distance', +0.2, e)} title="Zoom out (Shift = 10x)">-</button>
-            </div>
-            <div class="camera-overlay-hint">Drag to orbit, wheel to zoom</div>
-          </div>
-        {/if}
-      </div>
-    </main>
+    <PreviewCanvas
+      {config}
+      {is3DType}
+      {schedulePreviewRender}
+      {clearPreviewSettleTimer}
+      bind:canvasContainer
+      bind:canvasHost
+      bind:cameraDragActive
+      bind:settingsMaximized
+      bind:overlayVisible={settingsOverlayVisible}
+    />
   </svelte:fragment>
 
   <svelte:fragment slot="right">
