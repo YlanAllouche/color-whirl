@@ -5,4 +5,5 @@
 
 @import './tokens.css';
 @import './ui.css';
+@import './inspector.css';
 @import './preview.css';
