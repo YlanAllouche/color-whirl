@@ -41,6 +41,7 @@
   let root: HTMLDivElement | null = $state(null);
   let trigger: HTMLButtonElement | null = $state(null);
   let popStyle = $state('');
+  let popover: HTMLDivElement | null = $state(null);
 
   function close() {
     open = false;
@@ -70,6 +71,16 @@
     const maxLeft = Math.max(padding, window.innerWidth - padding - rect.width);
     const left = Math.min(Math.max(rect.left, padding), maxLeft);
     popStyle = `left: ${left}px; top: ${top}px; width: ${rect.width}px;`;
+  }
+
+  function portal(node: HTMLElement) {
+    if (typeof document === 'undefined') return;
+    document.body.appendChild(node);
+    return {
+      destroy() {
+        node.remove();
+      }
+    };
   }
 
   function selectOption(opt: Option) {
@@ -121,6 +132,11 @@
       window.removeEventListener('scroll', updatePosition, true);
     };
   });
+
+  $effect(() => {
+    if (!open || !popover) return;
+    updatePosition();
+  });
 </script>
 
 <div class="dropdown" class:disabled bind:this={root} data-size={size}>
@@ -145,7 +161,14 @@
   </button>
 
   {#if open}
-    <div class="dropdown-pop" role="listbox" aria-label={ariaLabel} style={popStyle}>
+    <div
+      class="dropdown-pop"
+      role="listbox"
+      aria-label={ariaLabel}
+      style={popStyle}
+      bind:this={popover}
+      use:portal
+    >
       {#each groups as group}
         {#if group.group}
           <div class="dropdown-group">{group.group}</div>
