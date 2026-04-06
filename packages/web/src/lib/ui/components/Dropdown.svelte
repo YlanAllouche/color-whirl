@@ -78,9 +78,23 @@
     popStyle = `left: ${left}px; top: ${top}px; width: ${rect.width}px;`;
   }
 
+  function ensurePortalRoot(): HTMLElement {
+    const existing = document.getElementById('dropdown-portal-root');
+    if (existing) return existing;
+    const root = document.createElement('div');
+    root.id = 'dropdown-portal-root';
+    root.style.position = 'fixed';
+    root.style.inset = '0';
+    root.style.zIndex = '4000';
+    root.style.pointerEvents = 'none';
+    document.body.appendChild(root);
+    return root;
+  }
+
   function portal(node: HTMLElement) {
     if (typeof document === 'undefined') return;
-    document.body.appendChild(node);
+    const root = ensurePortalRoot();
+    root.appendChild(node);
     return {
       destroy() {
         node.remove();
@@ -261,8 +275,9 @@
   }
 
   .dropdown-pop {
-    position: fixed;
-    z-index: 2000;
+    position: absolute;
+    z-index: 1;
+    pointer-events: auto;
     border-radius: var(--radius-sm);
     border: 1px solid var(--stroke0);
     background: rgba(12, 12, 14, 0.96);
