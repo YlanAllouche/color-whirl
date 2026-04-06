@@ -29,7 +29,7 @@
 
   let {
     value = $bindable(),
-    options,
+    options = [],
     disabled = false,
     ariaLabel = 'Select option',
     title,
@@ -109,13 +109,12 @@
     close();
   }
 
-  const selectedLabel = $derived(
-    options
-      .flatMap((opt) => ('group' in opt ? opt.options : [opt]))
-      .find((opt) => opt.value === value)?.label ?? String(value)
-  );
+  const selectedLabel = $derived.by(() => {
+    const flat = options.flatMap((opt) => ('group' in opt ? opt.options : [opt]));
+    return flat.find((opt) => opt.value === value)?.label ?? String(value);
+  });
 
-  const groups = $derived(() => {
+  const groups = $derived.by(() => {
     const grouped: Array<{ group?: string; options: Option[] }> = [];
     let buffer: Option[] = [];
     for (const opt of options) {
