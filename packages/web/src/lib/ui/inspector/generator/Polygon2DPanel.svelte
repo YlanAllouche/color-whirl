@@ -1,5 +1,6 @@
 <script lang="ts">
   import CollapsiblePanel from '$lib/ui/inspector/CollapsiblePanel.svelte';
+  import Dropdown from '$lib/ui/components/Dropdown.svelte';
 
   type Props = {
     config: any;
@@ -16,18 +17,26 @@
 <CollapsiblePanel id="polygon2d" title="Polygon (2D)" icon="pentagon" defaultOpen={true}>
   <label class="control-row">
     <button type="button" class="setting-title" class:locked={isLocked('polygons.mode')} onclick={() => toggleLock('polygons.mode')} title="Click to lock/unlock for randomize">Mode</button>
-    <select bind:value={config.polygons.mode}>
-      <option value="scatter">Scatter</option>
-      <option value="grid">Grid</option>
-    </select>
+    <Dropdown
+      bind:value={config.polygons.mode}
+      ariaLabel="Polygon mode"
+      options={[
+        { value: 'scatter', label: 'Scatter' },
+        { value: 'grid', label: 'Grid' }
+      ]}
+    />
   </label>
 
   <label class="control-row">
     <button type="button" class="setting-title" class:locked={isLocked('polygons.shape')} onclick={() => toggleLock('polygons.shape')} title="Click to lock/unlock for randomize">Shape</button>
-    <select bind:value={config.polygons.shape}>
-      <option value="polygon">Polygon</option>
-      <option value="star">Star</option>
-    </select>
+    <Dropdown
+      bind:value={config.polygons.shape}
+      ariaLabel="Polygon shape"
+      options={[
+        { value: 'polygon', label: 'Polygon' },
+        { value: 'star', label: 'Star' }
+      ]}
+    />
   </label>
 
   {#if config.polygons.mode === 'grid'}
@@ -35,10 +44,14 @@
       <summary class="control-details-summary">Grid</summary>
       <label class="control-row">
         <button type="button" class="setting-title" class:locked={isLocked('polygons.grid.kind')} onclick={() => toggleLock('polygons.grid.kind')} title="Click to lock/unlock for randomize">Kind</button>
-        <select bind:value={config.polygons.grid.kind}>
-          <option value="square">Square</option>
-          <option value="diamond">Diamond</option>
-        </select>
+        <Dropdown
+          bind:value={config.polygons.grid.kind}
+          ariaLabel="Polygon grid kind"
+          options={[
+            { value: 'square', label: 'Square' },
+            { value: 'diamond', label: 'Diamond' }
+          ]}
+        />
       </label>
 
       <label class="control-row slider">
@@ -131,10 +144,14 @@
     <summary class="control-details-summary">Palette</summary>
     <label class="control-row">
       <button type="button" class="setting-title" class:locked={isLocked('polygons.paletteMode')} onclick={() => toggleLock('polygons.paletteMode')} title="Click to lock/unlock for randomize">Mode</button>
-      <select bind:value={config.polygons.paletteMode}>
-        <option value="cycle">Cycle</option>
-        <option value="weighted">Weighted</option>
-      </select>
+      <Dropdown
+        bind:value={config.polygons.paletteMode}
+        ariaLabel="Polygon palette mode"
+        options={[
+          { value: 'cycle', label: 'Cycle' },
+          { value: 'weighted', label: 'Weighted' }
+        ]}
+      />
     </label>
 
     {#if config.polygons.paletteMode === 'weighted'}

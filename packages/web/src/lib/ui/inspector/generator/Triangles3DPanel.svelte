@@ -1,5 +1,6 @@
 <script lang="ts">
   import CollapsiblePanel from '$lib/ui/inspector/CollapsiblePanel.svelte';
+  import Dropdown from '$lib/ui/components/Dropdown.svelte';
 
   type Props = {
     config: any;
@@ -16,20 +17,28 @@
 <CollapsiblePanel id="triangles3d" title="Triangles (3D)" icon="triangle" defaultOpen={true}>
   <label class="control-row">
     <button type="button" class="setting-title" class:locked={isLocked('prisms.mode')} onclick={() => toggleLock('prisms.mode')} title="Click to lock/unlock for randomize">Mode</button>
-    <select bind:value={config.prisms.mode}>
-      <option value="tessellation">Tessellation</option>
-      <option value="scatter">Scatter</option>
-      <option value="stackedPrisms">Stacked prisms</option>
-    </select>
+    <Dropdown
+      bind:value={config.prisms.mode}
+      ariaLabel="Prism mode"
+      options={[
+        { value: 'tessellation', label: 'Tessellation' },
+        { value: 'scatter', label: 'Scatter' },
+        { value: 'stackedPrisms', label: 'Stacked prisms' }
+      ]}
+    />
   </label>
 
   <label class="control-row">
     <button type="button" class="setting-title" class:locked={isLocked('prisms.base')} onclick={() => toggleLock('prisms.base')} title="Click to lock/unlock for randomize">Shape</button>
-    <select bind:value={config.prisms.base}>
-      <option value="prism">Prism</option>
-      <option value="pyramidTri">Pyramid (tri)</option>
-      <option value="pyramidSquare">Pyramid (square)</option>
-    </select>
+    <Dropdown
+      bind:value={config.prisms.base}
+      ariaLabel="Prism shape"
+      options={[
+        { value: 'prism', label: 'Prism' },
+        { value: 'pyramidTri', label: 'Pyramid (tri)' },
+        { value: 'pyramidSquare', label: 'Pyramid (square)' }
+      ]}
+    />
   </label>
 
   <label class="control-row slider">
@@ -81,10 +90,14 @@
     <summary class="control-details-summary">Palette</summary>
     <label class="control-row">
       <button type="button" class="setting-title" class:locked={isLocked('prisms.paletteMode')} onclick={() => toggleLock('prisms.paletteMode')} title="Click to lock/unlock for randomize">Mode</button>
-      <select bind:value={config.prisms.paletteMode}>
-        <option value="cycle">Cycle</option>
-        <option value="weighted">Weighted</option>
-      </select>
+      <Dropdown
+        bind:value={config.prisms.paletteMode}
+        ariaLabel="Prism palette mode"
+        options={[
+          { value: 'cycle', label: 'Cycle' },
+          { value: 'weighted', label: 'Weighted' }
+        ]}
+      />
     </label>
 
     {#if config.prisms.paletteMode === 'weighted'}

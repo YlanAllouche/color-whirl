@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { WallpaperConfig } from '@wallpaper-maker/core';
   import CollapsiblePanel from '$lib/ui/inspector/CollapsiblePanel.svelte';
+  import Dropdown from '$lib/ui/components/Dropdown.svelte';
 
   type Props = {
     config: WallpaperConfig;
@@ -40,11 +41,12 @@
       >
         Palette Index
       </button>
-      <select bind:value={config.emission.paletteIndex} disabled={!config.emission.enabled}>
-        {#each config.colors as c, i}
-          <option value={i}>{i}: {c}</option>
-        {/each}
-      </select>
+      <Dropdown
+        bind:value={config.emission.paletteIndex}
+        ariaLabel="Emission palette index"
+        disabled={!config.emission.enabled}
+        options={config.colors.map((c, i) => ({ value: i, label: `${i}: ${c}` }))}
+      />
     </label>
 
     <label class="control-row slider">

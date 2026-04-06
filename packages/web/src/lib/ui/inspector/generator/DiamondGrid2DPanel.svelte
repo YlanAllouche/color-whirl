@@ -1,5 +1,6 @@
 <script lang="ts">
   import CollapsiblePanel from '$lib/ui/inspector/CollapsiblePanel.svelte';
+  import Dropdown from '$lib/ui/components/Dropdown.svelte';
 
   type Props = {
     config: any;
@@ -79,10 +80,14 @@
     <summary class="control-details-summary">Palette</summary>
     <label class="control-row">
       <button type="button" class="setting-title" class:locked={isLocked('diamondgrid.coloring.paletteMode')} onclick={() => toggleLock('diamondgrid.coloring.paletteMode')} title="Click to lock/unlock for randomize">Mode</button>
-      <select bind:value={config.diamondgrid.coloring.paletteMode}>
-        <option value="cycle">Cycle</option>
-        <option value="weighted">Weighted</option>
-      </select>
+      <Dropdown
+        bind:value={config.diamondgrid.coloring.paletteMode}
+        ariaLabel="Diamond grid palette mode"
+        options={[
+          { value: 'cycle', label: 'Cycle' },
+          { value: 'weighted', label: 'Weighted' }
+        ]}
+      />
     </label>
     {#if config.diamondgrid.coloring.paletteMode === 'weighted'}
       <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-top:0.5rem;">

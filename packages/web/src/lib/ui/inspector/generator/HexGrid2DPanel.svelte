@@ -1,5 +1,6 @@
 <script lang="ts">
   import CollapsiblePanel from '$lib/ui/inspector/CollapsiblePanel.svelte';
+  import Dropdown from '$lib/ui/components/Dropdown.svelte';
 
   type Props = {
     config: any;
@@ -69,11 +70,16 @@
     </label>
     <label class="control-row">
       <button type="button" class="setting-title" class:locked={isLocked('hexgrid.stroke.join')} onclick={() => toggleLock('hexgrid.stroke.join')} title="Click to lock/unlock for randomize">Join</button>
-      <select bind:value={config.hexgrid.stroke.join} disabled={!config.hexgrid.stroke.enabled}>
-        <option value="round">Round</option>
-        <option value="miter">Miter</option>
-        <option value="bevel">Bevel</option>
-      </select>
+      <Dropdown
+        bind:value={config.hexgrid.stroke.join}
+        ariaLabel="Hex grid stroke join"
+        disabled={!config.hexgrid.stroke.enabled}
+        options={[
+          { value: 'round', label: 'Round' },
+          { value: 'miter', label: 'Miter' },
+          { value: 'bevel', label: 'Bevel' }
+        ]}
+      />
     </label>
     <label class="control-row">
       <button type="button" class="setting-title" class:locked={isLocked('hexgrid.stroke.color')} onclick={() => toggleLock('hexgrid.stroke.color')} title="Click to lock/unlock for randomize">Color</button>
@@ -89,29 +95,42 @@
     <summary class="control-details-summary">Coloring</summary>
     <label class="control-row">
       <button type="button" class="setting-title" class:locked={isLocked('hexgrid.coloring.paletteMode')} onclick={() => toggleLock('hexgrid.coloring.paletteMode')} title="Click to lock/unlock for randomize">Palette mode</button>
-      <select bind:value={config.hexgrid.coloring.paletteMode}>
-        <option value="cycle">Cycle</option>
-        <option value="weighted">Weighted</option>
-      </select>
+      <Dropdown
+        bind:value={config.hexgrid.coloring.paletteMode}
+        ariaLabel="Hex grid palette mode"
+        options={[
+          { value: 'cycle', label: 'Cycle' },
+          { value: 'weighted', label: 'Weighted' }
+        ]}
+      />
     </label>
 
     <label class="control-row">
       <button type="button" class="setting-title" class:locked={isLocked('hexgrid.coloring.weightsMode')} onclick={() => toggleLock('hexgrid.coloring.weightsMode')} title="Click to lock/unlock for randomize">Weights</button>
-      <select bind:value={config.hexgrid.coloring.weightsMode}>
-        <option value="auto">Auto</option>
-        <option value="preset">Preset</option>
-        <option value="custom">Custom</option>
-      </select>
+      <Dropdown
+        bind:value={config.hexgrid.coloring.weightsMode}
+        ariaLabel="Hex grid weights mode"
+        options={[
+          { value: 'auto', label: 'Auto' },
+          { value: 'preset', label: 'Preset' },
+          { value: 'custom', label: 'Custom' }
+        ]}
+      />
     </label>
 
     <label class="control-row">
       <button type="button" class="setting-title" class:locked={isLocked('hexgrid.coloring.preset')} onclick={() => toggleLock('hexgrid.coloring.preset')} title="Click to lock/unlock for randomize">Preset</button>
-      <select bind:value={config.hexgrid.coloring.preset} disabled={config.hexgrid.coloring.weightsMode !== 'preset'}>
-        <option value="equal">Equal</option>
-        <option value="dominant">Dominant</option>
-        <option value="accents">Accents</option>
-        <option value="rare-accents">Rare accents</option>
-      </select>
+      <Dropdown
+        bind:value={config.hexgrid.coloring.preset}
+        ariaLabel="Hex grid preset"
+        disabled={config.hexgrid.coloring.weightsMode !== 'preset'}
+        options={[
+          { value: 'equal', label: 'Equal' },
+          { value: 'dominant', label: 'Dominant' },
+          { value: 'accents', label: 'Accents' },
+          { value: 'rare-accents', label: 'Rare accents' }
+        ]}
+      />
     </label>
 
     {#if config.hexgrid.coloring.weightsMode === 'custom'}
@@ -141,12 +160,16 @@
     <summary class="control-details-summary">Grouping</summary>
     <label class="control-row">
       <button type="button" class="setting-title" class:locked={isLocked('hexgrid.grouping.mode')} onclick={() => toggleLock('hexgrid.grouping.mode')} title="Click to lock/unlock for randomize">Mode</button>
-      <select bind:value={config.hexgrid.grouping.mode}>
-        <option value="none">None</option>
-        <option value="voronoi">Voronoi</option>
-        <option value="noise">Noise</option>
-        <option value="random-walk">Random walk</option>
-      </select>
+      <Dropdown
+        bind:value={config.hexgrid.grouping.mode}
+        ariaLabel="Hex grid grouping mode"
+        options={[
+          { value: 'none', label: 'None' },
+          { value: 'voronoi', label: 'Voronoi' },
+          { value: 'noise', label: 'Noise' },
+          { value: 'random-walk', label: 'Random walk' }
+        ]}
+      />
     </label>
     <label class="control-row slider">
       <button type="button" class="setting-title" class:locked={isLocked('hexgrid.grouping.strength')} onclick={() => toggleLock('hexgrid.grouping.strength')} title="Click to lock/unlock for randomize">Strength: {config.hexgrid.grouping.strength.toFixed(2)}</button>
@@ -162,12 +185,16 @@
     <summary class="control-details-summary">Effect</summary>
     <label class="control-row">
       <button type="button" class="setting-title" class:locked={isLocked('hexgrid.effect.kind')} onclick={() => toggleLock('hexgrid.effect.kind')} title="Click to lock/unlock for randomize">Kind</button>
-      <select bind:value={config.hexgrid.effect.kind}>
-        <option value="none">None</option>
-        <option value="bevel">Bevel</option>
-        <option value="grain">Grain</option>
-        <option value="gradient">Gradient</option>
-      </select>
+      <Dropdown
+        bind:value={config.hexgrid.effect.kind}
+        ariaLabel="Hex grid effect"
+        options={[
+          { value: 'none', label: 'None' },
+          { value: 'bevel', label: 'Bevel' },
+          { value: 'grain', label: 'Grain' },
+          { value: 'gradient', label: 'Gradient' }
+        ]}
+      />
     </label>
     <label class="control-row slider">
       <button type="button" class="setting-title" class:locked={isLocked('hexgrid.effect.amount')} onclick={() => toggleLock('hexgrid.effect.amount')} title="Click to lock/unlock for randomize">Amount: {config.hexgrid.effect.amount.toFixed(2)}</button>

@@ -1,5 +1,6 @@
 <script lang="ts">
   import CollapsiblePanel from '$lib/ui/inspector/CollapsiblePanel.svelte';
+  import Dropdown from '$lib/ui/components/Dropdown.svelte';
 
   type Props = {
     config: any;
@@ -18,11 +19,15 @@
     <summary class="control-details-summary">Shape</summary>
     <label class="control-row">
       <button type="button" class="setting-title" class:locked={isLocked('spheres.shape.kind')} onclick={() => toggleLock('spheres.shape.kind')} title="Click to lock/unlock for randomize">Kind</button>
-      <select bind:value={config.spheres.shape.kind}>
-        <option value="uvSphere">UV sphere</option>
-        <option value="spherifiedBox">Spherified box</option>
-        <option value="geodesicPoly">Geodesic poly</option>
-      </select>
+      <Dropdown
+        bind:value={config.spheres.shape.kind}
+        ariaLabel="Sphere shape"
+        options={[
+          { value: 'uvSphere', label: 'UV sphere' },
+          { value: 'spherifiedBox', label: 'Spherified box' },
+          { value: 'geodesicPoly', label: 'Geodesic poly' }
+        ]}
+      />
     </label>
 
     <label class="control-row slider">
@@ -43,11 +48,15 @@
 
   <label class="control-row">
     <button type="button" class="setting-title" class:locked={isLocked('spheres.distribution')} onclick={() => toggleLock('spheres.distribution')} title="Click to lock/unlock for randomize">Distribution</button>
-    <select bind:value={config.spheres.distribution}>
-      <option value="jitteredGrid">Jittered grid</option>
-      <option value="scatter">Scatter</option>
-      <option value="layeredDepth">Layered depth</option>
-    </select>
+    <Dropdown
+      bind:value={config.spheres.distribution}
+      ariaLabel="Sphere distribution"
+      options={[
+        { value: 'jitteredGrid', label: 'Jittered grid' },
+        { value: 'scatter', label: 'Scatter' },
+        { value: 'layeredDepth', label: 'Layered depth' }
+      ]}
+    />
   </label>
 
   <label class="control-row slider">
@@ -82,10 +91,14 @@
     <summary class="control-details-summary">Palette</summary>
     <label class="control-row">
       <button type="button" class="setting-title" class:locked={isLocked('spheres.paletteMode')} onclick={() => toggleLock('spheres.paletteMode')} title="Click to lock/unlock for randomize">Mode</button>
-      <select bind:value={config.spheres.paletteMode}>
-        <option value="cycle">Cycle</option>
-        <option value="weighted">Weighted</option>
-      </select>
+      <Dropdown
+        bind:value={config.spheres.paletteMode}
+        ariaLabel="Spheres palette mode"
+        options={[
+          { value: 'cycle', label: 'Cycle' },
+          { value: 'weighted', label: 'Weighted' }
+        ]}
+      />
     </label>
 
     {#if config.spheres.paletteMode === 'weighted'}

@@ -1,5 +1,6 @@
 <script lang="ts">
   import CollapsiblePanel from '$lib/ui/inspector/CollapsiblePanel.svelte';
+  import Dropdown from '$lib/ui/components/Dropdown.svelte';
 
   type Props = {
     config: any;
@@ -34,11 +35,15 @@
 
   <label class="control-row">
     <button type="button" class="setting-title" class:locked={isLocked('stickEndProfile')} onclick={() => toggleLock('stickEndProfile')} title="Click to lock/unlock for randomize">End profile</button>
-    <select bind:value={config.stickEndProfile}>
-      <option value="rounded">Rounded</option>
-      <option value="chamfer">Chamfer</option>
-      <option value="chipped">Chipped</option>
-    </select>
+    <Dropdown
+      bind:value={config.stickEndProfile}
+      ariaLabel="Stick end profile"
+      options={[
+        { value: 'rounded', label: 'Rounded' },
+        { value: 'chamfer', label: 'Chamfer' },
+        { value: 'chipped', label: 'Chipped' }
+      ]}
+    />
   </label>
 
   <label class="control-row slider">

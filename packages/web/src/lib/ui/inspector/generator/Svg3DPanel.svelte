@@ -1,5 +1,6 @@
 <script lang="ts">
   import CollapsiblePanel from '$lib/ui/inspector/CollapsiblePanel.svelte';
+  import Dropdown from '$lib/ui/components/Dropdown.svelte';
 
   type Props = {
     config: any;
@@ -18,20 +19,28 @@
 <CollapsiblePanel id="svg3d" title="SVG (3D)" icon="file-code" defaultOpen={true}>
   <label class="control-row">
     <button type="button" class="setting-title" class:locked={isLocked('svg.renderMode')} onclick={() => toggleLock('svg.renderMode')} title="Click to lock/unlock for randomize">Render</button>
-    <select bind:value={config.svg.renderMode}>
-      <option value="auto">Auto</option>
-      <option value="fill">Fill</option>
-      <option value="stroke">Stroke</option>
-      <option value="fill+stroke">Fill + Stroke</option>
-    </select>
+    <Dropdown
+      bind:value={config.svg.renderMode}
+      ariaLabel="SVG render mode"
+      options={[
+        { value: 'auto', label: 'Auto' },
+        { value: 'fill', label: 'Fill' },
+        { value: 'stroke', label: 'Stroke' },
+        { value: 'fill+stroke', label: 'Fill + Stroke' }
+      ]}
+    />
   </label>
 
   <label class="control-row">
     <button type="button" class="setting-title" class:locked={isLocked('svg.colorMode')} onclick={() => toggleLock('svg.colorMode')} title="Click to lock/unlock for randomize">Colors</button>
-    <select bind:value={config.svg.colorMode}>
-      <option value="palette">Palette</option>
-      <option value="svg-to-palette">SVG to palette</option>
-    </select>
+    <Dropdown
+      bind:value={config.svg.colorMode}
+      ariaLabel="SVG color mode"
+      options={[
+        { value: 'palette', label: 'Palette' },
+        { value: 'svg-to-palette', label: 'SVG to palette' }
+      ]}
+    />
   </label>
   {#if config.svg.colorMode === 'svg-to-palette'}
     <label class="control-row slider">
@@ -155,10 +164,14 @@
       <summary class="control-details-summary">Palette</summary>
       <label class="control-row">
         <button type="button" class="setting-title" class:locked={isLocked('svg.paletteMode')} onclick={() => toggleLock('svg.paletteMode')} title="Click to lock/unlock for randomize">Mode</button>
-        <select bind:value={config.svg.paletteMode}>
-          <option value="cycle">Cycle</option>
-          <option value="weighted">Weighted</option>
-        </select>
+        <Dropdown
+          bind:value={config.svg.paletteMode}
+          ariaLabel="SVG palette mode"
+          options={[
+            { value: 'cycle', label: 'Cycle' },
+            { value: 'weighted', label: 'Weighted' }
+          ]}
+        />
       </label>
 
       {#if config.svg.paletteMode === 'weighted'}

@@ -1,5 +1,6 @@
 <script lang="ts">
   import CollapsiblePanel from '$lib/ui/inspector/CollapsiblePanel.svelte';
+  import Dropdown from '$lib/ui/components/Dropdown.svelte';
 
   type Props = {
     config: any;
@@ -38,10 +39,15 @@
       >
         Mode
       </button>
-      <select bind:value={config.facades.grazing.mode} disabled={!config.facades.grazing.enabled}>
-        <option value="add">Add</option>
-        <option value="mix">Mix</option>
-      </select>
+      <Dropdown
+        bind:value={config.facades.grazing.mode}
+        ariaLabel="Grazing mode"
+        disabled={!config.facades.grazing.enabled}
+        options={[
+          { value: 'add', label: 'Add' },
+          { value: 'mix', label: 'Mix' }
+        ]}
+      />
     </label>
     <label class="control-row">
       <button

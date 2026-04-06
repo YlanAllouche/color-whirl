@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { WallpaperConfig } from '@wallpaper-maker/core';
   import CollapsiblePanel from '$lib/ui/inspector/CollapsiblePanel.svelte';
+  import Dropdown from '$lib/ui/components/Dropdown.svelte';
 
   type Props = {
     config: WallpaperConfig;
@@ -34,20 +35,30 @@
       <button type="button" class="setting-title" class:locked={isLocked('voronoi.space')} onclick={() => toggleLock('voronoi.space')} title="Click to lock/unlock for randomize">
         Space
       </button>
-      <select bind:value={(config as any).voronoi.space} disabled={!((config as any).voronoi.enabled)}>
-        <option value="world">World</option>
-        <option value="object">Object</option>
-      </select>
+      <Dropdown
+        bind:value={(config as any).voronoi.space}
+        ariaLabel="Voronoi space"
+        disabled={!((config as any).voronoi.enabled)}
+        options={[
+          { value: 'world', label: 'World' },
+          { value: 'object', label: 'Object' }
+        ]}
+      />
     </label>
 
     <label class="control-row">
       <button type="button" class="setting-title" class:locked={isLocked('voronoi.kind')} onclick={() => toggleLock('voronoi.kind')} title="Click to lock/unlock for randomize">
         Kind
       </button>
-      <select bind:value={(config as any).voronoi.kind} disabled={!((config as any).voronoi.enabled)}>
-        <option value="edges">Edges</option>
-        <option value="cells">Cells</option>
-      </select>
+      <Dropdown
+        bind:value={(config as any).voronoi.kind}
+        ariaLabel="Voronoi kind"
+        disabled={!((config as any).voronoi.enabled)}
+        options={[
+          { value: 'edges', label: 'Edges' },
+          { value: 'cells', label: 'Cells' }
+        ]}
+      />
     </label>
 
     <label class="control-row slider">
@@ -131,23 +142,33 @@
       <button type="button" class="setting-title" class:locked={isLocked('voronoi.materialMode')} onclick={() => toggleLock('voronoi.materialMode')} title="Click to lock/unlock for randomize">
         Material
       </button>
-      <select bind:value={(config as any).voronoi.materialMode} disabled={!((config as any).voronoi.enabled)}>
-        <option value="none">None</option>
-        <option value="roughness">Roughness</option>
-        <option value="normal">Normal</option>
-        <option value="both">Both</option>
-      </select>
+      <Dropdown
+        bind:value={(config as any).voronoi.materialMode}
+        ariaLabel="Voronoi material"
+        disabled={!((config as any).voronoi.enabled)}
+        options={[
+          { value: 'none', label: 'None' },
+          { value: 'roughness', label: 'Roughness' },
+          { value: 'normal', label: 'Normal' },
+          { value: 'both', label: 'Both' }
+        ]}
+      />
     </label>
 
     <label class="control-row">
       <button type="button" class="setting-title" class:locked={isLocked('voronoi.materialKind')} onclick={() => toggleLock('voronoi.materialKind')} title="Click to lock/unlock for randomize">
         Material kind
       </button>
-      <select bind:value={(config as any).voronoi.materialKind} disabled={!((config as any).voronoi.enabled)}>
-        <option value="match">Match kind</option>
-        <option value="edges">Edges</option>
-        <option value="cells">Cells</option>
-      </select>
+      <Dropdown
+        bind:value={(config as any).voronoi.materialKind}
+        ariaLabel="Voronoi material kind"
+        disabled={!((config as any).voronoi.enabled)}
+        options={[
+          { value: 'match', label: 'Match kind' },
+          { value: 'edges', label: 'Edges' },
+          { value: 'cells', label: 'Cells' }
+        ]}
+      />
     </label>
 
     <label class="control-row slider">
@@ -196,11 +217,16 @@
       <button type="button" class="setting-title" class:locked={isLocked('voronoi.colorMode')} onclick={() => toggleLock('voronoi.colorMode')} title="Click to lock/unlock for randomize">
         Color mode
       </button>
-      <select bind:value={(config as any).voronoi.colorMode} disabled={!((config as any).voronoi.enabled)}>
-        <option value="darken">Darken</option>
-        <option value="lighten">Lighten</option>
-        <option value="tint">Tint</option>
-      </select>
+      <Dropdown
+        bind:value={(config as any).voronoi.colorMode}
+        ariaLabel="Voronoi color mode"
+        disabled={!((config as any).voronoi.enabled)}
+        options={[
+          { value: 'darken', label: 'Darken' },
+          { value: 'lighten', label: 'Lighten' },
+          { value: 'tint', label: 'Tint' }
+        ]}
+      />
     </label>
 
     <label class="control-row">

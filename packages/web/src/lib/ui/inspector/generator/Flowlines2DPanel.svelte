@@ -1,5 +1,6 @@
 <script lang="ts">
   import CollapsiblePanel from '$lib/ui/inspector/CollapsiblePanel.svelte';
+  import Dropdown from '$lib/ui/components/Dropdown.svelte';
 
   type Props = {
     config: any;
@@ -31,10 +32,14 @@
     <summary class="control-details-summary">Integration</summary>
     <label class="control-row">
       <button type="button" class="setting-title" class:locked={isLocked('flowlines.spawn')} onclick={() => toggleLock('flowlines.spawn')} title="Click to lock/unlock for randomize">Spawn</button>
-      <select bind:value={config.flowlines.spawn}>
-        <option value="grid">Grid</option>
-        <option value="random">Random</option>
-      </select>
+      <Dropdown
+        bind:value={config.flowlines.spawn}
+        ariaLabel="Flowlines spawn"
+        options={[
+          { value: 'grid', label: 'Grid' },
+          { value: 'random', label: 'Random' }
+        ]}
+      />
     </label>
     <label class="control-row slider">
       <button type="button" class="setting-title" class:locked={isLocked('flowlines.stepPx')} onclick={() => toggleLock('flowlines.stepPx')} title="Click to lock/unlock for randomize">Step: {config.flowlines.stepPx.toFixed(2)}px</button>
@@ -70,10 +75,14 @@
     <summary class="control-details-summary">Palette</summary>
     <label class="control-row">
       <button type="button" class="setting-title" class:locked={isLocked('flowlines.paletteMode')} onclick={() => toggleLock('flowlines.paletteMode')} title="Click to lock/unlock for randomize">Mode</button>
-      <select bind:value={config.flowlines.paletteMode}>
-        <option value="cycle">Cycle</option>
-        <option value="weighted">Weighted</option>
-      </select>
+      <Dropdown
+        bind:value={config.flowlines.paletteMode}
+        ariaLabel="Flowlines palette mode"
+        options={[
+          { value: 'cycle', label: 'Cycle' },
+          { value: 'weighted', label: 'Weighted' }
+        ]}
+      />
     </label>
     {#if config.flowlines.paletteMode === 'weighted'}
       <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-top:0.5rem;">

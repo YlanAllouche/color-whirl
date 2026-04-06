@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { WallpaperConfig, WallpaperType } from '@wallpaper-maker/core';
   import CollapsiblePanel from '$lib/ui/inspector/CollapsiblePanel.svelte';
-  import TypePicker from '$lib/ui/components/TypePicker.svelte';
+  import Dropdown from '$lib/ui/components/Dropdown.svelte';
 
   type Props = {
     config: WallpaperConfig;
@@ -22,7 +22,7 @@
 <CollapsiblePanel id="type" title="Type" icon="shapes" defaultOpen={true}>
   <label class="control-row">
     <span class="setting-title">Generator</span>
-    <TypePicker
+    <Dropdown
       value={selectedType}
       options={[
         { value: 'popsicle', label: 'Popsicle' },
@@ -39,9 +39,10 @@
         { value: 'svg3d', label: 'SVG (3D)' },
         { value: 'hexgrid2d', label: 'Hex Grid (2D)' }
       ]}
+      ariaLabel="Wallpaper type"
       onChange={(value) => {
-        selectedType = value;
-        switchType(value);
+        selectedType = value as WallpaperType;
+        switchType(value as WallpaperType);
       }}
     />
   </label>

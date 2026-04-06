@@ -2,6 +2,7 @@
   import type { WallpaperConfig } from '@wallpaper-maker/core';
   import type { PreviewRenderMode } from '$lib/popsicle/preview';
   import CollapsiblePanel from '$lib/ui/inspector/CollapsiblePanel.svelte';
+  import Dropdown from '$lib/ui/components/Dropdown.svelte';
 
   type Props = {
     config: WallpaperConfig;
@@ -13,6 +14,24 @@
   };
 
   let { config, is3DType, supportsBloom, isLocked, toggleLock, renderMode = $bindable() }: Props = $props();
+
+  const envStyleOptions = [
+    { value: 'studio', label: 'Studio' },
+    { value: 'overcast', label: 'Overcast' },
+    { value: 'sunset', label: 'Sunset' }
+  ];
+
+  const shadowTypeOptions = [
+    { value: 'pcfsoft', label: 'PCF Soft' },
+    { value: 'vsm', label: 'VSM' }
+  ];
+
+  const pathTraceDisabled = $derived(
+    config.type !== 'popsicle' &&
+      config.type !== 'spheres3d' &&
+      config.type !== 'triangles3d' &&
+      config.type !== 'svg3d'
+  );
 </script>
 
 <CollapsiblePanel id="render" title="Render" icon="sparkles" defaultOpen={true}>
@@ -41,28 +60,27 @@
       >
         Tone Mapping
       </button>
-      <select bind:value={config.rendering.toneMapping}>
-        <option value="aces">ACES</option>
-        <option value="none">None</option>
-      </select>
+      <Dropdown
+        bind:value={config.rendering.toneMapping}
+        ariaLabel="Tone mapping"
+        options={[
+          { value: 'aces', label: 'ACES' },
+          { value: 'none', label: 'None' }
+        ]}
+      />
     </label>
 
     <label class="control-row">
       <span class="setting-title">Mode</span>
-      <select bind:value={renderMode} title="Raster is instant; Path traced refines progressively">
-        <option value="raster">Raster</option>
-        <option
-          value="path"
-          disabled={
-            config.type !== 'popsicle' &&
-            config.type !== 'spheres3d' &&
-            config.type !== 'triangles3d' &&
-            config.type !== 'svg3d'
-          }
-        >
-          Path traced
-        </option>
-      </select>
+      <Dropdown
+        bind:value={renderMode}
+        title="Raster is instant; Path traced refines progressively"
+        ariaLabel="Render mode"
+        options={[
+          { value: 'raster', label: 'Raster' },
+          { value: 'path', label: 'Path traced', disabled: pathTraceDisabled }
+        ]}
+      />
     </label>
   {/if}
 
@@ -176,11 +194,12 @@
           >
             Env Style
           </button>
-          <select bind:value={config.environment.style} disabled={!config.environment.enabled}>
-            <option value="studio">Studio</option>
-            <option value="overcast">Overcast</option>
-            <option value="sunset">Sunset</option>
-          </select>
+          <Dropdown
+            bind:value={config.environment.style}
+            ariaLabel="Environment style"
+            disabled={!config.environment.enabled}
+            options={envStyleOptions}
+          />
         </label>
       {:else}
         <details class="control-details">
@@ -207,11 +226,12 @@
             >
               Env Style
             </button>
-            <select bind:value={config.environment.style} disabled={!config.environment.enabled}>
-              <option value="studio">Studio</option>
-              <option value="overcast">Overcast</option>
-              <option value="sunset">Sunset</option>
-            </select>
+            <Dropdown
+              bind:value={config.environment.style}
+              ariaLabel="Environment style"
+              disabled={!config.environment.enabled}
+              options={envStyleOptions}
+            />
           </label>
         </details>
       {/if}
@@ -243,10 +263,12 @@
         >
           Shadow Type
         </button>
-        <select bind:value={config.shadows.type} disabled={!config.shadows.enabled}>
-          <option value="pcfsoft">PCF Soft</option>
-          <option value="vsm">VSM</option>
-        </select>
+        <Dropdown
+          bind:value={config.shadows.type}
+          ariaLabel="Shadow type"
+          disabled={!config.shadows.enabled}
+          options={shadowTypeOptions}
+        />
       </label>
       <label class="control-row slider">
         <button

@@ -1,5 +1,6 @@
 <script lang="ts">
   import CollapsiblePanel from '$lib/ui/inspector/CollapsiblePanel.svelte';
+  import Dropdown from '$lib/ui/components/Dropdown.svelte';
 
   type Props = {
     config: any;
@@ -16,11 +17,15 @@
 <CollapsiblePanel id="triangles2d" title="Triangles (2D)" icon="triangle" defaultOpen={true}>
   <label class="control-row">
     <button type="button" class="setting-title" class:locked={isLocked('triangles.mode')} onclick={() => toggleLock('triangles.mode')} title="Click to lock/unlock for randomize">Mode</button>
-    <select bind:value={config.triangles.mode}>
-      <option value="tessellation">Tessellation</option>
-      <option value="scatter">Scatter</option>
-      <option value="lowpoly">Low poly</option>
-    </select>
+    <Dropdown
+      bind:value={config.triangles.mode}
+      ariaLabel="Triangle mode"
+      options={[
+        { value: 'tessellation', label: 'Tessellation' },
+        { value: 'scatter', label: 'Scatter' },
+        { value: 'lowpoly', label: 'Low poly' }
+      ]}
+    />
   </label>
 
   <label class="control-row slider">
@@ -115,10 +120,14 @@
     <summary class="control-details-summary">Palette</summary>
     <label class="control-row">
       <button type="button" class="setting-title" class:locked={isLocked('triangles.paletteMode')} onclick={() => toggleLock('triangles.paletteMode')} title="Click to lock/unlock for randomize">Mode</button>
-      <select bind:value={config.triangles.paletteMode}>
-        <option value="cycle">Cycle</option>
-        <option value="weighted">Weighted</option>
-      </select>
+      <Dropdown
+        bind:value={config.triangles.paletteMode}
+        ariaLabel="Triangle palette mode"
+        options={[
+          { value: 'cycle', label: 'Cycle' },
+          { value: 'weighted', label: 'Weighted' }
+        ]}
+      />
     </label>
 
     {#if config.triangles.paletteMode === 'weighted'}

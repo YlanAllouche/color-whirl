@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { WallpaperConfig } from '@wallpaper-maker/core';
   import CollapsiblePanel from '$lib/ui/inspector/CollapsiblePanel.svelte';
+  import Dropdown from '$lib/ui/components/Dropdown.svelte';
 
   type Props = {
     config: WallpaperConfig;
@@ -37,10 +38,15 @@
       >
         Mode
       </button>
-      <select bind:value={config.collisions.mode} disabled={config.colors.length > 8}>
-        <option value="none">None</option>
-        <option value="carve">Carve</option>
-      </select>
+      <Dropdown
+        bind:value={config.collisions.mode}
+        ariaLabel="Collision mode"
+        disabled={config.colors.length > 8}
+        options={[
+          { value: 'none', label: 'None' },
+          { value: 'carve', label: 'Carve' }
+        ]}
+      />
     </label>
 
     {#if config.colors.length > 8}
@@ -60,10 +66,14 @@
         >
           Direction
         </button>
-        <select bind:value={config.collisions.carve.direction}>
-          <option value="oneWay">One-way</option>
-          <option value="twoWay">Two-way</option>
-        </select>
+        <Dropdown
+          bind:value={config.collisions.carve.direction}
+          ariaLabel="Collision carve direction"
+          options={[
+            { value: 'oneWay', label: 'One-way' },
+            { value: 'twoWay', label: 'Two-way' }
+          ]}
+        />
       </label>
       <label class="control-row slider">
         <button
@@ -117,10 +127,14 @@
         >
           Edge
         </button>
-        <select bind:value={config.collisions.carve.edge}>
-          <option value="hard">Hard</option>
-          <option value="soft">Soft</option>
-        </select>
+        <Dropdown
+          bind:value={config.collisions.carve.edge}
+          ariaLabel="Collision carve edge"
+          options={[
+            { value: 'hard', label: 'Hard' },
+            { value: 'soft', label: 'Soft' }
+          ]}
+        />
       </label>
       <label class="control-row slider">
         <button
@@ -178,10 +192,14 @@
             >
               Finish Volume
             </button>
-            <select bind:value={config.collisions.carve.finish}>
-              <option value="none">None</option>
-              <option value="wallsCap">Walls + Cap</option>
-            </select>
+            <Dropdown
+              bind:value={config.collisions.carve.finish}
+              ariaLabel="Collision finish volume"
+              options={[
+                { value: 'none', label: 'None' },
+                { value: 'wallsCap', label: 'Walls + Cap' }
+              ]}
+            />
           </label>
 
           {#if config.collisions.carve.finish === 'wallsCap'}

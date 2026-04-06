@@ -4,6 +4,7 @@
 
   import PaletteOverrides from '$lib/ui/inspector/colors/PaletteOverrides.svelte';
   import CollapsiblePanel from '$lib/ui/inspector/CollapsiblePanel.svelte';
+  import Dropdown from '$lib/ui/components/Dropdown.svelte';
 
   type Props = {
     config: WallpaperConfig;
@@ -76,15 +77,17 @@
   <div class="palette-controls">
     <div class="palette-row">
       <button type="button" class="palette-nav" onclick={() => cycleColorPreset(-1)} title="Previous preset">Prev</button>
-      <select bind:value={selectedColorPresetId} onchange={applySelectedColorPreset} title="Apply a preset to colors + background">
-        {#each colorPresetGroups as g}
-          <optgroup label={g.group}>
-            {#each g.presets as preset}
-              <option value={preset.id}>{preset.label}</option>
-            {/each}
-          </optgroup>
-        {/each}
-      </select>
+      <Dropdown
+        bind:value={selectedColorPresetId}
+        size="sm"
+        title="Apply a preset to colors + background"
+        ariaLabel="Color preset"
+        options={colorPresetGroups.map((g) => ({
+          group: g.group,
+          options: g.presets.map((preset) => ({ value: preset.id, label: preset.label }))
+        }))}
+        onChange={applySelectedColorPreset}
+      />
       <button type="button" class="palette-nav" onclick={() => cycleColorPreset(1)} title="Next preset">Next</button>
     </div>
     {#if selectedColorPreset}

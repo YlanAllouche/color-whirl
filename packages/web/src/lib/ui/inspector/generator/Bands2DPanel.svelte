@@ -1,5 +1,6 @@
 <script lang="ts">
   import CollapsiblePanel from '$lib/ui/inspector/CollapsiblePanel.svelte';
+  import Dropdown from '$lib/ui/components/Dropdown.svelte';
 
   type Props = {
     config: any;
@@ -16,11 +17,15 @@
 <CollapsiblePanel id="bands2d" title="Bands (2D)" icon="equal" defaultOpen={true}>
   <label class="control-row">
     <button type="button" class="setting-title" class:locked={isLocked('bands.mode')} onclick={() => toggleLock('bands.mode')} title="Click to lock/unlock for randomize">Mode</button>
-    <select bind:value={config.bands.mode}>
-      <option value="waves">Waves</option>
-      <option value="chevron">Chevron</option>
-      <option value="straight">Straight</option>
-    </select>
+    <Dropdown
+      bind:value={config.bands.mode}
+      ariaLabel="Bands mode"
+      options={[
+        { value: 'waves', label: 'Waves' },
+        { value: 'chevron', label: 'Chevron' },
+        { value: 'straight', label: 'Straight' }
+      ]}
+    />
   </label>
 
   <label class="control-row slider">
@@ -181,10 +186,14 @@
     <summary class="control-details-summary">Palette</summary>
     <label class="control-row">
       <button type="button" class="setting-title" class:locked={isLocked('bands.paletteMode')} onclick={() => toggleLock('bands.paletteMode')} title="Click to lock/unlock for randomize">Mode</button>
-      <select bind:value={config.bands.paletteMode}>
-        <option value="cycle">Cycle</option>
-        <option value="weighted">Weighted</option>
-      </select>
+      <Dropdown
+        bind:value={config.bands.paletteMode}
+        ariaLabel="Bands palette mode"
+        options={[
+          { value: 'cycle', label: 'Cycle' },
+          { value: 'weighted', label: 'Weighted' }
+        ]}
+      />
     </label>
 
     {#if config.bands.paletteMode === 'weighted'}

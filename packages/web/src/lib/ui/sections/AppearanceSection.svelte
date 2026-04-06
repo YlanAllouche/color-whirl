@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { WallpaperConfig } from '@wallpaper-maker/core';
   import CollapsiblePanel from '$lib/ui/inspector/CollapsiblePanel.svelte';
+  import Dropdown from '$lib/ui/components/Dropdown.svelte';
 
   type Props = {
     config: WallpaperConfig;
@@ -24,15 +25,19 @@
       >
         Texture
       </button>
-      <select bind:value={config.texture}>
-        <option value="glossy">Glossy</option>
-        <option value="matte">Matte</option>
-        <option value="metallic">Metallic</option>
-        <option value="drywall">Drywall</option>
-        <option value="glass">Glass</option>
-        <option value="mirror">Mirror</option>
-        <option value="cel">Cel</option>
-      </select>
+      <Dropdown
+        bind:value={config.texture}
+        ariaLabel="Texture"
+        options={[
+          { value: 'glossy', label: 'Glossy' },
+          { value: 'matte', label: 'Matte' },
+          { value: 'metallic', label: 'Metallic' },
+          { value: 'drywall', label: 'Drywall' },
+          { value: 'glass', label: 'Glass' },
+          { value: 'mirror', label: 'Mirror' },
+          { value: 'cel', label: 'Cel' }
+        ]}
+      />
     </label>
 
     {#if config.texture === 'drywall'}
@@ -73,12 +78,16 @@
         >
           Glass Style
         </button>
-        <select bind:value={config.textureParams.glass.style}>
-          <option value="simple">Simple</option>
-          <option value="frosted">Frosted</option>
-          <option value="thick">Thick</option>
-          <option value="stylized">Stylized</option>
-        </select>
+        <Dropdown
+          bind:value={config.textureParams.glass.style}
+          ariaLabel="Glass style"
+          options={[
+            { value: 'simple', label: 'Simple' },
+            { value: 'frosted', label: 'Frosted' },
+            { value: 'thick', label: 'Thick' },
+            { value: 'stylized', label: 'Stylized' }
+          ]}
+        />
       </label>
     {/if}
 

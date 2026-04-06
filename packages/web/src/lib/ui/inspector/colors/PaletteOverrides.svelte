@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { WallpaperConfig } from '@wallpaper-maker/core';
+  import Dropdown from '$lib/ui/components/Dropdown.svelte';
 
   type PaletteOverrideBlock =
     | 'emission'
@@ -75,20 +76,22 @@
               {#if ov?.bubbles}
                 <label class="control-row">
                   <span class="setting-title">Mode</span>
-                  <select
+                  <Dropdown
                     value={(ov.bubbles as any)?.mode ?? (config as any).bubbles.mode}
-                    oninput={(e) => {
-                      const v = String((e.currentTarget as HTMLSelectElement).value);
+                    ariaLabel="Bubble mode"
+                    options={[
+                      { value: 'through', label: 'Through' },
+                      { value: 'cap', label: 'Cap' }
+                    ]}
+                    onChange={(value) => {
+                      const v = String(value);
                       updatePaletteOverride(i, (cur) => ({
                         ...(cur ?? { enabled: true }),
                         enabled: true,
                         bubbles: { ...((cur as any)?.bubbles ?? {}), mode: v === 'cap' ? 'cap' : 'through' }
                       }));
                     }}
-                  >
-                    <option value="through">Through</option>
-                    <option value="cap">Cap</option>
-                  </select>
+                  />
                 </label>
 
                 <label class="control-row checkbox">
@@ -523,25 +526,27 @@
               {#if ov?.texture}
                 <label class="control-row">
                   <span class="setting-title">Type</span>
-                  <select
+                  <Dropdown
                     value={ov.texture.type ?? config.texture}
-                    oninput={(e) => {
-                      const value = (e.currentTarget as HTMLSelectElement).value;
+                    ariaLabel="Texture type"
+                    options={[
+                      { value: 'glossy', label: 'Glossy' },
+                      { value: 'matte', label: 'Matte' },
+                      { value: 'metallic', label: 'Metallic' },
+                      { value: 'drywall', label: 'Drywall' },
+                      { value: 'glass', label: 'Glass' },
+                      { value: 'mirror', label: 'Mirror' },
+                      { value: 'cel', label: 'Cel' }
+                    ]}
+                    onChange={(value) => {
+                      const next = String(value);
                       updatePaletteOverride(i, (cur) => ({
                         ...(cur ?? { enabled: true }),
                         enabled: true,
-                        texture: { ...(cur?.texture ?? {}), type: value }
+                        texture: { ...(cur?.texture ?? {}), type: next }
                       }));
                     }}
-                  >
-                    <option value="glossy">Glossy</option>
-                    <option value="matte">Matte</option>
-                    <option value="metallic">Metallic</option>
-                    <option value="drywall">Drywall</option>
-                    <option value="glass">Glass</option>
-                    <option value="mirror">Mirror</option>
-                    <option value="cel">Cel</option>
-                  </select>
+                  />
                 </label>
 
                 {#if (ov.texture.type ?? config.texture) === 'drywall'}
@@ -598,22 +603,24 @@
                 {#if (ov.texture.type ?? config.texture) === 'glass'}
                   <label class="control-row">
                     <span class="setting-title">Glass Style</span>
-                    <select
+                    <Dropdown
                       value={ov.texture.params?.glass?.style ?? config.textureParams.glass.style}
-                      oninput={(e) => {
-                        const v = (e.currentTarget as HTMLSelectElement).value;
+                      ariaLabel="Glass style"
+                      options={[
+                        { value: 'simple', label: 'Simple' },
+                        { value: 'frosted', label: 'Frosted' },
+                        { value: 'thick', label: 'Thick' },
+                        { value: 'stylized', label: 'Stylized' }
+                      ]}
+                      onChange={(value) => {
+                        const v = String(value);
                         updatePaletteOverride(i, (cur) => ({
                           ...(cur ?? { enabled: true }),
                           enabled: true,
                           texture: { ...(cur?.texture ?? {}), params: { ...((cur?.texture as any)?.params ?? {}), glass: { style: v } } }
                         }));
                       }}
-                    >
-                      <option value="simple">Simple</option>
-                      <option value="frosted">Frosted</option>
-                      <option value="thick">Thick</option>
-                      <option value="stylized">Stylized</option>
-                    </select>
+                    />
                   </label>
                 {/if}
 
@@ -688,37 +695,41 @@
                 </label>
                 <label class="control-row">
                   <span class="setting-title">Kind</span>
-                  <select
+                  <Dropdown
                     value={ov.voronoi.kind ?? (config as any).voronoi.kind}
-                    oninput={(e) => {
-                      const v = (e.currentTarget as HTMLSelectElement).value;
+                    ariaLabel="Voronoi kind"
+                    options={[
+                      { value: 'edges', label: 'Edges' },
+                      { value: 'cells', label: 'Cells' }
+                    ]}
+                    onChange={(value) => {
+                      const v = String(value);
                       updatePaletteOverride(i, (cur) => ({
                         ...(cur ?? { enabled: true }),
                         enabled: true,
                         voronoi: { ...(cur?.voronoi ?? {}), kind: v }
                       }));
                     }}
-                  >
-                    <option value="edges">Edges</option>
-                    <option value="cells">Cells</option>
-                  </select>
+                  />
                 </label>
                 <label class="control-row">
                   <span class="setting-title">Space</span>
-                  <select
+                  <Dropdown
                     value={ov.voronoi.space ?? (config as any).voronoi.space}
-                    oninput={(e) => {
-                      const v = (e.currentTarget as HTMLSelectElement).value;
+                    ariaLabel="Voronoi space"
+                    options={[
+                      { value: 'world', label: 'World' },
+                      { value: 'object', label: 'Object' }
+                    ]}
+                    onChange={(value) => {
+                      const v = String(value);
                       updatePaletteOverride(i, (cur) => ({
                         ...(cur ?? { enabled: true }),
                         enabled: true,
                         voronoi: { ...(cur?.voronoi ?? {}), space: v }
                       }));
                     }}
-                  >
-                    <option value="world">World</option>
-                    <option value="object">Object</option>
-                  </select>
+                  />
                 </label>
                 <label class="control-row slider">
                   <span class="setting-title">Scale: {Number(ov.voronoi.scale ?? (config as any).voronoi.scale).toFixed(2)}</span>
@@ -851,40 +862,44 @@
                 </label>
                 <label class="control-row">
                   <span class="setting-title">Material mode</span>
-                  <select
+                  <Dropdown
                     value={ov.voronoi.materialMode ?? (config as any).voronoi.materialMode}
-                    oninput={(e) => {
-                      const v = (e.currentTarget as HTMLSelectElement).value;
+                    ariaLabel="Voronoi material mode"
+                    options={[
+                      { value: 'none', label: 'None' },
+                      { value: 'roughness', label: 'Roughness' },
+                      { value: 'normal', label: 'Normal' },
+                      { value: 'both', label: 'Both' }
+                    ]}
+                    onChange={(value) => {
+                      const v = String(value);
                       updatePaletteOverride(i, (cur) => ({
                         ...(cur ?? { enabled: true }),
                         enabled: true,
                         voronoi: { ...(cur?.voronoi ?? {}), materialMode: v }
                       }));
                     }}
-                  >
-                    <option value="none">None</option>
-                    <option value="roughness">Roughness</option>
-                    <option value="normal">Normal</option>
-                    <option value="both">Both</option>
-                  </select>
+                  />
                 </label>
                 <label class="control-row">
                   <span class="setting-title">Material mask</span>
-                  <select
+                  <Dropdown
                     value={ov.voronoi.materialKind ?? (config as any).voronoi.materialKind}
-                    oninput={(e) => {
-                      const v = (e.currentTarget as HTMLSelectElement).value;
+                    ariaLabel="Voronoi material kind"
+                    options={[
+                      { value: 'match', label: 'Match kind' },
+                      { value: 'edges', label: 'Edges' },
+                      { value: 'cells', label: 'Cells' }
+                    ]}
+                    onChange={(value) => {
+                      const v = String(value);
                       updatePaletteOverride(i, (cur) => ({
                         ...(cur ?? { enabled: true }),
                         enabled: true,
                         voronoi: { ...(cur?.voronoi ?? {}), materialKind: v }
                       }));
                     }}
-                  >
-                    <option value="match">Match kind</option>
-                    <option value="edges">Edges</option>
-                    <option value="cells">Cells</option>
-                  </select>
+                  />
                 </label>
                 <label class="control-row slider">
                   <span class="setting-title">Roughness feel: {Number(ov.voronoi.roughnessStrength ?? (config as any).voronoi.roughnessStrength).toFixed(2)}</span>
@@ -945,21 +960,23 @@
                 </label>
                 <label class="control-row">
                   <span class="setting-title">Color mode</span>
-                  <select
+                  <Dropdown
                     value={ov.voronoi.colorMode ?? (config as any).voronoi.colorMode}
-                    oninput={(e) => {
-                      const v = (e.currentTarget as HTMLSelectElement).value;
+                    ariaLabel="Voronoi color mode"
+                    options={[
+                      { value: 'darken', label: 'Darken' },
+                      { value: 'lighten', label: 'Lighten' },
+                      { value: 'tint', label: 'Tint' }
+                    ]}
+                    onChange={(value) => {
+                      const v = String(value);
                       updatePaletteOverride(i, (cur) => ({
                         ...(cur ?? { enabled: true }),
                         enabled: true,
                         voronoi: { ...(cur?.voronoi ?? {}), colorMode: v }
                       }));
                     }}
-                  >
-                    <option value="darken">Darken</option>
-                    <option value="lighten">Lighten</option>
-                    <option value="tint">Tint</option>
-                  </select>
+                  />
                 </label>
                 <label class="control-row">
                   <span class="setting-title">Tint</span>
@@ -1096,20 +1113,22 @@
                 </label>
                 <label class="control-row">
                   <span class="setting-title">Mode</span>
-                  <select
+                  <Dropdown
                     value={ov.facades.grazing.mode ?? config.facades.grazing.mode}
-                    oninput={(e) => {
-                      const v = (e.currentTarget as HTMLSelectElement).value;
+                    ariaLabel="Grazing mode"
+                    options={[
+                      { value: 'add', label: 'Add' },
+                      { value: 'mix', label: 'Mix' }
+                    ]}
+                    onChange={(value) => {
+                      const v = String(value);
                       updatePaletteOverride(i, (cur) => ({
                         ...(cur ?? { enabled: true }),
                         enabled: true,
                         facades: { ...(cur?.facades ?? {}), grazing: { ...(cur?.facades?.grazing ?? {}), mode: v } }
                       }));
                     }}
-                  >
-                    <option value="add">Add</option>
-                    <option value="mix">Mix</option>
-                  </select>
+                  />
                 </label>
                 <label class="control-row">
                   <span class="setting-title">Color</span>

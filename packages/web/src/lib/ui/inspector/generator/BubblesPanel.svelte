@@ -1,5 +1,6 @@
 <script lang="ts">
   import CollapsiblePanel from '$lib/ui/inspector/CollapsiblePanel.svelte';
+  import Dropdown from '$lib/ui/components/Dropdown.svelte';
 
   type Props = {
     config: any;
@@ -45,10 +46,15 @@
 
   <label class="control-row">
     <button type="button" class="setting-title" class:locked={isLocked('bubbles.mode')} onclick={() => toggleLock('bubbles.mode')} title="Click to lock/unlock for randomize">Mode</button>
-    <select bind:value={config.bubbles.mode} disabled={!config.bubbles.enabled}>
-      <option value="through">Through</option>
-      <option value="cap">Cap</option>
-    </select>
+    <Dropdown
+      bind:value={config.bubbles.mode}
+      ariaLabel="Bubble mode"
+      disabled={!config.bubbles.enabled}
+      options={[
+        { value: 'through', label: 'Through' },
+        { value: 'cap', label: 'Cap' }
+      ]}
+    />
   </label>
 
   <label class="control-row slider">

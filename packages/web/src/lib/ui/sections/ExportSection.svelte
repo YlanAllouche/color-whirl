@@ -1,5 +1,6 @@
 <script lang="ts">
   import CollapsiblePanel from '$lib/ui/inspector/CollapsiblePanel.svelte';
+  import Dropdown from '$lib/ui/components/Dropdown.svelte';
 
   type ExportFormat = 'png' | 'jpg' | 'webp' | 'svg';
 
@@ -14,12 +15,16 @@
 
 <CollapsiblePanel id="export" title="Export" icon="download" defaultOpen={true}>
   <div class="export-controls">
-    <select bind:value={exportFormat}>
-      <option value="png">PNG</option>
-      <option value="jpg">JPG</option>
-      <option value="webp">WebP</option>
-      <option value="svg">SVG</option>
-    </select>
+    <Dropdown
+      bind:value={exportFormat}
+      ariaLabel="Export format"
+      options={[
+        { value: 'png', label: 'PNG' },
+        { value: 'jpg', label: 'JPG' },
+        { value: 'webp', label: 'WebP' },
+        { value: 'svg', label: 'SVG' }
+      ]}
+    />
     <button type="button" onclick={handleExport} disabled={isExporting}>{isExporting ? 'Exporting...' : 'Export'}</button>
   </div>
 </CollapsiblePanel>

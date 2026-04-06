@@ -1,5 +1,6 @@
 <script lang="ts">
   import CollapsiblePanel from '$lib/ui/inspector/CollapsiblePanel.svelte';
+  import Dropdown from '$lib/ui/components/Dropdown.svelte';
 
   type Props = {
     config: any;
@@ -16,10 +17,14 @@
 <CollapsiblePanel id="circles2d" title="Circles (2D)" icon="circle" defaultOpen={true}>
   <label class="control-row">
     <button type="button" class="setting-title" class:locked={isLocked('circles.mode')} onclick={() => toggleLock('circles.mode')} title="Click to lock/unlock for randomize">Mode</button>
-    <select bind:value={config.circles.mode}>
-      <option value="scatter">Scatter</option>
-      <option value="grid">Grid</option>
-    </select>
+    <Dropdown
+      bind:value={config.circles.mode}
+      ariaLabel="Circle mode"
+      options={[
+        { value: 'scatter', label: 'Scatter' },
+        { value: 'grid', label: 'Grid' }
+      ]}
+    />
   </label>
 
   <label class="control-row slider">
@@ -111,10 +116,14 @@
     <summary class="control-details-summary">Palette</summary>
     <label class="control-row">
       <button type="button" class="setting-title" class:locked={isLocked('circles.paletteMode')} onclick={() => toggleLock('circles.paletteMode')} title="Click to lock/unlock for randomize">Mode</button>
-      <select bind:value={config.circles.paletteMode}>
-        <option value="cycle">Cycle</option>
-        <option value="weighted">Weighted</option>
-      </select>
+      <Dropdown
+        bind:value={config.circles.paletteMode}
+        ariaLabel="Circle palette mode"
+        options={[
+          { value: 'cycle', label: 'Cycle' },
+          { value: 'weighted', label: 'Weighted' }
+        ]}
+      />
     </label>
 
     {#if config.circles.paletteMode === 'weighted'}
