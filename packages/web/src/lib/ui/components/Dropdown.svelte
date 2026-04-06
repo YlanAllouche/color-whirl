@@ -52,6 +52,7 @@
     const t = e.target as Node | null;
     if (!t) return;
     if (root && root.contains(t)) return;
+    if (popover && popover.contains(t)) return;
     close();
   }
 
@@ -67,9 +68,13 @@
     if (!trigger || typeof window === 'undefined') return;
     const rect = trigger.getBoundingClientRect();
     const padding = 8;
-    const top = rect.bottom + 6;
+    const popoverHeight = popover?.offsetHeight ?? 0;
+    let top = rect.bottom + 6;
     const maxLeft = Math.max(padding, window.innerWidth - padding - rect.width);
     const left = Math.min(Math.max(rect.left, padding), maxLeft);
+    if (popoverHeight && top + popoverHeight > window.innerHeight - padding) {
+      top = Math.max(padding, rect.top - 6 - popoverHeight);
+    }
     popStyle = `left: ${left}px; top: ${top}px; width: ${rect.width}px;`;
   }
 
@@ -257,7 +262,7 @@
 
   .dropdown-pop {
     position: fixed;
-    z-index: 1200;
+    z-index: 2000;
     border-radius: var(--radius-sm);
     border: 1px solid var(--stroke0);
     background: rgba(12, 12, 14, 0.96);
