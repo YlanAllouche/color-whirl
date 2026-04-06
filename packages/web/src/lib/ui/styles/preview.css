@@ -65,8 +65,9 @@
 }
 
 .fullscreen-toggle {
-  right: 14px;
+  left: 50%;
   top: 14px;
+  margin-left: -20px;
 }
 
 .fullscreen-btn {

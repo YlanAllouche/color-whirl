@@ -30,7 +30,7 @@
   const CAMERA_DISTANCE_MAX = 50;
   const CAMERA_ELEVATION_MIN = -80;
   const CAMERA_ELEVATION_MAX = 80;
-  const OVERLAY_IDLE_MS = 1200;
+  const OVERLAY_IDLE_MS = 800;
 
   let camDragPointerId = -1;
   let camDragStartX = 0;
