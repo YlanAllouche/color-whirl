@@ -87,6 +87,7 @@
   let cameraDragActive = $state(false);
   let settingsMaximized = $state(false);
   let settingsOverlayVisible = $state(false);
+  let settingsMaximizedReady = $state(false);
 
   const RENDER_SETTLE_MS = 280;
   const settingsMaximizedKey = 'ui.layout.settingsMaximized';
@@ -668,12 +669,14 @@
   });
 
   $effect(() => {
+    if (!settingsMaximizedReady) return;
     writeLocalStorageBool(settingsMaximizedKey, settingsMaximized);
   });
   
   onMount(() => {
     const storedSettingsMaximized = readLocalStorageBool(settingsMaximizedKey);
     if (storedSettingsMaximized !== null) settingsMaximized = storedSettingsMaximized;
+    settingsMaximizedReady = true;
     const hasUrlParams = window.location.search.length > 0;
     
     try {
