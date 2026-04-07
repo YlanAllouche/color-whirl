@@ -1,4 +1,4 @@
-import type { GrazingMode, WallpaperConfig, WallpaperType } from './types.js';
+import type { GrazingMode, WallpaperConfig, WallpaperType } from './types/index.js';
 import { DEFAULT_CONFIG_BY_TYPE } from './defaults.js';
 
 function isPlainObject(value: unknown): value is Record<string, any> {

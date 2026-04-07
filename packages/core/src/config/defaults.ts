@@ -14,7 +14,7 @@ import type {
   Triangles3DConfig,
   WallpaperConfig,
   WallpaperType
-} from './types.js';
+} from './types/index.js';
 
 export const DEFAULT_POPSICLE_CONFIG: PopsicleConfig = {
   type: 'popsicle',

@@ -7,4 +7,4 @@ export type {
   PaletteEdgeOverride,
   PaletteGeometryOverride,
   TextureParamsOverride
-} from './types.js';
+} from './types/index.js';
