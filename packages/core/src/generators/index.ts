@@ -16,9 +16,9 @@ import type {
   Svg3DConfig
 } from '../types.js';
 
-import { createPopsicleScene, renderPopsicleToCanvas } from './popsicle.js';
-import { createSpheres3DScene, renderSpheres3DToCanvas } from './spheres3d.js';
-import { createTriangles3DScene, renderTriangles3DToCanvas } from './triangles3d.js';
+import { createPopsicleScene, renderPopsicleToCanvas } from './popsicle/index.js';
+import { createSpheres3DScene, renderSpheres3DToCanvas } from './spheres3d/index.js';
+import { createTriangles3DScene, renderTriangles3DToCanvas } from './triangles3d/index.js';
 import { renderCircles2DToCanvas } from './circles2d.js';
 import { renderPolygon2DToCanvas } from './polygon2d.js';
 import { renderTriangles2DToCanvas } from './triangles2d.js';

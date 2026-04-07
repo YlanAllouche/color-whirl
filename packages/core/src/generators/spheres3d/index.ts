@@ -1,236 +1,22 @@
 import * as THREE from 'three';
-import type { Spheres3DConfig, EnvironmentStyle, PaletteAssignMode, BubblesConfig } from '../types.js';
-import { buildBubbles, buildBubblesSeed, buildBubblesInteriorWalls } from '../bubbles.js';
-import { createSurfaceMaterial } from '../materials.js';
-import { createRng } from '../types.js';
-import { resolvePaletteConfig } from '../palette.js';
-import { renderWithOptionalBloom } from './postprocessing.js';
-import { autoFitOrthographicCameraToBox } from './camera-fit.js';
-
-function clamp(n: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, n));
-}
-
-function clamp01(n: number): number {
-  return clamp(n, 0, 1);
-}
-
-function getSpheres3DGeometry(config: Spheres3DConfig): { geometry: THREE.BufferGeometry; flatShading: boolean } {
-  const rawShape = (config.spheres as any)?.shape as any;
-  const kind = rawShape?.kind === 'spherifiedBox' ? 'spherifiedBox' : rawShape?.kind === 'geodesicPoly' ? 'geodesicPoly' : 'uvSphere';
-
-  if (kind === 'uvSphere') {
-    const seg = Math.round(8 + clamp(config.geometry.quality, 0, 1) * 48);
-    const geometry = new THREE.SphereGeometry(1, seg, seg);
-    geometry.computeBoundingBox();
-    geometry.computeBoundingSphere();
-    return { geometry, flatShading: false };
-  }
-
-  const roundness = clamp01(Number(rawShape?.roundness ?? 1));
-  const faceting = clamp01(Number(rawShape?.faceting ?? 0));
-  const quality = clamp01(Number(config.geometry.quality ?? 0.6));
-
-  if (kind === 'geodesicPoly') {
-    const detailMax = Math.max(1, Math.round(1 + quality * 4));
-    const detail = Math.max(0, Math.min(detailMax, Math.round(roundness * detailMax)));
-    const geometry = new THREE.IcosahedronGeometry(1, detail);
-    geometry.computeVertexNormals();
-    geometry.computeBoundingBox();
-    geometry.computeBoundingSphere();
-    const flatShading = faceting > 0.6 || detail === 0;
-    return { geometry, flatShading };
-  }
-
-  // faceting=1 -> cube-ish (few segments). faceting=0 -> smoother (more segments).
-  const segMax = Math.round(3 + quality * 18); // 3..21
-  const segMin = 1;
-  const seg = Math.max(segMin, Math.round(segMin + (1 - faceting) * (segMax - segMin)));
-
-  // Use an inscribed cube so the bounding radius stays ~1 when roundness=0.
-  const size = 2 / Math.sqrt(3);
-  const geometry = new THREE.BoxGeometry(size, size, size, seg, seg, seg);
-
-  const pos = geometry.getAttribute('position') as THREE.BufferAttribute;
-  const t = roundness;
-  for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i);
-    const y = pos.getY(i);
-    const z = pos.getZ(i);
-
-    const len = Math.sqrt(x * x + y * y + z * z);
-    if (!(len > 1e-12)) continue;
-    const nx = x / len;
-    const ny = y / len;
-    const nz = z / len;
-
-    const sx = x + (nx - x) * t;
-    const sy = y + (ny - y) * t;
-    const sz = z + (nz - z) * t;
-    pos.setXYZ(i, sx, sy, sz);
-  }
-  pos.needsUpdate = true;
-
-  geometry.computeVertexNormals();
-  geometry.computeBoundingBox();
-  geometry.computeBoundingSphere();
-
-  const flatShading = faceting > 0.6 || seg <= 2;
-  return { geometry, flatShading };
-}
-
-function degToRad(deg: number): number {
-  return (deg * Math.PI) / 180;
-}
-
-function cameraZoomFromDistance(distance: number): number {
-  const referenceDistance = 17.3;
-  const safeDistance = Math.max(0.1, distance);
-  return referenceDistance / safeDistance;
-}
-
-function createProceduralEnvironment(
-  renderer: THREE.WebGLRenderer,
-  style: EnvironmentStyle,
-  rotationDeg: number
-): { texture: THREE.Texture; dispose: () => void } {
-  const width = 256;
-  const height = 128;
-  const data = new Uint8Array(width * height * 4);
-
-  const rot = ((((rotationDeg % 360) + 360) % 360) / 360) * width;
-
-  const addSoftbox = (u: number, v: number, radius: number, strength: number) => {
-    return (x: number, y: number) => {
-      const dx = x - u;
-      const dy = y - v;
-      const d2 = dx * dx + dy * dy;
-      const r2 = radius * radius;
-      if (d2 >= r2) return 0;
-      const t = 1 - d2 / r2;
-      return strength * t * t;
-    };
-  };
-
-  const spotA = addSoftbox(0.25, 0.22, 0.12, 0.9);
-  const spotB = addSoftbox(0.72, 0.18, 0.16, 0.7);
-  const spotC = addSoftbox(0.52, 0.55, 0.22, 0.45);
-
-  for (let y = 0; y < height; y++) {
-    const v = y / (height - 1);
-    for (let x = 0; x < width; x++) {
-      const xx = (x + rot) % width;
-      const u = xx / (width - 1);
-
-      let r = 0;
-      let g = 0;
-      let b = 0;
-
-      if (style === 'overcast') {
-        const top = 0.78;
-        const bot = 0.46;
-        const t = clamp01(1 - v);
-        const k = bot + (top - bot) * Math.pow(t, 1.4);
-        r = k;
-        g = k;
-        b = k;
-      } else if (style === 'sunset') {
-        const t = clamp01(1 - v);
-        const warm = 0.55 + 0.4 * Math.pow(t, 1.2);
-        r = warm;
-        g = 0.35 + 0.25 * Math.pow(t, 1.1);
-        b = 0.32 + 0.18 * Math.pow(1 - t, 1.7);
-      } else {
-        const t = clamp01(1 - v);
-        const sky = 0.74 * Math.pow(t, 1.6);
-        const floor = 0.06 + 0.05 * (1 - t);
-        const k = floor + sky;
-        r = k;
-        g = k;
-        b = k;
-      }
-
-      const s = spotA(u, v) + spotB(u, v) + spotC(u, v);
-      r = clamp01(r + s);
-      g = clamp01(g + s);
-      b = clamp01(b + s);
-
-      const i = (y * width + x) * 4;
-      data[i + 0] = Math.round(r * 255);
-      data[i + 1] = Math.round(g * 255);
-      data[i + 2] = Math.round(b * 255);
-      data[i + 3] = 255;
-    }
-  }
-
-  const tex = new THREE.DataTexture(data, width, height, THREE.RGBAFormat);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.mapping = THREE.EquirectangularReflectionMapping;
-  tex.needsUpdate = true;
-
-  const pmrem = new THREE.PMREMGenerator(renderer);
-  pmrem.compileEquirectangularShader();
-  const target = pmrem.fromEquirectangular(tex);
-  pmrem.dispose();
-  tex.dispose();
-
-  return {
-    texture: target.texture,
-    dispose: () => target.dispose()
-  };
-}
-
-function normalizeWeights(weights: number[], n: number): number[] {
-  const w = Array.from({ length: n }, (_, i) => Math.max(0, Number(weights[i] ?? 0)));
-  const sum = w.reduce((a, b) => a + b, 0);
-  if (!(sum > 0)) return Array.from({ length: n }, () => 1 / n);
-  return w.map((x) => x / sum);
-}
-
-function sampleWeightedIndex01(u: number, wNorm: number[]): number {
-  let acc = 0;
-  for (let i = 0; i < wNorm.length; i++) {
-    acc += wNorm[i];
-    if (u <= acc) return i;
-  }
-  return wNorm.length - 1;
-}
-
-function hash01(seed: number, a: number, b: number): number {
-  let x = (Number(seed) >>> 0) ^ (Math.imul(a | 0, 374761393) >>> 0) ^ (Math.imul(b | 0, 668265263) >>> 0);
-  x = Math.imul(x ^ (x >>> 13), 1274126177);
-  x = (x ^ (x >>> 16)) >>> 0;
-  return x / 4294967296;
-}
-
-function pickIndex(mode: PaletteAssignMode, i: number, rng: () => number, w: number[], n: number): number {
-  if (mode === 'cycle') return i % n;
-  return sampleWeightedIndex01(rng(), w);
-}
-
-function chainOnBeforeCompile(material: THREE.Material, fn: (shader: any) => void, keyPart: string): void {
-  const prev = material.onBeforeCompile;
-  material.onBeforeCompile = (shader: any, renderer: any) => {
-    (prev as any)?.(shader, renderer);
-    fn(shader);
-  };
-
-  const prevKey = (material as any).customProgramCacheKey;
-  (material as any).customProgramCacheKey = () => {
-    const a = typeof prevKey === 'function' ? String(prevKey.call(material)) : '';
-    return a ? `${a}|${keyPart}` : keyPart;
-  };
-  material.needsUpdate = true;
-}
-
-function makeSolidRedTexture01(): THREE.DataTexture {
-  const tex = new THREE.DataTexture(new Uint8Array([255]), 1, 1, THREE.RedFormat);
-  tex.colorSpace = THREE.NoColorSpace;
-  tex.needsUpdate = true;
-  tex.minFilter = THREE.NearestFilter;
-  tex.magFilter = THREE.NearestFilter;
-  return tex;
-}
+import type { Spheres3DConfig, EnvironmentStyle, BubblesConfig } from '../../types.js';
+import { buildBubbles, buildBubblesSeed, buildBubblesInteriorWalls } from '../../bubbles.js';
+import { createSurfaceMaterial } from '../../materials.js';
+import { createRng } from '../../types.js';
+import { resolvePaletteConfig } from '../../palette.js';
+import { renderWithOptionalBloom } from '../postprocessing.js';
+import { autoFitOrthographicCameraToBox } from '../camera-fit.js';
+import { getSpheres3DGeometry } from './geometry.js';
+import { hash01, normalizeWeights, pickIndex } from './sampling.js';
+import {
+  cameraZoomFromDistance,
+  chainOnBeforeCompile,
+  clamp,
+  createProceduralEnvironment,
+  degToRad,
+  lerp,
+  makeSolidRedTexture01
+} from './utils.js';
 
 export function createSpheres3DScene(
   config: Spheres3DConfig,
@@ -618,24 +404,24 @@ export function createSpheres3DScene(
         chainOnBeforeCompile(
           mat,
           (shader) => {
-          shader.uniforms.wmCollideRes = { value: new THREE.Vector2(screenW, screenH) };
-          shader.uniforms.wmCollideMarginPx = { value: marginPx };
-          shader.uniforms.wmCollideFeatherPx = { value: featherPx };
-          shader.uniforms.wmCollideSoftEdge = { value: softEdge ? 1 : 0 };
-          shader.uniforms.wmFinishEnabled = { value: finishEnabled };
-          shader.uniforms.wmFinishDepthPx = { value: finishDepthPx };
-          shader.uniforms.wmOtherDepthCount = { value: otherDepth.length };
-          shader.uniforms.wmOtherDepth0 = { value: (otherDepth[0] as any) ?? dummy };
-          shader.uniforms.wmOtherDepth1 = { value: (otherDepth[1] as any) ?? dummy };
-          shader.uniforms.wmOtherDepth2 = { value: (otherDepth[2] as any) ?? dummy };
-          shader.uniforms.wmOtherDepth3 = { value: (otherDepth[3] as any) ?? dummy };
-          shader.uniforms.wmOtherDepth4 = { value: (otherDepth[4] as any) ?? dummy };
-          shader.uniforms.wmOtherDepth5 = { value: (otherDepth[5] as any) ?? dummy };
-          shader.uniforms.wmOtherDepth6 = { value: (otherDepth[6] as any) ?? dummy };
+            shader.uniforms.wmCollideRes = { value: new THREE.Vector2(screenW, screenH) };
+            shader.uniforms.wmCollideMarginPx = { value: marginPx };
+            shader.uniforms.wmCollideFeatherPx = { value: featherPx };
+            shader.uniforms.wmCollideSoftEdge = { value: softEdge ? 1 : 0 };
+            shader.uniforms.wmFinishEnabled = { value: finishEnabled };
+            shader.uniforms.wmFinishDepthPx = { value: finishDepthPx };
+            shader.uniforms.wmOtherDepthCount = { value: otherDepth.length };
+            shader.uniforms.wmOtherDepth0 = { value: (otherDepth[0] as any) ?? dummy };
+            shader.uniforms.wmOtherDepth1 = { value: (otherDepth[1] as any) ?? dummy };
+            shader.uniforms.wmOtherDepth2 = { value: (otherDepth[2] as any) ?? dummy };
+            shader.uniforms.wmOtherDepth3 = { value: (otherDepth[3] as any) ?? dummy };
+            shader.uniforms.wmOtherDepth4 = { value: (otherDepth[4] as any) ?? dummy };
+            shader.uniforms.wmOtherDepth5 = { value: (otherDepth[5] as any) ?? dummy };
+            shader.uniforms.wmOtherDepth6 = { value: (otherDepth[6] as any) ?? dummy };
 
-          (mat.userData as any).__wmCollisionShader = shader;
+            (mat.userData as any).__wmCollisionShader = shader;
 
-          const headerGlobal = `
+            const headerGlobal = `
  uniform vec2 wmCollideRes;
  uniform float wmCollideMarginPx;
  uniform float wmCollideFeatherPx;
@@ -736,14 +522,14 @@ void wmApplyCollisionMask(inout vec4 col) {
 }
 `;
 
-          let fs = shader.fragmentShader;
-          if (fs.includes('#include <common>')) {
-            fs = fs.replace('#include <common>', `#include <common>\n${headerGlobal}\n`);
-          } else {
-            fs = fs.replace('void main() {', `${headerGlobal}\nvoid main() {`);
-          }
-          fs = fs.replace('#include <dithering_fragment>', `wmApplyCollisionMask(gl_FragColor);\n#include <dithering_fragment>`);
-          shader.fragmentShader = fs;
+            let fs = shader.fragmentShader;
+            if (fs.includes('#include <common>')) {
+              fs = fs.replace('#include <common>', `#include <common>\n${headerGlobal}\n`);
+            } else {
+              fs = fs.replace('void main() {', `${headerGlobal}\nvoid main() {`);
+            }
+            fs = fs.replace('#include <dithering_fragment>', `wmApplyCollisionMask(gl_FragColor);\n#include <dithering_fragment>`);
+            shader.fragmentShader = fs;
           },
           `collide-v1:${config.collisions.carve.direction}:${config.collisions.carve.edge}:${marginPx.toFixed(2)}:${featherPx.toFixed(2)}:${otherDepth.length}`
         );
@@ -983,10 +769,6 @@ void wmApplyCollisionMask(inout vec4 col) {
   void envDisposable;
 
   return { scene, camera, renderer };
-}
-
-function lerp(a: number, b: number, t: number): number {
-  return a + (b - a) * t;
 }
 
 export function renderSpheres3DToCanvas(config: Spheres3DConfig, canvas?: HTMLCanvasElement): HTMLCanvasElement {
