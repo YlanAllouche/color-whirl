@@ -28,6 +28,25 @@
     showColumnsToggle = true
   }: Props = $props();
 
+  type SearchStats = {
+    query: string;
+    matches: number;
+    panels: number;
+    details: number;
+    rows: number;
+  };
+
+  let searchStats = $state<SearchStats>({
+    query: '',
+    matches: 0,
+    panels: 0,
+    details: 0,
+    rows: 0
+  });
+
+  let hasQuery = $derived(searchStats.query.length > 0);
+  let hasResults = $derived(searchStats.matches > 0);
+
   const colsKey = $derived(`ui.inspector.${id}.columns`);
 
   onMount(() => {
@@ -64,6 +83,12 @@
         <div class="inspector-search" aria-hidden="true"></div>
       {/if}
 
+      {#if hasQuery}
+        <div class="inspector-search-meta" aria-live="polite">
+          {searchStats.matches} match{searchStats.matches === 1 ? '' : 'es'}
+        </div>
+      {/if}
+
       {#if showColumnsToggle}
         <button
           type="button"
@@ -79,8 +104,19 @@
     </div>
   </div>
 
-  <div class="inspector-scroll" use:filterDom={searchQuery}>
+  <div
+    class="inspector-scroll"
+    use:filterDom={{
+      query: searchQuery,
+      onStats: (stats) => {
+        searchStats = stats;
+      }
+    }}
+  >
     <div class="inspector-content inspector-content-scroll" class:cols2={columns === 2}>
+      {#if hasQuery && !hasResults}
+        <div class="inspector-empty" role="status">No matching settings.</div>
+      {/if}
       <slot />
     </div>
   </div>

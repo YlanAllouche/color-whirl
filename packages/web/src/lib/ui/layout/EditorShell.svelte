@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import LucideIcon from '$lib/ui/icons/LucideIcon.svelte';
   import { readLocalStorageNumber, writeLocalStorageNumber } from '$lib/ui/prefs/storage';
+  import { installSearchShortcuts } from '$lib/ui/search/shortcuts';
 
   type Props = {
     appTitle?: string;
@@ -31,6 +32,8 @@
   let leftW = $state(320);
   let rightW = $state(360);
 
+  let searchInput: HTMLInputElement | null = null;
+
   let mobileOpen = $state(false);
   let mobileTab = $state<'global' | 'look'>('global');
 
@@ -45,6 +48,18 @@
     const r = readLocalStorageNumber(rightKey);
     if (l !== null) leftW = clamp(l, 240, 520);
     if (r !== null) rightW = clamp(r, 280, 620);
+  });
+
+  onMount(() => {
+    if (!searchInput) return;
+    const shortcuts = installSearchShortcuts({
+      getInput: () => searchInput,
+      getQuery: () => searchQuery,
+      setQuery: (next) => {
+        searchQuery = next;
+      }
+    });
+    return () => shortcuts.destroy();
   });
 
   $effect(() => {
@@ -118,6 +133,7 @@
         <input
           type="search"
           bind:value={searchQuery}
+          bind:this={searchInput}
           placeholder="Filter settings…"
           autocapitalize="off"
           autocomplete="off"

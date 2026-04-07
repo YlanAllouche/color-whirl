@@ -8,12 +8,29 @@
     title: string;
     icon?: string;
     defaultOpen?: boolean;
+    searchKeys?: string;
   };
 
-  let { id, title, icon, defaultOpen = true }: Props = $props();
+  let { id, title, icon, defaultOpen = true, searchKeys }: Props = $props();
 
   const storageKey = $derived(`ui.panel.${id}.open`);
   let open = $state(defaultOpen);
+  let searchForcedOpen = $state(false);
+  let effectiveOpen = $derived(open || searchForcedOpen);
+
+  function searchForcedOpenAction(node: HTMLElement) {
+    const handle = (event: Event) => {
+      const detail = (event as CustomEvent<boolean>).detail;
+      searchForcedOpen = !!detail;
+    };
+
+    node.addEventListener('searchforcedopen', handle);
+    return {
+      destroy() {
+        node.removeEventListener('searchforcedopen', handle);
+      }
+    };
+  }
 
   onMount(() => {
     const stored = readLocalStorageBool(storageKey);
@@ -25,12 +42,20 @@
   });
 </script>
 
-<section class="control-section panel" class:open data-panel-title={title} data-panel-id={id}>
+<section
+  class="control-section panel"
+  class:open={effectiveOpen}
+  data-panel-title={title}
+  data-panel-id={id}
+  data-panel-open={open}
+  data-search-keys={searchKeys}
+  use:searchForcedOpenAction
+>
   <button
     type="button"
     class="panel-header"
-    aria-expanded={open}
-    onclick={() => {
+    aria-expanded={effectiveOpen}
+    on:click={() => {
       open = !open;
     }}
   >
@@ -44,7 +69,7 @@
     <LucideIcon name="chevron-down" size={16} class="panel-chevron" />
   </button>
 
-  {#if open}
+  {#if effectiveOpen}
     <div class="panel-body">
       <div class="panel-body-inner">
         <slot />
