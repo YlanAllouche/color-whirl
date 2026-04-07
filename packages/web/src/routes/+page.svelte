@@ -3,6 +3,7 @@
   import '@fontsource/geist-sans/latin.css';
   import '@fontsource/geist-mono/latin.css';
   import '$lib/ui/styles/app.css';
+  import { readLocalStorageBool, writeLocalStorageBool } from '$lib/ui/prefs/storage';
   import {
     DEFAULT_CONFIG_BY_TYPE,
     type WallpaperConfig,
@@ -88,6 +89,7 @@
   let settingsOverlayVisible = $state(false);
 
   const RENDER_SETTLE_MS = 280;
+  const settingsMaximizedKey = 'ui.layout.settingsMaximized';
   
   // Export format selection
   let exportFormat = $state<'png' | 'jpg' | 'webp' | 'svg'>('png');
@@ -664,8 +666,14 @@
     previewRefs.basic3dPreview.setMode(renderMode);
     schedulePreviewRender();
   });
+
+  $effect(() => {
+    writeLocalStorageBool(settingsMaximizedKey, settingsMaximized);
+  });
   
   onMount(() => {
+    const storedSettingsMaximized = readLocalStorageBool(settingsMaximizedKey);
+    if (storedSettingsMaximized !== null) settingsMaximized = storedSettingsMaximized;
     const hasUrlParams = window.location.search.length > 0;
     
     try {
@@ -807,7 +815,7 @@
       bind:canvasHost
       bind:cameraDragActive
       bind:settingsMaximized
-      bind:overlayVisible={settingsOverlayVisible}
+      bind:settingsOverlayVisible
     />
   </svelte:fragment>
 

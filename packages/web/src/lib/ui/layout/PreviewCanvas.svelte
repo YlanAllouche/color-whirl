@@ -11,6 +11,7 @@
     canvasHost?: HTMLDivElement | null;
     cameraDragActive?: boolean;
     settingsMaximized?: boolean;
+    settingsOverlayVisible?: boolean;
     overlayVisible?: boolean;
   };
 
@@ -23,6 +24,7 @@
     canvasHost = $bindable(null),
     cameraDragActive = $bindable(false),
     settingsMaximized = $bindable(false),
+    settingsOverlayVisible = $bindable(false),
     overlayVisible = $bindable(false)
   }: Props = $props();
 
@@ -31,6 +33,7 @@
   const CAMERA_ELEVATION_MIN = -80;
   const CAMERA_ELEVATION_MAX = 80;
   const OVERLAY_IDLE_MS = 800;
+  const SETTINGS_OVERLAY_IDLE_MS = 300;
 
   let camDragPointerId = -1;
   let camDragStartX = 0;
@@ -38,6 +41,7 @@
   let camDragStartAzimuth = 0;
   let camDragStartElevation = 0;
   let overlayTimer: ReturnType<typeof setTimeout> | null = null;
+  let settingsOverlayTimer: ReturnType<typeof setTimeout> | null = null;
 
   function clamp(n: number, min: number, max: number): number {
     return Math.max(min, Math.min(max, n));
@@ -54,6 +58,26 @@
     overlayTimer = window.setTimeout(() => {
       if (!cameraDragActive) overlayVisible = false;
     }, OVERLAY_IDLE_MS);
+  }
+
+  function isPointerInSettingsArea(x: number, y: number): boolean {
+    const panels = document.querySelectorAll<HTMLElement>('[data-settings-overlay]');
+    for (const panel of panels) {
+      const rect = panel.getBoundingClientRect();
+      if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) return true;
+    }
+    return false;
+  }
+
+  function updateSettingsOverlayFromPointer(x: number, y: number) {
+    if (!settingsMaximized) return;
+    const inSettings = isPointerInSettingsArea(x, y);
+    settingsOverlayVisible = true;
+    if (settingsOverlayTimer) window.clearTimeout(settingsOverlayTimer);
+    if (inSettings) return;
+    settingsOverlayTimer = window.setTimeout(() => {
+      settingsOverlayVisible = false;
+    }, SETTINGS_OVERLAY_IDLE_MS);
   }
 
   function resetCamera() {
@@ -142,9 +166,21 @@
 
   $effect(() => {
     if (!settingsMaximized) return;
-    const handleMove = () => bumpOverlay();
+    const handleMove = (event: PointerEvent) => {
+      bumpOverlay();
+      updateSettingsOverlayFromPointer(event.clientX, event.clientY);
+    };
     window.addEventListener('pointermove', handleMove, { passive: true });
     return () => window.removeEventListener('pointermove', handleMove);
+  });
+
+  $effect(() => {
+    if (settingsMaximized) return;
+    settingsOverlayVisible = false;
+    if (settingsOverlayTimer) {
+      window.clearTimeout(settingsOverlayTimer);
+      settingsOverlayTimer = null;
+    }
   });
 
   $effect(() => {
@@ -154,6 +190,7 @@
 
   onDestroy(() => {
     if (overlayTimer) window.clearTimeout(overlayTimer);
+    if (settingsOverlayTimer) window.clearTimeout(settingsOverlayTimer);
   });
 </script>
 
