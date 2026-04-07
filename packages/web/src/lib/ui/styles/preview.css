@@ -183,6 +183,21 @@
     grid-column: 1 / -1;
   }
 
+  .editor-shell.settings-maximized .preview-area {
+    padding: 0;
+  }
+
+  .editor-shell.settings-maximized .canvas-container {
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .editor-shell.settings-maximized .canvas-container canvas {
+    border-radius: 0;
+  }
+
   .editor-shell.settings-maximized:not(.settings-overlay-visible) .panel-left,
   .editor-shell.settings-maximized:not(.settings-overlay-visible) .panel-right {
     opacity: 0;
