@@ -29,9 +29,9 @@
   import { COLOR_PRESETS, COLOR_PRESET_GROUPS, type ColorPreset } from '$lib/color-presets';
 
   import EditorShell from '$lib/ui/layout/EditorShell.svelte';
-  import PreviewCanvas from '$lib/ui/layout/PreviewCanvas.svelte';
-  import GlobalInspector from '$lib/ui/inspector/GlobalInspector.svelte';
-  import LookInspector from '$lib/ui/inspector/LookInspector.svelte';
+  import EditorLeftSection from '$lib/ui/sections/EditorLeftSection.svelte';
+  import EditorCenterSection from '$lib/ui/sections/EditorCenterSection.svelte';
+  import EditorRightSection from '$lib/ui/sections/EditorRightSection.svelte';
 
   import { cloneDefaultConfig } from '$lib/app/config/config';
   import {
@@ -785,7 +785,7 @@
   settingsOverlayVisible={settingsOverlayVisible}
 >
   <svelte:fragment slot="left">
-    <GlobalInspector
+    <EditorLeftSection
       {config}
       {is3DType}
       {supportsBloom}
@@ -809,7 +809,7 @@
   </svelte:fragment>
 
   <svelte:fragment slot="center">
-    <PreviewCanvas
+    <EditorCenterSection
       {config}
       {is3DType}
       {schedulePreviewRender}
@@ -823,7 +823,7 @@
   </svelte:fragment>
 
   <svelte:fragment slot="right">
-    <LookInspector
+    <EditorRightSection
       {config}
       {is3DType}
       {supportsEmission}
