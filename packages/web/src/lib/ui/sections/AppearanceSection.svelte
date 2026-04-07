@@ -14,7 +14,7 @@
 </script>
 
 {#if is3DType}
-  <CollapsiblePanel id="appearance" title="Appearance" icon="sliders-horizontal" defaultOpen={true}>
+  <CollapsiblePanel id="appearance" title="Appearance" icon="sliders-horizontal" defaultOpen={true} searchKeys="material texture">
     <label class="control-row">
       <button
         type="button"

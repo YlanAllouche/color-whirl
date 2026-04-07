@@ -14,7 +14,7 @@
   let { config, isLocked, toggleLock, setEqualWeights, setRandomWeights, updateWeight }: Props = $props();
 </script>
 
-<CollapsiblePanel id="ridges2d" title="Ridges (2D)" icon="waves" defaultOpen={true}>
+<CollapsiblePanel id="ridges2d" title="Ridges (2D)" icon="waves" defaultOpen={true} searchKeys="contours">
   <label class="control-row slider">
     <button type="button" class="setting-title" class:locked={isLocked('ridges.gridStepPx')} onclick={() => toggleLock('ridges.gridStepPx')} title="Click to lock/unlock for randomize">Grid step: {Math.round(config.ridges.gridStepPx)}px</button>
     <input type="range" bind:value={config.ridges.gridStepPx} min="2" max="24" step="1" />

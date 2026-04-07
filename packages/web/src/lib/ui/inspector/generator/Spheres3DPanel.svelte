@@ -14,7 +14,7 @@
   let { config, isLocked, toggleLock, setEqualWeights, setRandomWeights, updateWeight }: Props = $props();
 </script>
 
-<CollapsiblePanel id="spheres3d" title="Spheres (3D)" icon="circle" defaultOpen={true}>
+<CollapsiblePanel id="spheres3d" title="Spheres (3D)" icon="circle" defaultOpen={true} searchKeys="balls orbs">
   <details class="control-details">
     <summary class="control-details-summary">Shape</summary>
     <label class="control-row">

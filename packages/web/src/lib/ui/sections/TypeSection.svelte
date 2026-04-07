@@ -19,7 +19,7 @@
 
 </script>
 
-<CollapsiblePanel id="type" title="Type" icon="shapes" defaultOpen={true}>
+<CollapsiblePanel id="type" title="Type" icon="shapes" defaultOpen={true} searchKeys="generator">
   <label class="control-row">
     <span class="setting-title">Generator</span>
     <Dropdown

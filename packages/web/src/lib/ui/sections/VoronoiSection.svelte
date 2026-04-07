@@ -14,7 +14,7 @@
 </script>
 
 {#if is3DType}
-  <CollapsiblePanel id="voronoi" title="Voronoi" icon="grid-3x3" defaultOpen={false}>
+  <CollapsiblePanel id="voronoi" title="Voronoi" icon="grid-3x3" defaultOpen={false} searchKeys="cells foam">
     <label class="control-row checkbox">
       <input type="checkbox" bind:checked={(config as any).voronoi.enabled} />
       <button

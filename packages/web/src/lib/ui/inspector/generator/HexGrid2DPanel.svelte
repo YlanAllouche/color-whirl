@@ -14,7 +14,7 @@
   let { config, isLocked, toggleLock, setEqualWeights, setRandomWeights, updateWeight }: Props = $props();
 </script>
 
-<CollapsiblePanel id="hexgrid2d" title="Hex Grid (2D)" icon="hexagon" defaultOpen={true}>
+<CollapsiblePanel id="hexgrid2d" title="Hex Grid (2D)" icon="hexagon" defaultOpen={true} searchKeys="hexagon">
   <label class="control-row slider">
     <button type="button" class="setting-title" class:locked={isLocked('hexgrid.radiusPx')} onclick={() => toggleLock('hexgrid.radiusPx')} title="Click to lock/unlock for randomize">Radius: {Math.round(config.hexgrid.radiusPx)}px</button>
     <input type="range" bind:value={config.hexgrid.radiusPx} min="3" max="140" step="1" />

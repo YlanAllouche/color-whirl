@@ -34,7 +34,7 @@
   );
 </script>
 
-<CollapsiblePanel id="render" title="Render" icon="sparkles" defaultOpen={true}>
+<CollapsiblePanel id="render" title="Render" icon="sparkles" defaultOpen={true} searchKeys="renderer tone mapping exposure bloom">
 
   {#if is3DType}
     <label class="control-row slider">

@@ -11,7 +11,7 @@
   let { config, isLocked, toggleLock }: Props = $props();
 </script>
 
-<CollapsiblePanel id="bubbles" title="Bubbles" icon="circle-dashed" defaultOpen={false}>
+<CollapsiblePanel id="bubbles" title="Bubbles" icon="circle-dashed" defaultOpen={false} searchKeys="foam">
   <label class="control-row checkbox">
     <input type="checkbox" bind:checked={config.bubbles.enabled} />
     <button

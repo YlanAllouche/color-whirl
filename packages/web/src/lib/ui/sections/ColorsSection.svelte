@@ -48,7 +48,7 @@
   }: Props = $props();
 </script>
 
-<CollapsiblePanel id="colors" title="Colors" icon="palette" defaultOpen={true}>
+<CollapsiblePanel id="colors" title="Colors" icon="palette" defaultOpen={true} searchKeys="palette preset background">
   <label class="control-row">
     <button
       type="button"

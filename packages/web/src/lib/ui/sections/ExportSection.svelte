@@ -13,7 +13,7 @@
   let { exportFormat = $bindable(), isExporting, handleExport }: Props = $props();
 </script>
 
-<CollapsiblePanel id="export" title="Export" icon="download" defaultOpen={true}>
+<CollapsiblePanel id="export" title="Export" icon="download" defaultOpen={true} searchKeys="download save">
   <div class="export-controls">
     <Dropdown
       bind:value={exportFormat}

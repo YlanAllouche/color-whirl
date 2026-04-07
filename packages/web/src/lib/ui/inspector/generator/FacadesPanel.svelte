@@ -11,7 +11,7 @@
   let { config, isLocked, toggleLock }: Props = $props();
 </script>
 
-<CollapsiblePanel id="facades" title="Facades" icon="layers" defaultOpen={false}>
+<CollapsiblePanel id="facades" title="Facades" icon="layers" defaultOpen={false} searchKeys="surface">
   <details class="control-details">
     <summary class="control-details-summary">Grazing</summary>
     <label class="control-row checkbox">

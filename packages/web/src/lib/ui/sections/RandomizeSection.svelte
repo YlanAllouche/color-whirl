@@ -9,7 +9,13 @@
   let { generateRandomGeneratedColors, generateRandomIncludingType }: Props = $props();
 </script>
 
-<CollapsiblePanel id="randomize" title="Randomize" icon="dice-5" defaultOpen={true}>
+<CollapsiblePanel
+  id="randomize"
+  title="Randomize"
+  icon="dice-5"
+  defaultOpen={true}
+  searchKeys="shuffle random"
+>
   <div class="randomize-buttons">
     <button
       type="button"

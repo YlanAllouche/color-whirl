@@ -10,7 +10,7 @@
   let { cliCommand, copyCliCommand, cliViewMode = $bindable() }: Props = $props();
 </script>
 
-<CollapsiblePanel id="share" title="Share / CLI" icon="terminal" defaultOpen={false}>
+<CollapsiblePanel id="share" title="Share / CLI" icon="terminal" defaultOpen={false} searchKeys="command copy">
   <div class="cli-controls">
     <textarea class="cli-text" readonly rows={cliViewMode === 'json' ? 10 : 4}>{cliCommand}</textarea>
     <div class="cli-buttons">

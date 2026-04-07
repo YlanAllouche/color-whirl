@@ -13,7 +13,7 @@
 </script>
 
 {#if is3DType}
-  <CollapsiblePanel id="camera" title="Camera" icon="camera" defaultOpen={false}>
+  <CollapsiblePanel id="camera" title="Camera" icon="camera" defaultOpen={false} searchKeys="orbit angle">
     <label class="control-row slider">
       <button
         type="button"

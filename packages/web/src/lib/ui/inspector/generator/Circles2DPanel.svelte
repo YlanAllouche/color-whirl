@@ -14,7 +14,7 @@
   let { config, isLocked, toggleLock, setEqualWeights, setRandomWeights, updateWeight }: Props = $props();
 </script>
 
-<CollapsiblePanel id="circles2d" title="Circles (2D)" icon="circle" defaultOpen={true}>
+<CollapsiblePanel id="circles2d" title="Circles (2D)" icon="circle" defaultOpen={true} searchKeys="rings">
   <label class="control-row">
     <button type="button" class="setting-title" class:locked={isLocked('circles.mode')} onclick={() => toggleLock('circles.mode')} title="Click to lock/unlock for randomize">Mode</button>
     <Dropdown

@@ -10,7 +10,7 @@
   let { config, isLocked, toggleLock }: Props = $props();
 </script>
 
-<CollapsiblePanel id="edge" title="Edge" icon="square" defaultOpen={false}>
+<CollapsiblePanel id="edge" title="Edge" icon="square" defaultOpen={false} searchKeys="border seam">
   <details class="control-details">
     <summary class="control-details-summary">Seam line</summary>
     <label class="control-row checkbox">

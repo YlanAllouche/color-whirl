@@ -14,7 +14,7 @@
   let { config, isLocked, toggleLock, setEqualWeights, setRandomWeights, updateWeight }: Props = $props();
 </script>
 
-<CollapsiblePanel id="flowlines2d" title="Flow Lines (2D)" icon="wind" defaultOpen={true}>
+<CollapsiblePanel id="flowlines2d" title="Flow Lines (2D)" icon="wind" defaultOpen={true} searchKeys="streamlines">
   <label class="control-row slider">
     <button type="button" class="setting-title" class:locked={isLocked('flowlines.frequency')} onclick={() => toggleLock('flowlines.frequency')} title="Click to lock/unlock for randomize">Frequency: {config.flowlines.frequency.toFixed(2)}</button>
     <input type="range" bind:value={config.flowlines.frequency} min="0.05" max="12" step="0.05" />

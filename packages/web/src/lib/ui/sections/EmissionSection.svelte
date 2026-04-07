@@ -14,7 +14,7 @@
 </script>
 
 {#if showEmissionSection}
-  <CollapsiblePanel id="emission" title="Emission" icon="zap" defaultOpen={false}>
+  <CollapsiblePanel id="emission" title="Emission" icon="zap" defaultOpen={false} searchKeys="glow light">
     <label class="control-row checkbox">
       <input type="checkbox" bind:checked={config.emission.enabled} />
       <button

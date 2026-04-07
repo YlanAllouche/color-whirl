@@ -11,7 +11,7 @@
   let { config, RESOLUTION_PRESETS, applyResolutionPreset }: Props = $props();
 </script>
 
-<CollapsiblePanel id="resolution" title="Resolution" icon="monitor" defaultOpen={false}>
+<CollapsiblePanel id="resolution" title="Resolution" icon="monitor" defaultOpen={false} searchKeys="size width height">
   <div class="preset-buttons">
     {#each Object.keys(RESOLUTION_PRESETS) as preset}
       <button type="button" onclick={() => applyResolutionPreset(preset)}>{preset}</button>

@@ -14,7 +14,7 @@
   let { config, isLocked, toggleLock, setEqualWeights, setRandomWeights, updateWeight }: Props = $props();
 </script>
 
-<CollapsiblePanel id="diamondgrid2d" title="Diamond Grid (2D)" icon="grid-3x3" defaultOpen={true}>
+<CollapsiblePanel id="diamondgrid2d" title="Diamond Grid (2D)" icon="grid-3x3" defaultOpen={true} searchKeys="lozenge">
   <label class="control-row slider">
     <button type="button" class="setting-title" class:locked={isLocked('diamondgrid.tileWidthPx')} onclick={() => toggleLock('diamondgrid.tileWidthPx')} title="Click to lock/unlock for randomize">Tile width: {Math.round(config.diamondgrid.tileWidthPx)}px</button>
     <input type="range" bind:value={config.diamondgrid.tileWidthPx} min="8" max="520" step="1" />

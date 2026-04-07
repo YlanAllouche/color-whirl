@@ -11,7 +11,7 @@
   let { config, isLocked, toggleLock }: Props = $props();
 </script>
 
-<CollapsiblePanel id="popsicle" title="Popsicle" icon="ice-cream-cone" defaultOpen={true}>
+<CollapsiblePanel id="popsicle" title="Popsicle" icon="ice-cream-cone" defaultOpen={true} searchKeys="ice cream sticks">
   <label class="control-row slider">
     <button type="button" class="setting-title" class:locked={isLocked('stickCount')} onclick={() => toggleLock('stickCount')} title="Click to lock/unlock for randomize">Count: {config.stickCount}</button>
     <input type="range" bind:value={config.stickCount} min="1" max="200" />

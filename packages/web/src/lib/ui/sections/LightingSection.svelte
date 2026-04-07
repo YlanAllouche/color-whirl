@@ -13,7 +13,7 @@
 </script>
 
 {#if is3DType}
-  <CollapsiblePanel id="lighting" title="Lighting" icon="sun" defaultOpen={false}>
+  <CollapsiblePanel id="lighting" title="Lighting" icon="sun" defaultOpen={false} searchKeys="light shadows">
     <label class="control-row checkbox">
       <input type="checkbox" bind:checked={config.lighting.enabled} />
       <button

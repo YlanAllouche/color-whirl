@@ -10,7 +10,7 @@
   let { config, isLocked, toggleLock }: Props = $props();
 </script>
 
-<CollapsiblePanel id="outline" title="Outline" icon="pen-tool" defaultOpen={false}>
+<CollapsiblePanel id="outline" title="Outline" icon="pen-tool" defaultOpen={false} searchKeys="stroke">
   <label class="control-row checkbox">
     <input type="checkbox" bind:checked={config.facades.outline.enabled} />
     <button

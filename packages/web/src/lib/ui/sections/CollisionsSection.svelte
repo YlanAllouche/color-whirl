@@ -27,7 +27,7 @@
 </script>
 
 {#if supportsCollisions}
-  <CollapsiblePanel id="collisions" title="Collisions" icon="scan" defaultOpen={false}>
+  <CollapsiblePanel id="collisions" title="Collisions" icon="scan" defaultOpen={false} searchKeys="overlap physics">
     <label class="control-row">
       <button
         type="button"

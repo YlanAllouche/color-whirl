@@ -16,7 +16,7 @@
   let { config, renderError, schedulePreviewRender, isLocked, toggleLock, setEqualWeights, setRandomWeights, updateWeight }: Props = $props();
 </script>
 
-<CollapsiblePanel id="svg3d" title="SVG (3D)" icon="file-code" defaultOpen={true}>
+<CollapsiblePanel id="svg3d" title="SVG (3D)" icon="file-code" defaultOpen={true} searchKeys="vector">
   <label class="control-row">
     <button type="button" class="setting-title" class:locked={isLocked('svg.renderMode')} onclick={() => toggleLock('svg.renderMode')} title="Click to lock/unlock for randomize">Render</button>
     <Dropdown
