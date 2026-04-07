@@ -156,7 +156,17 @@
 }
 
 .inspector-content.cols2 {
-  grid-template-columns: 1fr 1fr;
+  display: block;
+  column-count: 2;
+  column-gap: 0.6rem;
+  grid-template-columns: none;
+}
+
+.inspector-content.cols2 .panel {
+  break-inside: avoid;
+  display: inline-block;
+  width: 100%;
+  margin-bottom: 0.6rem;
 }
 
 @media (max-width: 980px) {
