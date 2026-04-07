@@ -64,7 +64,7 @@
   }: Props = $props();
 </script>
 
-<div oninput={schedulePreviewRender} onchange={schedulePreviewRender}>
+<div class="inspector-host" oninput={schedulePreviewRender} onchange={schedulePreviewRender}>
   <InspectorColumn
     id="global"
     title="Global"
