@@ -34,6 +34,7 @@ import { cloneConfigDeep } from '$lib/app/editor/cloneConfigDeep';
 import { touchPreviewDeps } from '$lib/app/editor/touchPreviewDeps';
 import {
   addColor as addColorImpl,
+  moveColor as moveColorImpl,
   removeColor as removeColorImpl,
   replaceColors as replaceColorsImpl,
   updateColor as updateColorImpl,
@@ -263,6 +264,11 @@ export function createPageState() {
 
   function removeColor(index: number) {
     state.config = removeColorImpl(state.config, index);
+    schedulePreviewRender();
+  }
+
+  function moveColor(fromIndex: number, toIndex: number) {
+    state.config = moveColorImpl(state.config, fromIndex, toIndex);
     schedulePreviewRender();
   }
 
@@ -775,6 +781,7 @@ export function createPageState() {
       handleExport,
       applyResolutionPreset,
       addColor,
+      moveColor,
       removeColor,
       updateColor,
       replaceColors,

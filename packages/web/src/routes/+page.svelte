@@ -85,6 +85,7 @@
       applySelectedColorPreset={actions.applySelectedColorPreset}
       updateColor={actions.updateColor}
       replaceColors={actions.replaceColors}
+      moveColor={actions.moveColor}
       removeColor={actions.removeColor}
       addColor={actions.addColor}
       togglePaletteOverride={actions.togglePaletteOverride}

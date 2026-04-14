@@ -21,6 +21,7 @@
     applySelectedColorPreset: () => void;
     updateColor: (index: number, next: string) => void;
     replaceColors?: (colors: string[]) => void;
+    moveColor?: (fromIndex: number, toIndex: number) => void;
     removeColor: (index: number) => void;
     addColor: () => void;
     togglePaletteOverride: (paletteIndex: number) => void;
@@ -41,6 +42,7 @@
     applySelectedColorPreset,
     updateColor,
     replaceColors = () => {},
+    moveColor = () => {},
     removeColor,
     addColor,
     togglePaletteOverride,
@@ -55,11 +57,17 @@
   let harmonyIncludeAccent = $state(true);
   let harmonyAnchorA = $state('#ff5f56');
   let harmonyAnchorB = $state('#4db6ff');
+  let harmonyInitialized = $state(false);
+
+  let dragFromIndex = $state(-1);
+  let dragOverIndex = $state(-1);
 
   $effect(() => {
+    if (harmonyInitialized) return;
     harmonyLength = Math.max(2, config.colors.length || 5);
     if (config.colors[0]) harmonyAnchorA = normalizeHex(config.colors[0]) ?? harmonyAnchorA;
     if (config.colors[1]) harmonyAnchorB = normalizeHex(config.colors[1]) ?? harmonyAnchorB;
+    harmonyInitialized = true;
   });
 
   type Rgb = { r: number; g: number; b: number };
@@ -242,7 +250,7 @@
       const accentHue = wrapHue(a.h + 180);
       const accentSat = clamp(0.6 * a.s + 0.4 * b.s + 14, 24, 100);
       const accentVal = clamp(0.55 * a.v + 0.45 * b.v + 12, 20, 100);
-      out.push(toHex(hsvToRgb({ h: accentHue, s: accentSat, v: accentVal })));
+      out.unshift(toHex(hsvToRgb({ h: accentHue, s: accentSat, v: accentVal })));
     }
 
     return out.slice(0, n);
@@ -250,6 +258,28 @@
 
   function applyHarmonyPalette() {
     replaceColors(makeHarmonyPalette());
+  }
+
+  function handleDragStart(index: number) {
+    dragFromIndex = index;
+    dragOverIndex = index;
+  }
+
+  function handleDragEnter(index: number) {
+    dragOverIndex = index;
+  }
+
+  function handleDrop(index: number) {
+    const from = dragFromIndex;
+    dragFromIndex = -1;
+    dragOverIndex = -1;
+    if (from < 0 || from === index) return;
+    moveColor(from, index);
+  }
+
+  function handleDragEnd() {
+    dragFromIndex = -1;
+    dragOverIndex = -1;
   }
 </script>
 
@@ -360,10 +390,19 @@
   </details>
 
   <div class="colors-list palette-list">
-    {#each config.colors as color, i}
+    {#each config.colors as color, i (`${i}-${color}`)}
       {@const hsv = colorToHsv(color)}
       {@const ovStatus = getOverrideStatus(i)}
-      <div class="palette-item">
+      <div
+        class={`palette-item ${dragOverIndex === i ? 'is-drop-target' : ''}`}
+        role="listitem"
+        draggable="true"
+        ondragstart={() => handleDragStart(i)}
+        ondragenter={() => handleDragEnter(i)}
+        ondragover={(e) => e.preventDefault()}
+        ondrop={() => handleDrop(i)}
+        ondragend={handleDragEnd}
+      >
         <div class="palette-item-head">
           <span class="mono">#{i + 1}</span>
           <span class="swatch" style={`background: ${color}`}></span>
