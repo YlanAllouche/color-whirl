@@ -25,8 +25,8 @@
   lookColumns={state.lookColumns}
   toggleLookColumns={actions.toggleLookColumns}
   bind:searchQuery={state.inspectorSearch}
-  settingsMaximized={state.settingsMaximized}
-  settingsOverlayVisible={state.settingsOverlayVisible}
+  bind:settingsMaximized={state.settingsMaximized}
+  bind:settingsOverlayVisible={state.settingsOverlayVisible}
 >
   <svelte:fragment slot="left">
     <EditorLeftSection
@@ -68,7 +68,7 @@
 
   <svelte:fragment slot="right">
     <EditorRightSection
-      config={state.config}
+      bind:config={state.config}
       is3DType={derived.is3DType}
       supportsEmission={derived.supportsEmission}
       showEmissionSection={derived.showEmissionSection}

@@ -31,7 +31,7 @@
   };
 
   let {
-    config,
+    config = $bindable(),
     is3DType,
     supportsEmission,
     isLocked,
