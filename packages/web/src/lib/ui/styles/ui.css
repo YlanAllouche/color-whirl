@@ -636,6 +636,91 @@
   gap: 0.375rem;
 }
 
+.palette-list {
+  gap: 0.7rem;
+}
+
+.palette-item {
+  border: 1px solid var(--stroke0);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+  padding: 0.5rem;
+}
+
+.palette-item-head {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-bottom: 0.45rem;
+}
+
+.override-pill {
+  margin-left: auto;
+  font-size: 0.68rem;
+  line-height: 1;
+  border: 1px solid var(--stroke0);
+  border-radius: 999px;
+  padding: 0.16rem 0.42rem;
+  color: var(--text2);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.override-pill.active {
+  border-color: rgba(249, 115, 22, 0.45);
+  color: rgba(255, 240, 225, 0.95);
+  background: rgba(249, 115, 22, 0.12);
+}
+
+.palette-item-grid {
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: minmax(72px, 88px) minmax(132px, 1fr) repeat(3, minmax(58px, 72px));
+}
+
+.palette-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.palette-field span {
+  font-size: 0.7rem;
+  color: var(--text2);
+}
+
+.palette-field input[type='number'],
+.palette-field input[type='text'] {
+  width: 100%;
+  padding: 0.28rem 0.38rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--stroke0);
+  background: rgba(20, 20, 22, 0.5);
+  color: var(--text0);
+  outline: none;
+  font-size: 0.78rem;
+}
+
+.palette-field input[type='number']:focus-visible,
+.palette-field input[type='text']:focus-visible {
+  border-color: var(--accent-stroke);
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.16);
+}
+
+.palette-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-top: 0.5rem;
+}
+
+.palette-inline-override {
+  margin-top: 0.45rem;
+}
+
+.palette-inline-override .palette-override-item {
+  margin-top: 0;
+}
+
 .color-item {
   display: flex;
   align-items: center;
@@ -691,6 +776,17 @@
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+@media (max-width: 760px) {
+  .palette-item-grid {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+
+  .palette-item-grid .color-field,
+  .palette-item-grid .palette-field:nth-child(2) {
+    grid-column: span 3;
+  }
 }
 
 .remove-btn:hover:not(:disabled) {
