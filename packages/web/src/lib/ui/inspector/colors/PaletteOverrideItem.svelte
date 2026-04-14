@@ -14,6 +14,7 @@
     index: number;
     is3DType: boolean;
     supportsEmission: boolean;
+    open?: boolean;
     togglePaletteOverride: (paletteIndex: number) => void;
     updatePaletteOverride: (paletteIndex: number, fn: (cur: any | null) => any | null) => void;
     togglePaletteBlock: (paletteIndex: number, block: PaletteOverrideBlock) => void;
@@ -25,6 +26,7 @@
     index,
     is3DType,
     supportsEmission,
+    open = $bindable(false),
     togglePaletteOverride,
     updatePaletteOverride,
     togglePaletteBlock
@@ -33,7 +35,7 @@
   let ov = $derived((config as any).palette?.overrides?.[index]);
   let ovEnabled = $derived(!!ov?.enabled);
 </script>
-<details class="palette-override-item">
+<details class="palette-override-item" bind:open>
   <summary class="palette-override-summary">
     <span class="mono">#{index}</span>
     <span class="swatch" style={`background: ${color}`}></span>

@@ -35,6 +35,7 @@ import { touchPreviewDeps } from '$lib/app/editor/touchPreviewDeps';
 import {
   addColor as addColorImpl,
   removeColor as removeColorImpl,
+  replaceColors as replaceColorsImpl,
   updateColor as updateColorImpl,
   updatePaletteOverride as updatePaletteOverrideImpl,
   togglePaletteOverride as togglePaletteOverrideImpl,
@@ -267,6 +268,11 @@ export function createPageState() {
 
   function updateColor(index: number, color: string) {
     state.config = updateColorImpl(state.config, index, color);
+  }
+
+  function replaceColors(colors: string[]) {
+    state.config = replaceColorsImpl(state.config, colors);
+    schedulePreviewRender();
   }
 
   function updatePaletteOverride(paletteIndex: number, fn: (cur: any | null) => any | null) {
@@ -771,6 +777,7 @@ export function createPageState() {
       addColor,
       removeColor,
       updateColor,
+      replaceColors,
       updatePaletteOverride,
       togglePaletteOverride,
       togglePaletteBlock,

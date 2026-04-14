@@ -37,6 +37,15 @@ export function updateColor(config: WallpaperConfig, index: number, color: strin
   return { ...config, colors: newColors };
 }
 
+export function replaceColors(config: WallpaperConfig, colors: string[]): WallpaperConfig {
+  const nextColors = colors.length > 0 ? colors.slice() : ['#ffffff'];
+  const palette = getPalette(config);
+  const curOverrides: any[] = Array.isArray(palette.overrides) ? palette.overrides.slice() : [];
+  const nextOverrides = curOverrides.slice(0, nextColors.length);
+  while (nextOverrides.length < nextColors.length) nextOverrides.push(null);
+  return { ...config, colors: nextColors, palette: { ...palette, overrides: nextOverrides } } as any;
+}
+
 export function updatePaletteOverride(
   config: WallpaperConfig,
   paletteIndex: number,

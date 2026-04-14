@@ -34,6 +34,7 @@
     cycleColorPreset: (delta: number) => void;
     applySelectedColorPreset: () => void;
     updateColor: (index: number, next: string) => void;
+    replaceColors: (colors: string[]) => void;
     removeColor: (index: number) => void;
     addColor: () => void;
     togglePaletteOverride: (paletteIndex: number) => void;
@@ -68,6 +69,7 @@
     cycleColorPreset,
     applySelectedColorPreset,
     updateColor,
+    replaceColors,
     removeColor,
     addColor,
     togglePaletteOverride,
@@ -105,6 +107,7 @@
       {cycleColorPreset}
       {applySelectedColorPreset}
       {updateColor}
+      {replaceColors}
       {removeColor}
       {addColor}
       {togglePaletteOverride}
