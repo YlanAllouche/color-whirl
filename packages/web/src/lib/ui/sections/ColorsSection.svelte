@@ -31,7 +31,7 @@
   };
 
   let {
-    config = $bindable(),
+    config,
     is3DType,
     supportsEmission,
     isLocked,
@@ -398,8 +398,7 @@
     </div>
   </details>
 
-  {#key `${selectedColorPresetId}|${config.backgroundColor}|${config.colors.join('|')}`}
-    <div class="colors-list palette-list">
+  <div class="colors-list palette-list">
       {#each config.colors as color, i (i)}
         {@const ovStatus = getOverrideStatus(i)}
         <div
@@ -479,6 +478,5 @@
         </div>
       {/each}
       <button class="add-btn" onclick={addColor}>+ Add Color</button>
-    </div>
-  {/key}
+  </div>
 </CollapsiblePanel>

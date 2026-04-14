@@ -22,8 +22,8 @@
     lookColumns,
     toggleLookColumns,
     searchQuery = $bindable(''),
-    settingsMaximized = $bindable(false),
-    settingsOverlayVisible = $bindable(false)
+    settingsMaximized = false,
+    settingsOverlayVisible = false
   }: Props = $props();
 
   const leftKey = 'ui.layout.leftWidth';

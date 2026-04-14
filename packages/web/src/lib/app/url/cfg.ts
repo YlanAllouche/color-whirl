@@ -4,6 +4,7 @@ import {
   type WallpaperAppStateV1,
   type WallpaperConfig
 } from '@wallpaper-maker/core';
+import { replaceState } from '$app/navigation';
 import type { PreviewRenderMode } from '$lib/popsicle/preview';
 
 export type ExportFormat = 'png' | 'jpg' | 'webp' | 'svg';
@@ -47,7 +48,7 @@ export function scheduleReplaceCfgInUrl(cfg: string, opts?: { debounceMs?: numbe
     const u = new URL(window.location.href);
     u.search = '';
     u.searchParams.set('cfg', cfg);
-    history.replaceState({}, '', u);
+    replaceState(u, {});
   }, debounceMs);
 
   return () => {

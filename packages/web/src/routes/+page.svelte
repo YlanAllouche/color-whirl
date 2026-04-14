@@ -25,8 +25,8 @@
   lookColumns={state.lookColumns}
   toggleLookColumns={actions.toggleLookColumns}
   bind:searchQuery={state.inspectorSearch}
-  bind:settingsMaximized={state.settingsMaximized}
-  bind:settingsOverlayVisible={state.settingsOverlayVisible}
+  settingsMaximized={state.settingsMaximized}
+  settingsOverlayVisible={state.settingsOverlayVisible}
 >
   <svelte:fragment slot="left">
     <EditorLeftSection
@@ -60,15 +60,24 @@
       clearPreviewSettleTimer={actions.clearPreviewSettleTimer}
       bind:canvasContainer={state.canvasContainer}
       bind:canvasHost={state.canvasHost}
-      bind:cameraDragActive={state.cameraDragActive}
-      bind:settingsMaximized={state.settingsMaximized}
-      bind:settingsOverlayVisible={state.settingsOverlayVisible}
+      cameraDragActive={state.cameraDragActive}
+      settingsMaximized={state.settingsMaximized}
+      settingsOverlayVisible={state.settingsOverlayVisible}
+      onCameraDragActiveChange={(next) => {
+        state.cameraDragActive = next;
+      }}
+      onSettingsMaximizedChange={(next) => {
+        state.settingsMaximized = next;
+      }}
+      onSettingsOverlayVisibleChange={(next) => {
+        state.settingsOverlayVisible = next;
+      }}
     />
   </svelte:fragment>
 
   <svelte:fragment slot="right">
     <EditorRightSection
-      bind:config={state.config}
+      config={state.config}
       is3DType={derived.is3DType}
       supportsEmission={derived.supportsEmission}
       showEmissionSection={derived.showEmissionSection}

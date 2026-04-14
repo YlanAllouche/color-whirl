@@ -54,7 +54,7 @@
   };
 
   let {
-    config = $bindable(),
+    config,
     is3DType,
     supportsEmission,
     showEmissionSection,
@@ -99,7 +99,7 @@
     showColumnsToggle={false}
   >
     <ColorsSection
-      bind:config
+      {config}
       {is3DType}
       {supportsEmission}
       {isLocked}

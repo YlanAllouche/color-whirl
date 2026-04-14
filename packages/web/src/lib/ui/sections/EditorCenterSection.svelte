@@ -13,6 +13,9 @@
     cameraDragActive: boolean;
     settingsMaximized: boolean;
     settingsOverlayVisible: boolean;
+    onCameraDragActiveChange?: (next: boolean) => void;
+    onSettingsMaximizedChange?: (next: boolean) => void;
+    onSettingsOverlayVisibleChange?: (next: boolean) => void;
   };
 
   let {
@@ -22,9 +25,12 @@
     clearPreviewSettleTimer,
     canvasContainer = $bindable(null),
     canvasHost = $bindable(null),
-    cameraDragActive = $bindable(false),
-    settingsMaximized = $bindable(false),
-    settingsOverlayVisible = $bindable(false)
+    cameraDragActive,
+    settingsMaximized,
+    settingsOverlayVisible,
+    onCameraDragActiveChange,
+    onSettingsMaximizedChange,
+    onSettingsOverlayVisibleChange
   }: Props = $props();
 </script>
 
@@ -35,7 +41,10 @@
   {clearPreviewSettleTimer}
   bind:canvasContainer
   bind:canvasHost
-  bind:cameraDragActive
-  bind:settingsMaximized
-  bind:settingsOverlayVisible
+  {cameraDragActive}
+  {settingsMaximized}
+  {settingsOverlayVisible}
+  {onCameraDragActiveChange}
+  {onSettingsMaximizedChange}
+  {onSettingsOverlayVisibleChange}
 />

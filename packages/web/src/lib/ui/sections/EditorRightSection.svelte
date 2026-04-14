@@ -53,7 +53,7 @@
   };
 
   let {
-    config = $bindable(),
+    config,
     is3DType,
     supportsEmission,
     showEmissionSection,
@@ -86,7 +86,7 @@
 </script>
 
 <LookInspector
-  bind:config
+  {config}
   {is3DType}
   {supportsEmission}
   {showEmissionSection}

@@ -13,6 +13,9 @@
     settingsMaximized?: boolean;
     settingsOverlayVisible?: boolean;
     overlayVisible?: boolean;
+    onCameraDragActiveChange?: (next: boolean) => void;
+    onSettingsMaximizedChange?: (next: boolean) => void;
+    onSettingsOverlayVisibleChange?: (next: boolean) => void;
   };
 
   let {
@@ -22,11 +25,32 @@
     clearPreviewSettleTimer,
     canvasContainer = $bindable(null),
     canvasHost = $bindable(null),
-    cameraDragActive = $bindable(false),
-    settingsMaximized = $bindable(false),
-    settingsOverlayVisible = $bindable(false),
-    overlayVisible = $bindable(false)
+    cameraDragActive = false,
+    settingsMaximized = false,
+    settingsOverlayVisible = false,
+    overlayVisible = false,
+    onCameraDragActiveChange,
+    onSettingsMaximizedChange,
+    onSettingsOverlayVisibleChange
   }: Props = $props();
+
+  function setCameraDragActive(next: boolean) {
+    if (cameraDragActive === next) return;
+    cameraDragActive = next;
+    onCameraDragActiveChange?.(next);
+  }
+
+  function setSettingsMaximized(next: boolean) {
+    if (settingsMaximized === next) return;
+    settingsMaximized = next;
+    onSettingsMaximizedChange?.(next);
+  }
+
+  function setSettingsOverlayVisible(next: boolean) {
+    if (settingsOverlayVisible === next) return;
+    settingsOverlayVisible = next;
+    onSettingsOverlayVisibleChange?.(next);
+  }
 
   const CAMERA_DISTANCE_MIN = 5;
   const CAMERA_DISTANCE_MAX = 50;
@@ -72,11 +96,11 @@
   function updateSettingsOverlayFromPointer(x: number, y: number) {
     if (!settingsMaximized) return;
     const inSettings = isPointerInSettingsArea(x, y);
-    settingsOverlayVisible = true;
+    setSettingsOverlayVisible(true);
     if (settingsOverlayTimer) window.clearTimeout(settingsOverlayTimer);
     if (inSettings) return;
     settingsOverlayTimer = window.setTimeout(() => {
-      settingsOverlayVisible = false;
+      setSettingsOverlayVisible(false);
     }, SETTINGS_OVERLAY_IDLE_MS);
   }
 
@@ -104,7 +128,7 @@
     const target = e.target as HTMLElement | null;
     if (target?.closest?.('.preview-overlay') || target?.closest?.('[data-settings-overlay]')) return;
 
-    cameraDragActive = true;
+    setCameraDragActive(true);
     camDragPointerId = e.pointerId;
     camDragStartX = e.clientX;
     camDragStartY = e.clientY;
@@ -140,7 +164,7 @@
   function handleCanvasPointerUp(e: PointerEvent) {
     if (!cameraDragActive) return;
     if (camDragPointerId !== -1 && e.pointerId !== camDragPointerId) return;
-    cameraDragActive = false;
+    setCameraDragActive(false);
     camDragPointerId = -1;
     try {
       (e.currentTarget as HTMLElement)?.releasePointerCapture?.(e.pointerId);
@@ -176,7 +200,7 @@
 
   $effect(() => {
     if (settingsMaximized) return;
-    settingsOverlayVisible = false;
+    if (settingsOverlayVisible) setSettingsOverlayVisible(false);
     if (settingsOverlayTimer) {
       window.clearTimeout(settingsOverlayTimer);
       settingsOverlayTimer = null;
@@ -214,7 +238,7 @@
         type="button"
         class="fullscreen-btn"
         onclick={() => {
-          settingsMaximized = !settingsMaximized;
+          setSettingsMaximized(!settingsMaximized);
         }}
         title={settingsMaximized ? 'Minimize settings' : 'Maximize settings'}
         aria-pressed={settingsMaximized}
