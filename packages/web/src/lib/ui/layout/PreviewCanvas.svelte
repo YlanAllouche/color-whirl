@@ -26,13 +26,16 @@
     canvasContainer = $bindable(null),
     canvasHost = $bindable(null),
     cameraDragActive = false,
-    settingsMaximized = false,
-    settingsOverlayVisible = false,
+    settingsMaximized: settingsMaximizedProp = false,
+    settingsOverlayVisible: settingsOverlayVisibleProp = false,
     overlayVisible = false,
     onCameraDragActiveChange,
     onSettingsMaximizedChange,
     onSettingsOverlayVisibleChange
   }: Props = $props();
+
+  let settingsMaximized = $state(false);
+  let settingsOverlayVisible = $state(false);
 
   function setCameraDragActive(next: boolean) {
     if (cameraDragActive === next) return;
@@ -126,7 +129,7 @@
     if (!is3DType) return;
     if (e.button !== 0) return;
     const target = e.target as HTMLElement | null;
-    if (target?.closest?.('.preview-overlay') || target?.closest?.('[data-settings-overlay]')) return;
+    if (target?.closest?.('.preview-overlay') || target?.closest?.('[data-settings-overlay]') || target?.closest?.('.fullscreen-toggle')) return;
 
     setCameraDragActive(true);
     camDragPointerId = e.pointerId;
@@ -179,7 +182,7 @@
     bumpOverlay();
     if (!is3DType) return;
     const target = e.target as HTMLElement | null;
-    if (target?.closest?.('.preview-overlay') || target?.closest?.('[data-settings-overlay]')) return;
+    if (target?.closest?.('.preview-overlay') || target?.closest?.('[data-settings-overlay]') || target?.closest?.('.fullscreen-toggle')) return;
 
     // Smooth, multiplicative zoom.
     const factor = Math.pow(1.0015, e.deltaY);
@@ -187,6 +190,16 @@
     config.camera.distance = next;
     e.preventDefault();
   }
+
+  $effect(() => {
+    const next = !!settingsMaximizedProp;
+    if (settingsMaximized !== next) settingsMaximized = next;
+  });
+
+  $effect(() => {
+    const next = !!settingsOverlayVisibleProp;
+    if (settingsOverlayVisible !== next) settingsOverlayVisible = next;
+  });
 
   $effect(() => {
     if (!settingsMaximized) return;
