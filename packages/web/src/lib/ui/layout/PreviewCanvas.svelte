@@ -40,8 +40,8 @@
   let camDragStartY = 0;
   let camDragStartAzimuth = 0;
   let camDragStartElevation = 0;
-  let overlayTimer: ReturnType<typeof setTimeout> | null = null;
-  let settingsOverlayTimer: ReturnType<typeof setTimeout> | null = null;
+  let overlayTimer: number | null = null;
+  let settingsOverlayTimer: number | null = null;
 
   function clamp(n: number, min: number, max: number): number {
     return Math.max(min, Math.min(max, n));
@@ -209,7 +209,7 @@
   >
     <div bind:this={canvasHost} class="canvas-host"></div>
 
-    <div class="preview-overlay fullscreen-toggle" class:visible={overlayVisible} aria-hidden={!overlayVisible}>
+    <div class="fullscreen-toggle">
       <button
         type="button"
         class="fullscreen-btn"

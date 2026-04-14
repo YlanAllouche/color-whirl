@@ -660,6 +660,29 @@
   margin-bottom: 0.45rem;
 }
 
+.palette-drag-handle {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1px solid var(--stroke0);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text2);
+  cursor: grab;
+  display: grid;
+  place-items: center;
+  line-height: 1;
+  padding: 0;
+}
+
+.palette-drag-handle:active {
+  cursor: grabbing;
+}
+
+.palette-drag-handle:hover {
+  border-color: var(--stroke1);
+  color: var(--text1);
+}
+
 .override-pill {
   margin-left: auto;
   font-size: 0.68rem;

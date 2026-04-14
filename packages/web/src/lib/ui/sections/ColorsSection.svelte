@@ -259,17 +259,27 @@
     replaceColors(nextColors);
   }
 
-  function handleDragStart(index: number) {
+  function handleDragStart(index: number, event: DragEvent) {
     dragFromIndex = index;
     dragOverIndex = index;
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', String(index));
+    }
   }
 
-  function handleDragEnter(index: number) {
+  function handleDragEnter(index: number, event: DragEvent) {
+    event.preventDefault();
     dragOverIndex = index;
   }
 
-  function handleDrop(index: number) {
-    const from = dragFromIndex;
+  function handleDrop(index: number, event: DragEvent) {
+    event.preventDefault();
+    let from = dragFromIndex;
+    if (from < 0 && event.dataTransfer) {
+      const parsed = Number.parseInt(event.dataTransfer.getData('text/plain'), 10);
+      if (Number.isFinite(parsed)) from = parsed;
+    }
     dragFromIndex = -1;
     dragOverIndex = -1;
     if (from < 0 || from === index) return;
@@ -388,20 +398,32 @@
     </div>
   </details>
 
-  <div class="colors-list palette-list">
-    {#each config.colors as color, i (i)}
-      {@const ovStatus = getOverrideStatus(i)}
-      <div
-        class={`palette-item ${dragOverIndex === i ? 'is-drop-target' : ''}`}
-        role="listitem"
-        draggable="true"
-        ondragstart={() => handleDragStart(i)}
-        ondragenter={() => handleDragEnter(i)}
-        ondragover={(e) => e.preventDefault()}
-        ondrop={() => handleDrop(i)}
-        ondragend={handleDragEnd}
-      >
+  {#key `${selectedColorPresetId}|${config.backgroundColor}|${config.colors.join('|')}`}
+    <div class="colors-list palette-list">
+      {#each config.colors as color, i (i)}
+        {@const ovStatus = getOverrideStatus(i)}
+        <div
+          class={`palette-item ${dragOverIndex === i ? 'is-drop-target' : ''}`}
+          role="listitem"
+          ondragenter={(e) => handleDragEnter(i, e)}
+          ondragover={(e) => {
+            e.preventDefault();
+            dragOverIndex = i;
+          }}
+          ondrop={(e) => handleDrop(i, e)}
+        >
         <div class="palette-item-head">
+          <button
+            type="button"
+            class="palette-drag-handle"
+            aria-label={`Drag color ${i + 1}`}
+            title="Drag to reorder"
+            draggable="true"
+            ondragstart={(e) => handleDragStart(i, e)}
+            ondragend={handleDragEnd}
+          >
+            <span aria-hidden="true">::</span>
+          </button>
           <span class="mono">#{i + 1}</span>
           <span class="swatch" style={`background: ${color}`}></span>
           <span class="mono">{color}</span>
@@ -454,8 +476,9 @@
             />
           </div>
         {/if}
-      </div>
-    {/each}
-    <button class="add-btn" onclick={addColor}>+ Add Color</button>
-  </div>
+        </div>
+      {/each}
+      <button class="add-btn" onclick={addColor}>+ Add Color</button>
+    </div>
+  {/key}
 </CollapsiblePanel>
