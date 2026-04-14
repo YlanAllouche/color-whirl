@@ -68,6 +68,9 @@
   left: 50%;
   top: 14px;
   margin-left: -20px;
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
 }
 
 .fullscreen-btn {

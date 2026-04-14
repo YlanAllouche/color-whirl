@@ -20,8 +20,8 @@
     cycleColorPreset: (delta: number) => void;
     applySelectedColorPreset: () => void;
     updateColor: (index: number, next: string) => void;
-    replaceColors?: (colors: string[]) => void;
-    moveColor?: (fromIndex: number, toIndex: number) => void;
+    replaceColors: (colors: string[]) => void;
+    moveColor: (fromIndex: number, toIndex: number) => void;
     removeColor: (index: number) => void;
     addColor: () => void;
     togglePaletteOverride: (paletteIndex: number) => void;
@@ -41,8 +41,8 @@
     cycleColorPreset,
     applySelectedColorPreset,
     updateColor,
-    replaceColors = () => {},
-    moveColor = () => {},
+    replaceColors,
+    moveColor,
     removeColor,
     addColor,
     togglePaletteOverride,
@@ -174,16 +174,6 @@
     updateColor(index, next);
   }
 
-  function updateColorFromHsv(index: number, nextHsv: Partial<Hsv>) {
-    const current = colorToHsv(config.colors[index] ?? '#ffffff');
-    const merged: Hsv = {
-      h: nextHsv.h ?? current.h,
-      s: nextHsv.s ?? current.s,
-      v: nextHsv.v ?? current.v
-    };
-    updateColor(index, toHex(hsvToRgb(merged)));
-  }
-
   function toggleOverrideEditor(index: number) {
     openOverrideByIndex = { ...openOverrideByIndex, [index]: !openOverrideByIndex[index] };
   }
@@ -258,6 +248,15 @@
 
   function applyHarmonyPalette() {
     replaceColors(makeHarmonyPalette());
+  }
+
+  function swapColorWithBackground(index: number) {
+    const color = normalizeHex(config.colors[index] ?? '#ffffff') ?? (config.colors[index] ?? '#ffffff');
+    const background = normalizeHex(config.backgroundColor) ?? config.backgroundColor;
+    const nextColors = config.colors.slice();
+    nextColors[index] = background;
+    config.backgroundColor = color;
+    replaceColors(nextColors);
   }
 
   function handleDragStart(index: number) {
@@ -390,8 +389,7 @@
   </details>
 
   <div class="colors-list palette-list">
-    {#each config.colors as color, i (`${i}-${color}`)}
-      {@const hsv = colorToHsv(color)}
+    {#each config.colors as color, i (i)}
       {@const ovStatus = getOverrideStatus(i)}
       <div
         class={`palette-item ${dragOverIndex === i ? 'is-drop-target' : ''}`}
@@ -430,55 +428,11 @@
               }}
             />
           </label>
-
-          <label class="palette-field palette-field-sm">
-            <span>H</span>
-            <input
-              type="number"
-              min="0"
-              max="360"
-              value={Math.round(hsv.h)}
-              oninput={(e) => {
-                const h = Number((e.currentTarget as HTMLInputElement).value);
-                if (!Number.isFinite(h)) return;
-                updateColorFromHsv(i, { h: wrapHue(h) });
-              }}
-            />
-          </label>
-
-          <label class="palette-field palette-field-sm">
-            <span>S</span>
-            <input
-              type="number"
-              min="0"
-              max="100"
-              value={Math.round(hsv.s)}
-              oninput={(e) => {
-                const s = Number((e.currentTarget as HTMLInputElement).value);
-                if (!Number.isFinite(s)) return;
-                updateColorFromHsv(i, { s: clamp(s, 0, 100) });
-              }}
-            />
-          </label>
-
-          <label class="palette-field palette-field-sm">
-            <span>V</span>
-            <input
-              type="number"
-              min="0"
-              max="100"
-              value={Math.round(hsv.v)}
-              oninput={(e) => {
-                const v = Number((e.currentTarget as HTMLInputElement).value);
-                if (!Number.isFinite(v)) return;
-                updateColorFromHsv(i, { v: clamp(v, 0, 100) });
-              }}
-            />
-          </label>
         </div>
 
         <div class="palette-item-actions">
           <button type="button" class="palette-nav" onclick={() => copyHex(color)}>Copy hex</button>
+          <button type="button" class="palette-nav" onclick={() => swapColorWithBackground(i)}>Swap BG</button>
           <button type="button" class="palette-nav" onclick={() => toggleOverrideEditor(i)}>
             {openOverrideByIndex[i] ? 'Hide override' : 'Override'}
           </button>

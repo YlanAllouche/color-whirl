@@ -680,7 +680,7 @@
 .palette-item-grid {
   display: grid;
   gap: 0.45rem;
-  grid-template-columns: minmax(72px, 88px) minmax(0, 1fr) repeat(3, minmax(0, 70px));
+  grid-template-columns: minmax(72px, 88px) minmax(0, 1fr);
 }
 
 .palette-field {
@@ -791,12 +791,12 @@
 
 @media (max-width: 760px) {
   .palette-item-grid {
-    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-columns: 1fr;
   }
 
   .palette-item-grid .color-field,
   .palette-item-grid .palette-field:nth-child(2) {
-    grid-column: span 3;
+    grid-column: span 1;
   }
 }
 
