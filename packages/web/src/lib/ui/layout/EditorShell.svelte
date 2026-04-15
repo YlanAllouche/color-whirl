@@ -107,7 +107,7 @@
   <header class="app-topbar">
     <div class="topbar-left">
       <div class="topbar-brand" title={appTitle}>
-        <img class="brand-mark" src="/favicon.svg" alt="" aria-hidden="true" />
+        <img class="brand-mark" src="favicon.svg" alt="" aria-hidden="true" />
         <span class="topbar-title">{appTitle}</span>
       </div>
 
