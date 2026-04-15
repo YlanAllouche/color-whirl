@@ -35,11 +35,11 @@
 
   <label class="control-row slider">
     <button type="button" class="setting-title" class:locked={isLocked('bands.bandWidthPx')} onclick={() => toggleLock('bands.bandWidthPx')} title="Click to lock/unlock for randomize">Band width: {Math.round(config.bands.bandWidthPx)}px</button>
-    <input type="range" bind:value={config.bands.bandWidthPx} min="2" max="600" step="1" />
+    <input type="range" bind:value={config.bands.bandWidthPx} min="2" max="1400" step="1" />
   </label>
   <label class="control-row slider">
     <button type="button" class="setting-title" class:locked={isLocked('bands.gapPx')} onclick={() => toggleLock('bands.gapPx')} title="Click to lock/unlock for randomize">Gap: {Math.round(config.bands.gapPx)}px</button>
-    <input type="range" bind:value={config.bands.gapPx} min="0" max="300" step="1" />
+    <input type="range" bind:value={config.bands.gapPx} min="0" max="900" step="1" />
   </label>
 
   <details class="control-details">
@@ -79,7 +79,7 @@
 
     <label class="control-row slider">
       <button type="button" class="setting-title" class:locked={isLocked('bands.panel.radiusPx')} onclick={() => toggleLock('bands.panel.radiusPx')} title="Click to lock/unlock for randomize">Radius: {Math.round(config.bands.panel.radiusPx)}px</button>
-      <input type="range" bind:value={config.bands.panel.radiusPx} min="0" max="400" step="1" disabled={!config.bands.panel.enabled} />
+      <input type="range" bind:value={config.bands.panel.radiusPx} min="0" max="900" step="1" disabled={!config.bands.panel.enabled} />
     </label>
 
     <details class="control-details" style="margin-top:0.5rem;">
@@ -148,7 +148,7 @@
       </label>
       <label class="control-row slider">
         <button type="button" class="setting-title" class:locked={isLocked('bands.waves.wavelengthPx')} onclick={() => toggleLock('bands.waves.wavelengthPx')} title="Click to lock/unlock for randomize">Wavelength: {Math.round(config.bands.waves.wavelengthPx)}px</button>
-        <input type="range" bind:value={config.bands.waves.wavelengthPx} min="30" max="2400" step="1" />
+        <input type="range" bind:value={config.bands.waves.wavelengthPx} min="30" max="5000" step="1" />
       </label>
       <label class="control-row slider">
         <button type="button" class="setting-title" class:locked={isLocked('bands.waves.noiseAmount')} onclick={() => toggleLock('bands.waves.noiseAmount')} title="Click to lock/unlock for randomize">Noise: {config.bands.waves.noiseAmount.toFixed(2)}</button>
@@ -156,7 +156,7 @@
       </label>
       <label class="control-row slider">
         <button type="button" class="setting-title" class:locked={isLocked('bands.waves.noiseScale')} onclick={() => toggleLock('bands.waves.noiseScale')} title="Click to lock/unlock for randomize">Noise scale: {config.bands.waves.noiseScale.toFixed(2)}</button>
-        <input type="range" bind:value={config.bands.waves.noiseScale} min="0.1" max="6" step="0.01" />
+        <input type="range" bind:value={config.bands.waves.noiseScale} min="0.1" max="12" step="0.01" />
       </label>
     </details>
   {:else if config.bands.mode === 'chevron'}
@@ -164,11 +164,11 @@
       <summary class="control-details-summary">Chevron</summary>
       <label class="control-row slider">
         <button type="button" class="setting-title" class:locked={isLocked('bands.chevron.amplitudePx')} onclick={() => toggleLock('bands.chevron.amplitudePx')} title="Click to lock/unlock for randomize">Amplitude: {Math.round(config.bands.chevron.amplitudePx)}px</button>
-        <input type="range" bind:value={config.bands.chevron.amplitudePx} min="0" max="320" step="1" />
+        <input type="range" bind:value={config.bands.chevron.amplitudePx} min="0" max="500" step="1" />
       </label>
       <label class="control-row slider">
         <button type="button" class="setting-title" class:locked={isLocked('bands.chevron.wavelengthPx')} onclick={() => toggleLock('bands.chevron.wavelengthPx')} title="Click to lock/unlock for randomize">Width: {Math.round(config.bands.chevron.wavelengthPx)}px</button>
-        <input type="range" bind:value={config.bands.chevron.wavelengthPx} min="20" max="1200" step="1" />
+        <input type="range" bind:value={config.bands.chevron.wavelengthPx} min="20" max="2400" step="1" />
       </label>
       <label class="control-row slider">
         <button type="button" class="setting-title" class:locked={isLocked('bands.chevron.sharpness')} onclick={() => toggleLock('bands.chevron.sharpness')} title="Click to lock/unlock for randomize">Sharpness: {config.bands.chevron.sharpness.toFixed(2)}</button>
