@@ -476,6 +476,15 @@
           <span class="swatch" style={`background: ${color}`}></span>
           <span class="mono">{color}</span>
           <span class={`override-pill ${ovStatus.active ? 'active' : ''}`}>{ovStatus.label}</span>
+          <button
+            type="button"
+            class="palette-nav palette-delete"
+            onclick={() => removeColorWithEditors(i)}
+            disabled={config.colors.length <= 1}
+            title="Delete color"
+          >
+            Delete
+          </button>
         </div>
 
         <div class="palette-item-grid">
@@ -506,7 +515,6 @@
           <button type="button" class="palette-nav" onclick={() => toggleOverrideEditorWithCreate(i)}>
             {overrideActionLabel(i)}
           </button>
-          <button class="remove-btn" onclick={() => removeColorWithEditors(i)} disabled={config.colors.length <= 1}>×</button>
         </div>
 
         {#if openOverrideByIndex[i]}
