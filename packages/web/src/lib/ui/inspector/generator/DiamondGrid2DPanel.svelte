@@ -28,9 +28,69 @@
     <input type="range" bind:value={config.diamondgrid.marginPx} min="0" max="40" step="1" />
   </label>
   <label class="control-row slider">
+    <button type="button" class="setting-title" class:locked={isLocked('diamondgrid.overscanPx')} onclick={() => toggleLock('diamondgrid.overscanPx')} title="Click to lock/unlock for randomize">Overscan: {Math.round(config.diamondgrid.overscanPx)}px</button>
+    <input type="range" bind:value={config.diamondgrid.overscanPx} min="0" max="400" step="5" />
+  </label>
+  <label class="control-row slider">
     <button type="button" class="setting-title" class:locked={isLocked('diamondgrid.fillOpacity')} onclick={() => toggleLock('diamondgrid.fillOpacity')} title="Click to lock/unlock for randomize">Fill opacity: {config.diamondgrid.fillOpacity.toFixed(2)}</button>
     <input type="range" bind:value={config.diamondgrid.fillOpacity} min="0" max="1" step="0.01" />
   </label>
+
+  <details class="control-details">
+    <summary class="control-details-summary">Origin</summary>
+    <label class="control-row slider">
+      <button type="button" class="setting-title" class:locked={isLocked('diamondgrid.originPx.x')} onclick={() => toggleLock('diamondgrid.originPx.x')} title="Click to lock/unlock for randomize">X: {Math.round(config.diamondgrid.originPx.x)}px</button>
+      <input type="range" bind:value={config.diamondgrid.originPx.x} min="-500" max="500" step="1" />
+    </label>
+    <label class="control-row slider">
+      <button type="button" class="setting-title" class:locked={isLocked('diamondgrid.originPx.y')} onclick={() => toggleLock('diamondgrid.originPx.y')} title="Click to lock/unlock for randomize">Y: {Math.round(config.diamondgrid.originPx.y)}px</button>
+      <input type="range" bind:value={config.diamondgrid.originPx.y} min="-500" max="500" step="1" />
+    </label>
+  </details>
+
+  <details class="control-details">
+    <summary class="control-details-summary">Stroke</summary>
+    <label class="control-row checkbox">
+      <input type="checkbox" bind:checked={config.diamondgrid.stroke.enabled} />
+      <button
+        type="button"
+        class="setting-title"
+        class:locked={isLocked('diamondgrid.stroke.enabled')}
+        onclick={(e) => {
+          e.preventDefault();
+          toggleLock('diamondgrid.stroke.enabled');
+        }}
+        title="Click to lock/unlock for randomize"
+      >
+        Enable
+      </button>
+    </label>
+    <label class="control-row slider">
+      <button type="button" class="setting-title" class:locked={isLocked('diamondgrid.stroke.widthPx')} onclick={() => toggleLock('diamondgrid.stroke.widthPx')} title="Click to lock/unlock for randomize">Width: {Math.round(config.diamondgrid.stroke.widthPx)}px</button>
+      <input type="range" bind:value={config.diamondgrid.stroke.widthPx} min="0" max="24" step="1" disabled={!config.diamondgrid.stroke.enabled} />
+    </label>
+    <label class="control-row">
+      <button type="button" class="setting-title" class:locked={isLocked('diamondgrid.stroke.join')} onclick={() => toggleLock('diamondgrid.stroke.join')} title="Click to lock/unlock for randomize">Join</button>
+      <Dropdown
+        bind:value={config.diamondgrid.stroke.join}
+        ariaLabel="Diamond grid stroke join"
+        disabled={!config.diamondgrid.stroke.enabled}
+        options={[
+          { value: 'round', label: 'Round' },
+          { value: 'miter', label: 'Miter' },
+          { value: 'bevel', label: 'Bevel' }
+        ]}
+      />
+    </label>
+    <label class="control-row">
+      <button type="button" class="setting-title" class:locked={isLocked('diamondgrid.stroke.color')} onclick={() => toggleLock('diamondgrid.stroke.color')} title="Click to lock/unlock for randomize">Color</button>
+      <input type="color" bind:value={config.diamondgrid.stroke.color} disabled={!config.diamondgrid.stroke.enabled} />
+    </label>
+    <label class="control-row slider">
+      <button type="button" class="setting-title" class:locked={isLocked('diamondgrid.stroke.opacity')} onclick={() => toggleLock('diamondgrid.stroke.opacity')} title="Click to lock/unlock for randomize">Opacity: {config.diamondgrid.stroke.opacity.toFixed(2)}</button>
+      <input type="range" bind:value={config.diamondgrid.stroke.opacity} min="0" max="1" step="0.01" disabled={!config.diamondgrid.stroke.enabled} />
+    </label>
+  </details>
 
   <details class="control-details">
     <summary class="control-details-summary">Bevel</summary>
