@@ -14,14 +14,24 @@ export function generateDiamondGrid2DSVG(config: Extract<WallpaperConfig, { type
   const a0 = tileW * 0.5;
   const b0 = tileH * 0.5;
   const marginPx = Math.max(0, Number(dg.marginPx) || 0);
+  const sizeVariance = clamp01(Number(dg.sizeVariance) || 0);
   const sw = dg.stroke?.enabled ? Math.max(0, Number(dg.stroke?.widthPx) || 0) : 0;
   const shrink = marginPx * 0.5 + sw * 0.5;
-  const a = Math.max(0.5, a0 - shrink);
-  const b = Math.max(0.5, b0 - shrink);
+  const maxScale = 1 + sizeVariance;
 
   const originX = Number(dg.originPx?.x) || 0;
   const originY = Number(dg.originPx?.y) || 0;
   const overscan = Math.max(0, Number(dg.overscanPx) || 0);
+  const panelEnabled = !!dg.panel?.enabled;
+  const panelRect = dg.panel?.rectFrac ?? {};
+  const panelX = clamp01(Number(panelRect.x) || 0);
+  const panelY = clamp01(Number(panelRect.y) || 0);
+  const panelW = Math.max(0.02, Math.min(1, Number(panelRect.w) || 1));
+  const panelH = Math.max(0.02, Math.min(1, Number(panelRect.h) || 1));
+  const panelMinX = width * panelX;
+  const panelMinY = height * panelY;
+  const panelMaxX = width * (panelX + panelW);
+  const panelMaxY = height * (panelY + panelH);
   const fillOpacity = clamp01(Number(dg.fillOpacity) || 0);
 
   const strokeEnabled = !!dg.stroke?.enabled;
@@ -78,7 +88,13 @@ export function generateDiamondGrid2DSVG(config: Extract<WallpaperConfig, { type
     for (let u = u0; u <= u1; u++) {
       const cx = originX + (u - v) * a0;
       const cy = originY + (u + v) * b0;
-      if (cx < xMin - a0 || cx > xMax + a0 || cy < yMin - b0 || cy > yMax + b0) continue;
+      if (panelEnabled && (cx < panelMinX || cx > panelMaxX || cy < panelMinY || cy > panelMaxY)) continue;
+      if (cx < xMin - a0 * maxScale || cx > xMax + a0 * maxScale || cy < yMin - b0 * maxScale || cy > yMax + b0 * maxScale) continue;
+
+      const scale = 1 + (cellRand01(seed, u, v, 5101) * 2 - 1) * sizeVariance;
+      const a = Math.max(0.5, a0 * Math.max(0.1, scale) - shrink);
+      const b = Math.max(0.5, b0 * Math.max(0.1, scale) - shrink);
+
       const idx = pickIndex(u, v);
       const col = palette[idx] ?? '#ffffff';
       const pts = [

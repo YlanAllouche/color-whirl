@@ -299,8 +299,15 @@ export interface DiamondGrid2DConfig extends BaseWallpaperConfig {
     tileWidthPx: number;
     tileHeightPx: number;
     marginPx: number;
+    /** 0..1: per-cell size variation around base tile size */
+    sizeVariance: number;
     originPx: { x: number; y: number };
     overscanPx: number;
+    panel: {
+      enabled: boolean;
+      /** 0..1 fractions of the full canvas */
+      rectFrac: { x: number; y: number; w: number; h: number };
+    };
     /** 0..1 */
     fillOpacity: number;
     stroke: {
@@ -320,6 +327,7 @@ export interface DiamondGrid2DConfig extends BaseWallpaperConfig {
       enabled: boolean;
       /** 0..1 */
       amount: number;
+      mode: 'convex' | 'concave';
       lightDeg: number;
       /** 0..1 */
       variation: number;

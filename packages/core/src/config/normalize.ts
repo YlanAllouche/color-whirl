@@ -526,6 +526,8 @@ export function normalizeWallpaperConfig(input: any): WallpaperConfig {
       dAny.tileHeightPx = Number.isFinite(th) ? Math.max(2, th) : Math.max(2, Number(baseDg?.tileHeightPx) || 2);
       const m = Number(dAny.marginPx);
       dAny.marginPx = Number.isFinite(m) ? Math.max(0, m) : Math.max(0, Number(baseDg?.marginPx) || 0);
+      const sv = Number(dAny.sizeVariance);
+      dAny.sizeVariance = Number.isFinite(sv) ? clamp(sv, 0, 1) : clamp(Number(baseDg?.sizeVariance) || 0, 0, 1);
       if (!dAny.originPx || typeof dAny.originPx !== 'object') dAny.originPx = cloneJson(baseDg?.originPx);
       const ox = Number(dAny.originPx.x);
       const oy = Number(dAny.originPx.y);
@@ -533,6 +535,18 @@ export function normalizeWallpaperConfig(input: any): WallpaperConfig {
       dAny.originPx.y = Number.isFinite(oy) ? oy : Number(baseDg?.originPx?.y) || 0;
       const os = Number(dAny.overscanPx);
       dAny.overscanPx = Number.isFinite(os) ? Math.max(0, os) : Math.max(0, Number(baseDg?.overscanPx) || 0);
+      if (!dAny.panel || typeof dAny.panel !== 'object') dAny.panel = cloneJson(baseDg?.panel);
+      dAny.panel.enabled = typeof dAny.panel.enabled === 'boolean' ? dAny.panel.enabled : !!(baseDg?.panel?.enabled);
+      if (!dAny.panel.rectFrac || typeof dAny.panel.rectFrac !== 'object') dAny.panel.rectFrac = cloneJson(baseDg?.panel?.rectFrac);
+      const pxRaw = Number(dAny.panel.rectFrac?.x);
+      const pyRaw = Number(dAny.panel.rectFrac?.y);
+      const pwRaw = Number(dAny.panel.rectFrac?.w);
+      const phRaw = Number(dAny.panel.rectFrac?.h);
+      const pw = Number.isFinite(pwRaw) ? clamp(pwRaw, 0.02, 1) : clamp(Number(baseDg?.panel?.rectFrac?.w) || 1, 0.02, 1);
+      const ph = Number.isFinite(phRaw) ? clamp(phRaw, 0.02, 1) : clamp(Number(baseDg?.panel?.rectFrac?.h) || 1, 0.02, 1);
+      const px = Number.isFinite(pxRaw) ? clamp(pxRaw, 0, 1 - pw) : clamp(Number(baseDg?.panel?.rectFrac?.x) || 0, 0, 1 - pw);
+      const py = Number.isFinite(pyRaw) ? clamp(pyRaw, 0, 1 - ph) : clamp(Number(baseDg?.panel?.rectFrac?.y) || 0, 0, 1 - ph);
+      dAny.panel.rectFrac = { x: px, y: py, w: pw, h: ph };
       const fo = Number(dAny.fillOpacity);
       dAny.fillOpacity = Number.isFinite(fo) ? clamp(fo, 0, 1) : clamp(Number(baseDg?.fillOpacity) || 0, 0, 1);
 
@@ -553,6 +567,7 @@ export function normalizeWallpaperConfig(input: any): WallpaperConfig {
       dAny.bevel.enabled = typeof dAny.bevel.enabled === 'boolean' ? dAny.bevel.enabled : !!dAny.bevel.enabled;
       const ba = Number(dAny.bevel.amount);
       dAny.bevel.amount = Number.isFinite(ba) ? clamp(ba, 0, 1) : clamp(Number(baseDg?.bevel?.amount) || 0, 0, 1);
+      dAny.bevel.mode = dAny.bevel.mode === 'concave' ? 'concave' : 'convex';
       const ld = Number(dAny.bevel.lightDeg);
       dAny.bevel.lightDeg = Number.isFinite(ld) ? ld : Number(baseDg?.bevel?.lightDeg) || 0;
       const bv = Number(dAny.bevel.variation);

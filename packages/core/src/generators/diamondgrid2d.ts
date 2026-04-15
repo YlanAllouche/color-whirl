@@ -100,9 +100,20 @@ export function renderDiamondGrid2DToCanvas(config: DiamondGrid2DConfig, canvas?
   const tileW = Math.max(2, Number(dg?.tileWidthPx) || 2);
   const tileH = Math.max(2, Number(dg?.tileHeightPx) || 2);
   const marginPx = Math.max(0, Number(dg?.marginPx) || 0);
+  const sizeVariance = clamp01(Number(dg?.sizeVariance) || 0);
   const overscan = Math.max(0, Number(dg?.overscanPx) || 0);
   const originX = Number(dg?.originPx?.x) || 0;
   const originY = Number(dg?.originPx?.y) || 0;
+  const panelEnabled = !!dg?.panel?.enabled;
+  const panelRect = dg?.panel?.rectFrac ?? {};
+  const panelX = clamp(Number(panelRect.x) || 0, 0, 1);
+  const panelY = clamp(Number(panelRect.y) || 0, 0, 1);
+  const panelW = clamp(Number(panelRect.w) || 1, 0.02, 1);
+  const panelH = clamp(Number(panelRect.h) || 1, 0.02, 1);
+  const panelMinX = c.width * panelX;
+  const panelMinY = c.height * panelY;
+  const panelMaxX = c.width * (panelX + panelW);
+  const panelMaxY = c.height * (panelY + panelH);
 
   const fillOpacity = clamp01(Number(dg?.fillOpacity) || 0);
 
@@ -114,14 +125,14 @@ export function renderDiamondGrid2DToCanvas(config: DiamondGrid2DConfig, canvas?
 
   const bevelEnabled = !!dg?.bevel?.enabled;
   const bevelAmt = clamp01(Number(dg?.bevel?.amount) || 0);
+  const bevelMode = dg?.bevel?.mode === 'concave' ? 'concave' : 'convex';
   const bevelLightDeg = Number(dg?.bevel?.lightDeg) || 0;
   const bevelVar = clamp01(Number(dg?.bevel?.variation) || 0);
 
   const a0 = tileW * 0.5;
   const b0 = tileH * 0.5;
   const shrink = marginPx * 0.5 + strokeW * 0.5;
-  const a = Math.max(0.5, a0 - shrink);
-  const b = Math.max(0.5, b0 - shrink);
+  const maxScale = 1 + sizeVariance;
 
   // Inverse bounds (conservative): from pixel bounds to (u,v) ranges.
   const xMin = -overscan;
@@ -134,8 +145,8 @@ export function renderDiamondGrid2DToCanvas(config: DiamondGrid2DConfig, canvas?
   // y = oy + (u+v)*b
   // => u = 0.5*((x-ox)/a + (y-oy)/b)
   // => v = 0.5*((y-oy)/b - (x-ox)/a)
-  const invU = (x: number, y: number) => 0.5 * ((x - originX) / a + (y - originY) / b);
-  const invV = (x: number, y: number) => 0.5 * ((y - originY) / b - (x - originX) / a);
+  const invU = (x: number, y: number) => 0.5 * ((x - originX) / a0 + (y - originY) / b0);
+  const invV = (x: number, y: number) => 0.5 * ((y - originY) / b0 - (x - originX) / a0);
 
   const corners = [
     { x: xMin, y: yMin },
@@ -173,8 +184,14 @@ export function renderDiamondGrid2DToCanvas(config: DiamondGrid2DConfig, canvas?
       const cx = center.x;
       const cy = center.y;
 
+      if (panelEnabled && (cx < panelMinX || cx > panelMaxX || cy < panelMinY || cy > panelMaxY)) continue;
+
       // Offscreen reject.
-      if (cx < xMin - a0 || cx > xMax + a0 || cy < yMin - b0 || cy > yMax + b0) continue;
+      if (cx < xMin - a0 * maxScale || cx > xMax + a0 * maxScale || cy < yMin - b0 * maxScale || cy > yMax + b0 * maxScale) continue;
+
+      const scale = 1 + (cellRand01(seedU32, uu, vv, 5101) * 2 - 1) * sizeVariance;
+      const a = Math.max(0.5, a0 * Math.max(0.1, scale) - shrink);
+      const b = Math.max(0.5, b0 * Math.max(0.1, scale) - shrink);
 
       const ci = pickPaletteIndex(seedU32, paletteMode, weightsNorm, uu, vv, 5001);
       const baseCol = colors[ci % colors.length] ?? '#ffffff';
@@ -196,8 +213,8 @@ export function renderDiamondGrid2DToCanvas(config: DiamondGrid2DConfig, canvas?
           const ly = Math.sin(ang);
 
           const g = ctx.createLinearGradient(cx - lx * a, cy - ly * b, cx + lx * a, cy + ly * b);
-          const hi = adjustHex(baseCol, 0.16 * amt);
-          const lo = adjustHex(baseCol, -0.13 * amt);
+          const hi = adjustHex(baseCol, (bevelMode === 'concave' ? -0.16 : 0.16) * amt);
+          const lo = adjustHex(baseCol, (bevelMode === 'concave' ? 0.13 : -0.13) * amt);
           g.addColorStop(0, rgba(hi, fillOpacity));
           g.addColorStop(1, rgba(lo, fillOpacity));
           ctx.fillStyle = g;

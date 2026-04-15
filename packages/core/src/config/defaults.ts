@@ -439,12 +439,17 @@ export const DEFAULT_DIAMONDGRID2D_CONFIG: DiamondGrid2DConfig = {
     tileWidthPx: 120,
     tileHeightPx: 60,
     marginPx: 2,
+    sizeVariance: 0,
     originPx: { x: 0, y: 0 },
     overscanPx: 64,
+    panel: {
+      enabled: false,
+      rectFrac: { x: 0, y: 0, w: 1, h: 1 }
+    },
     fillOpacity: 0.96,
     stroke: { enabled: false, widthPx: 2, color: '#0b0b10', opacity: 0.6, join: 'round' },
     coloring: { paletteMode: 'weighted', colorWeights: [0.34, 0.28, 0.18, 0.12, 0.08] },
-    bevel: { enabled: true, amount: 0.48, lightDeg: 315, variation: 0.15 }
+    bevel: { enabled: true, amount: 0.48, mode: 'convex', lightDeg: 315, variation: 0.15 }
   }
 };
 
