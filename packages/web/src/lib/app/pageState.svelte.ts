@@ -8,6 +8,7 @@ import {
   generateRandomConfigNoPresets,
   generateRandomConfigNoPresetsFromSeed,
   normalizeWallpaperConfig,
+  pruneWallpaperConfigForType,
   exportToPNG,
   exportToJPG,
   exportToWebP,
@@ -799,7 +800,11 @@ export function createPageState() {
   }
 
   function getAppState(): WallpaperAppStateV1 {
-    return buildAppState({ config: state.config, exportFormat: state.exportFormat, renderMode: state.renderMode });
+    return buildAppState({
+      config: pruneWallpaperConfigForType(state.config),
+      exportFormat: state.exportFormat,
+      renderMode: state.renderMode
+    });
   }
 
   function quoteCliArg(value: string): string {

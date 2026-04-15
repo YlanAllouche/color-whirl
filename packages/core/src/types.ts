@@ -4,4 +4,5 @@
 export * from './config/types/index.js';
 export * from './config/defaults.js';
 export * from './config/normalize.js';
+export * from './config/prune.js';
 export * from './config/randomize.js';
