@@ -2,6 +2,8 @@ import type { BaseWallpaperConfig, PaletteAssignMode } from './base.js';
 
 export type SvgRenderMode = 'auto' | 'fill' | 'stroke' | 'fill+stroke';
 
+export type Svg2DLayoutMode = 'scatter' | 'grid';
+
 export type SvgColorMode = 'palette' | 'svg-to-palette';
 
 export interface Svg2DConfig extends BaseWallpaperConfig {
@@ -15,6 +17,8 @@ export interface Svg2DConfig extends BaseWallpaperConfig {
     colorMode: SvgColorMode;
     /** Maximum number of tones extracted when colorMode='svg-to-palette'. */
     maxTones: number;
+    /** How to place instances in 2D space. */
+    mode: Svg2DLayoutMode;
     count: number;
     rMinPx: number;
     rMaxPx: number;

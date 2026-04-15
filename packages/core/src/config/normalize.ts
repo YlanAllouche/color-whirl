@@ -318,6 +318,9 @@ export function normalizeWallpaperConfig(input: any): WallpaperConfig {
         ? Math.max(1, Math.round(cnt))
         : Math.max(1, Math.round(Number(baseSvg?.count) || 0));
       if ((merged as any).type === 'svg2d') {
+        const modeRaw = String(sAny.mode ?? baseSvg?.mode ?? 'scatter');
+        sAny.mode = modeRaw === 'grid' ? 'grid' : 'scatter';
+
         const rMin = Number(sAny.rMinPx);
         const rMax = Number(sAny.rMaxPx);
         sAny.rMinPx = Number.isFinite(rMin) ? Math.max(0, rMin) : Math.max(0, Number(baseSvg?.rMinPx) || 0);

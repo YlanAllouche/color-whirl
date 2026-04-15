@@ -6,11 +6,17 @@ export function generateSvg2DSVG(config: Extract<WallpaperConfig, { type: 'svg2d
   const { width, height, colors, backgroundColor } = config;
   const n = Math.max(1, colors.length);
   const count = Math.max(1, Math.round(Number(config.svg.count) || 0));
+  const layoutMode = config.svg.mode === 'grid' ? 'grid' : 'scatter';
   const rMin = Math.max(0.1, Number(config.svg.rMinPx) || 1);
   const rMax = Math.max(rMin, Number(config.svg.rMaxPx) || rMin);
   let fillOpacity = clamp01(Number(config.svg.fillOpacity) || 0);
   const jitter = clamp01(Number(config.svg.jitter) || 0);
   const rotJ = ((Number(config.svg.rotateJitterDeg) || 0) * Math.PI) / 180;
+
+  const gridCols = Math.max(1, Math.round(Math.sqrt((count * width) / Math.max(1, height))));
+  const gridRows = Math.max(1, Math.ceil(count / gridCols));
+  const cellW = width / gridCols;
+  const cellH = height / gridRows;
 
   validateSvgSource(config.svg.source);
 
@@ -51,10 +57,12 @@ export function generateSvg2DSVG(config: Extract<WallpaperConfig, { type: 'svg2d
 
   for (let i = 0; i < count; i++) {
     const r = rMin + rand01(i, 2) * (rMax - rMin);
-    const cx0 = rand01(i, 3) * width;
-    const cy0 = rand01(i, 4) * height;
-    const cx = cx0 + (rand01(i, 6) - 0.5) * r * 2 * jitter;
-    const cy = cy0 + (rand01(i, 7) - 0.5) * r * 2 * jitter;
+    const cx0 = layoutMode === 'grid' ? ((i % gridCols) + 0.5) * cellW : rand01(i, 3) * width;
+    const cy0 = layoutMode === 'grid' ? (Math.floor(i / gridCols) + 0.5) * cellH : rand01(i, 4) * height;
+    const jitterX = layoutMode === 'grid' ? cellW * 0.8 * jitter : r * 2 * jitter;
+    const jitterY = layoutMode === 'grid' ? cellH * 0.8 * jitter : r * 2 * jitter;
+    const cx = cx0 + (rand01(i, 6) - 0.5) * jitterX;
+    const cy = cy0 + (rand01(i, 7) - 0.5) * jitterY;
     const theta = (rand01(i, 8) - 0.5) * rotJ;
     const rotDeg = (theta * 180) / Math.PI;
 

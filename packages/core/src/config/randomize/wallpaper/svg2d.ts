@@ -16,6 +16,7 @@ export function createSvg2dConfig(context: RandomConfigContext): WallpaperConfig
       renderMode: 'auto',
       colorMode: rng() < 0.12 ? 'svg-to-palette' : 'palette',
       maxTones: Math.max(2, Math.min(12, Math.round(tri(2, 8, 12)))),
+      mode: chance(0.15) ? 'grid' : 'scatter',
       count: chance(0.15) ? 1 : skewCountLow(2, DEFAULT_SVG2D_CONFIG.svg.count, 420, 1600, 0.03),
       rMinPx: Math.round(randomWeighted(6, 40, DEFAULT_SVG2D_CONFIG.svg.rMinPx)),
       rMaxPx: Math.round(randomWeighted(30, 280, DEFAULT_SVG2D_CONFIG.svg.rMaxPx)),

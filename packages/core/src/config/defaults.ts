@@ -464,6 +464,7 @@ export const DEFAULT_SVG2D_CONFIG: Svg2DConfig = {
     renderMode: 'auto',
     colorMode: 'palette',
     maxTones: 8,
+    mode: 'scatter',
     count: 220,
     rMinPx: 18,
     rMaxPx: 150,

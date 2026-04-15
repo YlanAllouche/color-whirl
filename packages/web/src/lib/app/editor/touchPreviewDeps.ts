@@ -348,6 +348,7 @@ export function touchPreviewDeps(config: WallpaperConfig, renderMode: unknown, e
   if (c.type === 'svg2d') {
     void c.svg?.source;
     void c.svg?.renderMode;
+    void c.svg?.mode;
     void c.svg?.colorMode;
     void c.svg?.maxTones;
     void c.svg?.count;

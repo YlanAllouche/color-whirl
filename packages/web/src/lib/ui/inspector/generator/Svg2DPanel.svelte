@@ -32,6 +32,18 @@
   </label>
 
   <label class="control-row">
+    <button type="button" class="setting-title" class:locked={isLocked('svg.mode')} onclick={() => toggleLock('svg.mode')} title="Click to lock/unlock for randomize">Layout</button>
+    <Dropdown
+      bind:value={config.svg.mode}
+      ariaLabel="SVG layout mode"
+      options={[
+        { value: 'scatter', label: 'Scatter' },
+        { value: 'grid', label: 'Grid' }
+      ]}
+    />
+  </label>
+
+  <label class="control-row">
     <button type="button" class="setting-title" class:locked={isLocked('svg.colorMode')} onclick={() => toggleLock('svg.colorMode')} title="Click to lock/unlock for randomize">Colors</button>
     <Dropdown
       bind:value={config.svg.colorMode}

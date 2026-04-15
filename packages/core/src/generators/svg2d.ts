@@ -213,11 +213,17 @@ export function renderSvg2DToCanvas(config: Svg2DConfig, canvas?: HTMLCanvasElem
   });
 
   const count = Math.max(1, Math.round(Number(config.svg.count) || 0));
+  const layoutMode = config.svg.mode === 'grid' ? 'grid' : 'scatter';
   const rMin = Math.max(0.1, Number(config.svg.rMinPx) || 1);
   const rMax = Math.max(rMin, Number(config.svg.rMaxPx) || rMin);
   const jitter = clamp01(Number(config.svg.jitter) || 0);
   const rotJ = ((Number(config.svg.rotateJitterDeg) || 0) * Math.PI) / 180;
   const fillOpacity = doFill ? clamp01(Number(config.svg.fillOpacity) || 0) : 0;
+
+  const gridCols = Math.max(1, Math.round(Math.sqrt((count * c.width) / Math.max(1, c.height))));
+  const gridRows = Math.max(1, Math.ceil(count / gridCols));
+  const cellW = c.width / gridCols;
+  const cellH = c.height / gridRows;
 
   const strokeEnabled = doStroke ? true : !!config.svg.stroke?.enabled;
   const strokeW = Math.max(0, Number(config.svg.stroke?.widthPx) || 0);
@@ -295,13 +301,15 @@ export function renderSvg2DToCanvas(config: Svg2DConfig, canvas?: HTMLCanvasElem
 
   for (let i = 0; i < count; i++) {
     const r0 = rMin + rng() * (rMax - rMin);
-    const x0 = rng() * c.width;
-    const y0 = rng() * c.height;
+    const x0 = layoutMode === 'grid' ? ((i % gridCols) + 0.5) * cellW : rng() * c.width;
+    const y0 = layoutMode === 'grid' ? (Math.floor(i / gridCols) + 0.5) * cellH : rng() * c.height;
     const theta = (rng() - 0.5) * rotJ;
 
     if (colorMode === 'svg-to-palette' && paletteLayers) {
-      const x = x0 + (rng() - 0.5) * r0 * 2 * jitter;
-      const y = y0 + (rng() - 0.5) * r0 * 2 * jitter;
+      const jitterX = layoutMode === 'grid' ? cellW * 0.8 * jitter : r0 * 2 * jitter;
+      const jitterY = layoutMode === 'grid' ? cellH * 0.8 * jitter : r0 * 2 * jitter;
+      const x = x0 + (rng() - 0.5) * jitterX;
+      const y = y0 + (rng() - 0.5) * jitterY;
       for (let ti = 0; ti < paletteLayers.length; ti++) {
         const col = colors[ti % nColors] ?? '#ffffff';
         drawShape(ctx, x, y, r0, theta, col, paletteLayers[ti]);
@@ -315,8 +323,10 @@ export function renderSvg2DToCanvas(config: Svg2DConfig, canvas?: HTMLCanvasElem
     const fill = colors[pi] ?? '#ffffff';
     const sizeMult = sizeMultByIndex[pi] ?? 1;
     const r = r0 * sizeMult;
-    const x = x0 + (rng() - 0.5) * r * 2 * jitter;
-    const y = y0 + (rng() - 0.5) * r * 2 * jitter;
+    const jitterX = layoutMode === 'grid' ? cellW * 0.8 * jitter : r * 2 * jitter;
+    const jitterY = layoutMode === 'grid' ? cellH * 0.8 * jitter : r * 2 * jitter;
+    const x = x0 + (rng() - 0.5) * jitterX;
+    const y = y0 + (rng() - 0.5) * jitterY;
 
     drawShape(ctx, x, y, r, theta, fill);
     {
