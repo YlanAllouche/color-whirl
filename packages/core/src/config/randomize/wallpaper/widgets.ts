@@ -100,7 +100,7 @@ const WIDGET_RANDOMIZE_MAP: Record<string, WidgetRandomizeConfig> = {
     types: ['svg2d']
   },
   svg3d: {
-    paths: ['svg', 'texture', 'textureParams'],
+    paths: ['svg', 'texture', 'textureParams', 'facades.outline'],
     types: ['svg3d']
   },
   triangles2d: {
