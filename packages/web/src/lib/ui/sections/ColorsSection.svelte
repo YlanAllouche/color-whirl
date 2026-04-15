@@ -269,7 +269,7 @@
   function makeHarmonyPalette(): string[] {
     const a = colorToHsv(harmonyAnchorA);
     const b = colorToHsv(harmonyAnchorB);
-    const n = clamp(Math.round(harmonyLength), 2, 24);
+    const n = clamp(Math.round(harmonyLength), 2, 250);
     const out: string[] = [];
     const mode = harmonyMode === 'auto' ? pickAutoHarmonyMode(a, b) : harmonyMode;
     const seedBase = a.h * 0.37 + a.s * 0.11 + b.h * 0.19 + b.v * 0.07 + n * 13.0;
@@ -554,10 +554,10 @@
       <input
         type="number"
         min="2"
-        max="24"
+        max="250"
         value={harmonyLength}
         oninput={(e) => {
-          harmonyLength = clamp(Number((e.currentTarget as HTMLInputElement).value || 2), 2, 24);
+          harmonyLength = clamp(Number((e.currentTarget as HTMLInputElement).value || 2), 2, 250);
         }}
       />
     </label>

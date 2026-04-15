@@ -66,12 +66,12 @@
       <input
         type="number"
         min="2"
-        max="24"
+        max="250"
         value={paletteRandomizeHueBetweenSteps ?? ''}
         placeholder="Palette length"
         oninput={(event) => {
           const raw = Number((event.currentTarget as HTMLInputElement).value);
-          paletteRandomizeHueBetweenSteps = Number.isFinite(raw) && raw >= 2 ? Math.round(raw) : null;
+          paletteRandomizeHueBetweenSteps = Number.isFinite(raw) && raw >= 2 ? Math.min(250, Math.round(raw)) : null;
         }}
       />
     </label>

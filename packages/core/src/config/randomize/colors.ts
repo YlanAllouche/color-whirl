@@ -133,7 +133,7 @@ function buildHueBetweenPalette(input: {
 
   const a = rgbToHsl(aRgb);
   const b = rgbToHsl(bRgb);
-  const steps = Math.max(2, Math.min(96, Math.round(Number(input.steps) || count)));
+  const steps = Math.max(2, Math.min(250, Math.round(Number(input.steps) || count)));
 
   const ramp: string[] = [];
   const hueDelta = shortestHueDelta(a.h, b.h);
