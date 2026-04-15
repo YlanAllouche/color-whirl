@@ -518,8 +518,8 @@ export function createSvg3DScene(
   };
 
   // Instanced meshes per palette index for fill and/or stroke.
-  const perColorFill: Array<{ idx: number; inst: THREE.InstancedMesh; mat: THREE.Material; count: number }> = [];
-  const perColorStroke: Array<{ idx: number; inst: THREE.InstancedMesh; mat: THREE.Material; count: number }> = [];
+  const perColorFill: Array<{ idx: number; paletteIndex: number; inst: THREE.InstancedMesh; mat: THREE.Material; count: number }> = [];
+  const perColorStroke: Array<{ idx: number; paletteIndex: number; inst: THREE.InstancedMesh; mat: THREE.Material; count: number }> = [];
 
   if (toneGeometries && toneGeometries.length > 0 && fillOpacity > 0) {
     // One instanced mesh per tone, colored by palette index.
@@ -534,7 +534,7 @@ export function createSvg3DScene(
       inst.receiveShadow = useShadows;
       scene.add(inst);
       // Store in perColorFill as a generic bucket list (idx is tone index).
-      perColorFill.push({ idx: ti, inst, mat, count });
+      perColorFill.push({ idx: ti, paletteIndex: pi, inst, mat, count });
     }
   } else if (geometryFill && fillOpacity > 0) {
     for (let pi = 0; pi < nColors; pi++) {
@@ -542,7 +542,7 @@ export function createSvg3DScene(
       const anyMat: any = mat as any;
       if (typeof anyMat.side === 'number') anyMat.side = THREE.DoubleSide;
       const inst = new THREE.InstancedMesh(geometryFill, mat, count);
-      perColorFill.push({ idx: pi, inst, mat, count: 0 });
+      perColorFill.push({ idx: pi, paletteIndex: pi, inst, mat, count: 0 });
       inst.castShadow = useShadows;
       inst.receiveShadow = useShadows;
       scene.add(inst);
@@ -555,7 +555,7 @@ export function createSvg3DScene(
       const anyMat: any = mat as any;
       if (typeof anyMat.side === 'number') anyMat.side = THREE.DoubleSide;
       const inst = new THREE.InstancedMesh(geometryStroke, mat, count);
-      perColorStroke.push({ idx: pi, inst, mat, count: 0 });
+      perColorStroke.push({ idx: pi, paletteIndex: pi, inst, mat, count: 0 });
       inst.castShadow = useShadows;
       inst.receiveShadow = useShadows;
       scene.add(inst);
@@ -613,6 +613,51 @@ export function createSvg3DScene(
   for (const it of perColorStroke) {
     it.inst.count = it.count;
     it.inst.instanceMatrix.needsUpdate = true;
+  }
+
+  // Outline (optional)
+  {
+    const outlineMats = new Map<string, THREE.MeshBasicMaterial>();
+    const addBucketOutline = (bucket: { paletteIndex: number; inst: THREE.InstancedMesh }) => {
+      if (!bucket?.inst || bucket.inst.count <= 0) return;
+
+      const oc = resolvePaletteConfig(config as any, bucket.paletteIndex).facades.outline;
+      if (!oc?.enabled) return;
+
+      const opacity = clamp01(Number(oc.opacity) || 1);
+      const thickness = Math.max(0, Math.min(0.2, Number(oc.thickness) || 0));
+      if (!(thickness > 0) || opacity <= 0) return;
+
+      const matKey = `${String(oc.color)}:${opacity.toFixed(4)}`;
+      let outlineMat = outlineMats.get(matKey);
+      if (!outlineMat) {
+        outlineMat = new THREE.MeshBasicMaterial({
+          color: new THREE.Color(oc.color),
+          side: THREE.BackSide,
+          transparent: opacity < 1,
+          opacity,
+          depthWrite: false
+        });
+        outlineMats.set(matKey, outlineMat);
+      }
+
+      const outInst = new THREE.InstancedMesh(bucket.inst.geometry, outlineMat, bucket.inst.count);
+      outInst.castShadow = false;
+      outInst.receiveShadow = false;
+      const s = new THREE.Vector3(1 + thickness, 1 + thickness, 1 + thickness);
+      for (let j = 0; j < bucket.inst.count; j++) {
+        bucket.inst.getMatrixAt(j, tmpMat);
+        tmpMat.scale(s);
+        outInst.setMatrixAt(j, tmpMat);
+      }
+      outInst.instanceMatrix.needsUpdate = true;
+      outInst.computeBoundingBox();
+      outInst.computeBoundingSphere();
+      scene.add(outInst);
+    };
+
+    for (const it of perColorFill) addBucketOutline(it);
+    for (const it of perColorStroke) addBucketOutline(it);
   }
 
   // SVG coordinates are Y-down; flip for three's Y-up.

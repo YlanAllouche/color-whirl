@@ -33,7 +33,7 @@
 
   let { config, isLocked, toggleLock, renderError, schedulePreviewRender, setEqualWeights, setRandomWeights, updateWeight }: Props = $props();
 
-  let supportsOutlineOnly = $derived(config.type === 'spheres3d' || config.type === 'triangles3d');
+  let supportsOutlineOnly = $derived(config.type === 'spheres3d' || config.type === 'triangles3d' || config.type === 'svg3d');
 </script>
 
 {#if config.type === 'popsicle'}

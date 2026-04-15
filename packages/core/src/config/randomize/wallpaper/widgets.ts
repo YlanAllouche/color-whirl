@@ -45,7 +45,7 @@ const WIDGET_RANDOMIZE_MAP: Record<string, WidgetRandomizeConfig> = {
   },
   outline: {
     paths: ['facades.outline'],
-    types: ['spheres3d', 'triangles3d']
+    types: ['spheres3d', 'triangles3d', 'svg3d']
   },
   bubbles: {
     paths: ['bubbles'],
