@@ -261,7 +261,7 @@
     <div class="icon-picker-toolbar">
       <label class="control-row icon-search-row">
         <span class="setting-title">Search</span>
-        <input type="text" bind:value={search} placeholder="e.g. arch" />
+        <input type="text" bind:value={search} placeholder="e.g. circle" />
       </label>
       <button type="button" class="icon-expand" onclick={openExpanded} title="Open larger icon picker">
         Expand
@@ -357,7 +357,7 @@
       <div class="dialog-body">
         <label class="control-row icon-search-row">
           <span class="setting-title">Search</span>
-          <input bind:this={expandedSearchEl} type="text" bind:value={search} placeholder="e.g. arch" />
+          <input bind:this={expandedSearchEl} type="text" bind:value={search} placeholder="e.g. circle" />
         </label>
 
         <div class="icon-provider-filters" aria-label="Icon provider filters">

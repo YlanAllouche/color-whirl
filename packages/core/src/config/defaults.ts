@@ -454,7 +454,7 @@ export const DEFAULT_DIAMONDGRID2D_CONFIG: DiamondGrid2DConfig = {
 };
 
 export const DEFAULT_SVG_SOURCE =
-  `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-app-window-icon lucide-app-window"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M10 4v4"/><path d="M2 8h20"/><path d="M6 4v4"/></svg>`;
+  `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 32 32"><path fill="currentColor" d="M4.14 15.39a8.06 8.06 0 0 1-2.2-4.043A6.79 6.79 0 0 1 4.198 5.47a6.73 6.73 0 0 1 8.727-.213l1.26-1.464a8.65 8.65 0 0 0-11.277.232A8.73 8.73 0 0 0 .068 11.6a10.17 10.17 0 0 0 2.793 5.275z" class="ouiIcon__fillSecondary"/><path fill="currentColor" d="M15.515 31.274L4.548 18.454L15.855 4.763a8.67 8.67 0 0 1 12.266-.746a8.73 8.73 0 0 1 2.91 7.205c-.243 2.695-2.037 4.732-3.482 6.37zm-8.427-12.82l8.427 9.862l10.55-11.995c1.32-1.503 2.822-3.21 3.007-5.265a6.79 6.79 0 0 0-2.24-5.586a6.73 6.73 0 0 0-9.504.563z"/></svg>`;
 
 export const DEFAULT_SVG2D_CONFIG: Svg2DConfig = {
   ...DEFAULT_POPSICLE_CONFIG,
@@ -470,7 +470,7 @@ export const DEFAULT_SVG2D_CONFIG: Svg2DConfig = {
     jitter: 1.0,
     rotateJitterDeg: 180,
     fillOpacity: 0.95,
-    // Default stroke-on helps outline icons (Lucide etc.) read correctly under auto mode.
+    // Default stroke-on helps outlined icons read correctly under auto mode.
     stroke: { enabled: true, widthPx: 2, color: '#0b0b10', opacity: 0.7 },
     paletteMode: 'weighted',
     colorWeights: [0.34, 0.28, 0.18, 0.12, 0.08]
