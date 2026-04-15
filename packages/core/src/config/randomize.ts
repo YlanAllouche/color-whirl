@@ -7,3 +7,11 @@ export { generateRandomColorTheme, generateRandomColorThemeFromSeed } from './ra
 
 export type { RandomizationProfile, RandomizeWallpaperOptions } from './randomize/wallpaper/index.js';
 export { generateRandomConfigNoPresets, generateRandomConfigNoPresetsFromSeed } from './randomize/wallpaper/index.js';
+
+export type { RandomizeWidgetId } from './randomize/wallpaper/widgets.js';
+export {
+  applyRandomizedWidgetPaths,
+  getRandomizeWidgetIdsForType,
+  getRandomizeWidgetPaths,
+  isRandomizeWidgetSupported
+} from './randomize/wallpaper/widgets.js';
