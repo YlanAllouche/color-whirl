@@ -42,8 +42,8 @@
     applySelectedColorPreset,
     updateColor,
     replaceColors,
-    moveColor,
-    removeColor,
+    moveColor: moveColorAction,
+    removeColor: removeColorAction,
     addColor,
     togglePaletteOverride,
     updatePaletteOverride,
@@ -178,6 +178,24 @@
     openOverrideByIndex = { ...openOverrideByIndex, [index]: !openOverrideByIndex[index] };
   }
 
+  function hasOverride(index: number): boolean {
+    return !!(config as any).palette?.overrides?.[index];
+  }
+
+  function overrideActionLabel(index: number): string {
+    if (openOverrideByIndex[index]) return 'Hide override';
+    return hasOverride(index) ? 'Edit override' : 'Add override';
+  }
+
+  function toggleOverrideEditorWithCreate(index: number) {
+    if (openOverrideByIndex[index]) {
+      toggleOverrideEditor(index);
+      return;
+    }
+    if (!hasOverride(index)) togglePaletteOverride(index);
+    openOverrideByIndex = { ...openOverrideByIndex, [index]: true };
+  }
+
   function getOverrideStatus(index: number): { label: string; active: boolean } {
     const ov = (config as any).palette?.overrides?.[index] as any;
     if (!ov) return { label: 'No override', active: false };
@@ -283,12 +301,43 @@
     dragFromIndex = -1;
     dragOverIndex = -1;
     if (from < 0 || from === index) return;
-    moveColor(from, index);
+    moveColorWithEditors(from, index);
   }
 
   function handleDragEnd() {
     dragFromIndex = -1;
     dragOverIndex = -1;
+  }
+
+  function remapOpenEditors(mapper: (index: number) => number | null) {
+    const next: Record<number, boolean> = {};
+    for (const [key, isOpen] of Object.entries(openOverrideByIndex)) {
+      if (!isOpen) continue;
+      const mapped = mapper(Number(key));
+      if (mapped === null || mapped < 0) continue;
+      next[mapped] = true;
+    }
+    openOverrideByIndex = next;
+  }
+
+  function removeColorWithEditors(index: number) {
+    if (config.colors.length <= 1) return;
+    removeColorAction(index);
+    remapOpenEditors((openIndex) => {
+      if (openIndex === index) return null;
+      if (openIndex > index) return openIndex - 1;
+      return openIndex;
+    });
+  }
+
+  function moveColorWithEditors(from: number, to: number) {
+    moveColorAction(from, to);
+    remapOpenEditors((openIndex) => {
+      if (openIndex === from) return to;
+      if (from < to && openIndex > from && openIndex <= to) return openIndex - 1;
+      if (from > to && openIndex >= to && openIndex < from) return openIndex + 1;
+      return openIndex;
+    });
   }
 </script>
 
@@ -454,10 +503,10 @@
         <div class="palette-item-actions">
           <button type="button" class="palette-nav" onclick={() => copyHex(color)}>Copy hex</button>
           <button type="button" class="palette-nav" onclick={() => swapColorWithBackground(i)}>Swap BG</button>
-          <button type="button" class="palette-nav" onclick={() => toggleOverrideEditor(i)}>
-            {openOverrideByIndex[i] ? 'Hide override' : 'Override'}
+          <button type="button" class="palette-nav" onclick={() => toggleOverrideEditorWithCreate(i)}>
+            {overrideActionLabel(i)}
           </button>
-          <button class="remove-btn" onclick={() => removeColor(i)} disabled={config.colors.length <= 1}>×</button>
+          <button class="remove-btn" onclick={() => removeColorWithEditors(i)} disabled={config.colors.length <= 1}>×</button>
         </div>
 
         {#if openOverrideByIndex[i]}
