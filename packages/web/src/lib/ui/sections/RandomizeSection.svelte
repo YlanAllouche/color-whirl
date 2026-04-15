@@ -55,6 +55,11 @@
     <Dropdown bind:value={paletteRandomizeScheme} options={paletteSchemeOptions} ariaLabel="Palette randomization scheme" />
   </label>
 
+  <div class="control-row">
+    <span class="setting-title">Mode intent</span>
+    <span class="setting-hint">Stochastic, seed-based, lock-aware randomization</span>
+  </div>
+
   {#if paletteRandomizeScheme === 'hue-between'}
     <label class="control-row">
       <span class="setting-title">Hue-between steps</span>
@@ -76,21 +81,21 @@
     <button
       type="button"
       onclick={generateRandomColorsOnly}
-      title="Randomize only palette and background using the selected palette scheme"
+      title="Randomize palette/background using the selected scheme; respects locks"
     >
       colors
     </button>
     <button
       type="button"
       onclick={generateRandomGeneratedColors}
-      title="Randomize current generator using selected camera profile and palette scheme"
+      title="Randomize current generator using selected profile and palette scheme; respects locks"
     >
       current
     </button>
     <button
       type="button"
       onclick={generateRandomIncludingType}
-      title="Randomize all settings and generator type using selected camera profile and palette scheme"
+      title="Randomize all settings and generator type using selected profile and palette scheme; respects locks"
     >
       all
     </button>
