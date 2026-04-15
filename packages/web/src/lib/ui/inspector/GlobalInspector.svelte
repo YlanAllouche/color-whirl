@@ -11,6 +11,7 @@
   import CliSection from '$lib/ui/sections/CliSection.svelte';
 
   type ExportFormat = 'png' | 'jpg' | 'webp' | 'svg';
+  type RandomizationProfile = 'safe' | 'exploratory';
 
   type Props = {
     config: WallpaperConfig;
@@ -22,6 +23,7 @@
 
     generateRandomGeneratedColors: () => void;
     generateRandomIncludingType: () => void;
+    randomizationProfile: RandomizationProfile;
     switchType: (nextType: any) => void;
 
     isLocked: (path: string) => boolean;
@@ -49,6 +51,7 @@
     schedulePreviewRender,
     generateRandomGeneratedColors,
     generateRandomIncludingType,
+    randomizationProfile = $bindable('safe'),
     switchType,
     isLocked,
     toggleLock,
@@ -75,7 +78,7 @@
     showSearch={false}
     showColumnsToggle={false}
   >
-    <RandomizeSection {generateRandomGeneratedColors} {generateRandomIncludingType} />
+    <RandomizeSection {generateRandomGeneratedColors} {generateRandomIncludingType} bind:randomizationProfile />
     <TypeSection {config} {switchType} />
     {#if is3DType || supportsBloom}
       <RenderSection {config} {is3DType} {supportsBloom} {isLocked} {toggleLock} bind:renderMode />

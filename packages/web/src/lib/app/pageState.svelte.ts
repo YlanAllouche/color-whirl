@@ -56,6 +56,7 @@ import {
 
 type WeightTarget = 'spheres' | 'circles' | 'polygons' | 'triangles2d' | 'prisms' | 'hexgrid' | 'ridges' | 'svg' | 'bands' | 'flowlines' | 'diamondgrid';
 type ExportFormat = 'png' | 'jpg' | 'webp' | 'svg';
+type RandomizationProfile = 'safe' | 'exploratory';
 
 const RENDER_SETTLE_MS = 280;
 const SETTINGS_MAXIMIZED_KEY = 'ui.layout.settingsMaximized';
@@ -82,7 +83,8 @@ export function createPageState() {
     cliCommand: '',
     cliViewMode: 'bash' as 'bash' | 'json',
     locks: {} as LockMap,
-    selectedColorPresetId: COLOR_PRESETS[0]?.id ?? ''
+    selectedColorPresetId: COLOR_PRESETS[0]?.id ?? '',
+    randomizationProfile: 'safe' as RandomizationProfile
   });
 
   let camDragPointerId = -1;
@@ -484,7 +486,9 @@ export function createPageState() {
 
   function generateRandomGeneratedColors() {
     const seed = randomSeedU32();
-    state.config = mergeWithLocks(generateRandomConfigNoPresetsFromSeed(seed, state.config.type) as any) as WallpaperConfig;
+    state.config = mergeWithLocks(
+      (generateRandomConfigNoPresetsFromSeed as any)(seed, state.config.type, { profile: state.randomizationProfile }) as any
+    ) as WallpaperConfig;
     schedulePreviewRender();
   }
 
@@ -510,7 +514,9 @@ export function createPageState() {
     if (types.length > 1 && nextType === currentType) {
       nextType = types[(types.indexOf(nextType) + 1) % types.length] ?? nextType;
     }
-    state.config = mergeWithLocks(generateRandomConfigNoPresetsFromSeed(seed, nextType) as any) as WallpaperConfig;
+    state.config = mergeWithLocks(
+      (generateRandomConfigNoPresetsFromSeed as any)(seed, nextType, { profile: state.randomizationProfile }) as any
+    ) as WallpaperConfig;
     schedulePreviewRender();
   }
 
@@ -738,13 +744,13 @@ export function createPageState() {
           state.exportFormat = stateFromUrl.f;
           state.renderMode = stateFromUrl.m;
         } else {
-          state.config = generateRandomConfigNoPresets() as WallpaperConfig;
+          state.config = (generateRandomConfigNoPresets as any)({ profile: state.randomizationProfile }) as WallpaperConfig;
         }
       } else {
-        state.config = generateRandomConfigNoPresets() as WallpaperConfig;
+        state.config = (generateRandomConfigNoPresets as any)({ profile: state.randomizationProfile }) as WallpaperConfig;
       }
     } catch {
-      state.config = generateRandomConfigNoPresets() as WallpaperConfig;
+      state.config = (generateRandomConfigNoPresets as any)({ profile: state.randomizationProfile }) as WallpaperConfig;
     }
 
     state.urlSyncEnabled = true;

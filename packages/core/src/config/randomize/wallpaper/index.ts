@@ -15,14 +15,24 @@ import { createSvg3dConfig } from './svg3d.js';
 import { createTriangles2dConfig } from './triangles2d.js';
 import { createTriangles3dConfig } from './triangles3d.js';
 
+export type RandomizationProfile = 'safe' | 'exploratory';
+
+export type RandomizeWallpaperOptions = {
+  profile?: RandomizationProfile;
+};
+
 /** Generate a random wallpaper configuration, including colors, without using presets. */
-export function generateRandomConfigNoPresets(): WallpaperConfig {
+export function generateRandomConfigNoPresets(options?: RandomizeWallpaperOptions): WallpaperConfig {
   const seed = Math.floor(Math.random() * 0xffffffff) >>> 0;
-  return generateRandomConfigNoPresetsFromSeed(seed, 'popsicle');
+  return generateRandomConfigNoPresetsFromSeed(seed, 'popsicle', options);
 }
 
-export function generateRandomConfigNoPresetsFromSeed(seed: number, type: WallpaperType = 'popsicle'): WallpaperConfig {
-  const context = createRandomConfigContext(seed, type);
+export function generateRandomConfigNoPresetsFromSeed(
+  seed: number,
+  type: WallpaperType = 'popsicle',
+  options?: RandomizeWallpaperOptions
+): WallpaperConfig {
+  const context = createRandomConfigContext(seed, type, options);
 
   switch (type) {
     case 'spheres3d':

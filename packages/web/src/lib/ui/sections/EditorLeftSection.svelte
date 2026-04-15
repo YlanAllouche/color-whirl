@@ -5,6 +5,7 @@
   import GlobalInspector from '$lib/ui/inspector/GlobalInspector.svelte';
 
   type ExportFormat = 'png' | 'jpg' | 'webp' | 'svg';
+  type RandomizationProfile = 'safe' | 'exploratory';
 
   type Props = {
     config: WallpaperConfig;
@@ -15,6 +16,7 @@
     schedulePreviewRender: () => void;
     generateRandomGeneratedColors: () => void;
     generateRandomIncludingType: () => void;
+    randomizationProfile: RandomizationProfile;
     switchType: (nextType: any) => void;
     isLocked: (path: string) => boolean;
     toggleLock: (path: string) => void;
@@ -37,6 +39,7 @@
     schedulePreviewRender,
     generateRandomGeneratedColors,
     generateRandomIncludingType,
+    randomizationProfile = $bindable('safe'),
     switchType,
     isLocked,
     toggleLock,
@@ -60,6 +63,7 @@
   {schedulePreviewRender}
   {generateRandomGeneratedColors}
   {generateRandomIncludingType}
+  bind:randomizationProfile
   {switchType}
   {isLocked}
   {toggleLock}

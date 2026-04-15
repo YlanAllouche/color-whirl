@@ -18,6 +18,7 @@
   import ExportSection from '$lib/ui/sections/ExportSection.svelte';
 
   type ExportFormat = 'png' | 'jpg' | 'webp' | 'svg';
+  type RandomizationProfile = 'safe' | 'exploratory';
 
   type Props = {
     config: WallpaperConfig;
@@ -35,6 +36,7 @@
 
     generateRandomGeneratedColors: () => void;
     generateRandomIncludingType: () => void;
+    randomizationProfile: RandomizationProfile;
     switchType: (nextType: any) => void;
 
     colorPresetGroups: Array<{ group: string; presets: ColorPreset[] }>;
@@ -87,6 +89,7 @@
     toggleLock,
     generateRandomGeneratedColors,
     generateRandomIncludingType,
+    randomizationProfile = $bindable('safe'),
     switchType,
     colorPresetGroups,
     selectedColorPreset,
@@ -124,7 +127,7 @@
   </div>
 
   <div class="sidebar-content">
-    <RandomizeSection {generateRandomGeneratedColors} {generateRandomIncludingType} />
+    <RandomizeSection {generateRandomGeneratedColors} {generateRandomIncludingType} bind:randomizationProfile />
 
     <TypeSection {config} {switchType} />
 

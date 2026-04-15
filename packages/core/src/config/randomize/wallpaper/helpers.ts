@@ -9,6 +9,8 @@ import type { RNG } from '../rng.js';
 import { createRng, randomTriangular, randomWeighted } from '../rng.js';
 import { clamp, deepMerge } from '../utils.js';
 
+import type { RandomizeWallpaperOptions } from './index.js';
+
 export type RandomConfigContext = {
   base: BaseWallpaperConfig;
   rng: RNG;
@@ -21,10 +23,13 @@ export type RandomConfigContext = {
   randomStickOpacity: () => number;
   skewCountLow: (min: number, normal: number, softMax: number, hardMax: number, tailChance?: number) => number;
   is3DType: boolean;
+  profile: 'safe' | 'exploratory';
 };
 
-export function createRandomConfigContext(seed: number, type: WallpaperType): RandomConfigContext {
+export function createRandomConfigContext(seed: number, type: WallpaperType, options?: RandomizeWallpaperOptions): RandomConfigContext {
   const rng = createRng(seed);
+  const profile = options?.profile === 'exploratory' ? 'exploratory' : 'safe';
+  const isExploratory = profile === 'exploratory';
 
   const theme = generateRandomColorThemeFromSeed(seed ^ 0x9e3779b9, 5);
 
@@ -84,6 +89,40 @@ export function createRandomConfigContext(seed: number, type: WallpaperType): Ra
     collisionsMode === 'carve' && collisionsEdge === 'soft'
       ? Math.round(tri(0, DEFAULT_POPSICLE_CONFIG.collisions.carve.featherPx, 16))
       : 0;
+
+  const cameraMode: 'auto' | 'manual' = is3DType && chance(isExploratory ? 0.35 : 0.08) ? 'manual' : 'auto';
+  const cameraPadding = isExploratory
+    ? clamp(tri(0.6, DEFAULT_POPSICLE_CONFIG.camera.padding, 0.995), 0.5, 0.999)
+    : clamp(tri(0.82, DEFAULT_POPSICLE_CONFIG.camera.padding, 0.99), 0.5, 0.999);
+  const cameraDistance = isExploratory
+    ? tri(4, DEFAULT_POPSICLE_CONFIG.camera.distance, 65)
+    : tri(5, DEFAULT_POPSICLE_CONFIG.camera.distance, 50);
+
+  const cameraZoom = cameraMode === 'manual'
+    ? isExploratory
+      ? clamp(randomWeighted(rng, 0.2, 8.0, 1.6), 0.01, 80)
+      : clamp(randomWeighted(rng, 0.7, 2.2, 1.15), 0.01, 80)
+    : DEFAULT_POPSICLE_CONFIG.camera.zoom;
+  const cameraPanX = cameraMode === 'manual'
+    ? isExploratory
+      ? randomWeighted(rng, -4.0, 4.0, 0)
+      : randomWeighted(rng, -1.2, 1.2, 0)
+    : DEFAULT_POPSICLE_CONFIG.camera.panX;
+  const cameraPanY = cameraMode === 'manual'
+    ? isExploratory
+      ? randomWeighted(rng, -4.0, 4.0, 0)
+      : randomWeighted(rng, -1.2, 1.2, 0)
+    : DEFAULT_POPSICLE_CONFIG.camera.panY;
+  const cameraNear = cameraMode === 'manual'
+    ? isExploratory
+      ? clamp(tri(0.001, 0.04, 1.2), 0.001, 10000)
+      : clamp(tri(0.001, 0.02, 0.35), 0.001, 10000)
+    : DEFAULT_POPSICLE_CONFIG.camera.near;
+  const cameraFar = cameraMode === 'manual'
+    ? isExploratory
+      ? Math.max(cameraNear + 0.001, tri(150, 1200, 8000))
+      : Math.max(cameraNear + 0.001, tri(300, 1200, 4000))
+    : DEFAULT_POPSICLE_CONFIG.camera.far;
 
   const base: BaseWallpaperConfig = {
     type,
@@ -295,16 +334,16 @@ export function createRandomConfigContext(seed: number, type: WallpaperType): Ra
       ambientIntensity: tri(0.0, DEFAULT_POPSICLE_CONFIG.lighting.ambientIntensity, 1.0)
     },
     camera: {
-      mode: 'auto',
-      padding: DEFAULT_POPSICLE_CONFIG.camera.padding,
-      distance: tri(5, DEFAULT_POPSICLE_CONFIG.camera.distance, 50),
-      zoom: DEFAULT_POPSICLE_CONFIG.camera.zoom,
-      panX: DEFAULT_POPSICLE_CONFIG.camera.panX,
-      panY: DEFAULT_POPSICLE_CONFIG.camera.panY,
+      mode: cameraMode,
+      padding: cameraPadding,
+      distance: cameraDistance,
+      zoom: cameraZoom,
+      panX: cameraPanX,
+      panY: cameraPanY,
       azimuth: tri(0, DEFAULT_POPSICLE_CONFIG.camera.azimuth, 360),
       elevation: tri(-80, DEFAULT_POPSICLE_CONFIG.camera.elevation, 80),
-      near: DEFAULT_POPSICLE_CONFIG.camera.near,
-      far: DEFAULT_POPSICLE_CONFIG.camera.far
+      near: cameraNear,
+      far: cameraFar
     },
     environment: {
       enabled: chance(0.85),
@@ -471,6 +510,7 @@ export function createRandomConfigContext(seed: number, type: WallpaperType): Ra
     randomWeighted: randomWeightedValue,
     randomStickOpacity,
     skewCountLow,
-    is3DType
+    is3DType,
+    profile
   };
 }

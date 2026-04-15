@@ -37,6 +37,7 @@
       schedulePreviewRender={actions.schedulePreviewRender}
       generateRandomGeneratedColors={actions.generateRandomGeneratedColors}
       generateRandomIncludingType={actions.generateRandomIncludingType}
+      bind:randomizationProfile={state.randomizationProfile}
       switchType={actions.switchType}
       isLocked={actions.isLocked}
       toggleLock={actions.toggleLock}
