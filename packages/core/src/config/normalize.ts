@@ -109,6 +109,44 @@ export function normalizeWallpaperConfig(input: any): WallpaperConfig {
   if (!Number.isFinite(Number(merged.collisions?.carve?.marginPx))) merged.collisions.carve.marginPx = 0;
   if (!Number.isFinite(Number(merged.collisions?.carve?.featherPx))) merged.collisions.carve.featherPx = 0;
 
+  // Camera config validation.
+  const baseCamera: any = (base as any).camera;
+  const cameraAny: any = (merged as any).camera;
+  if (!cameraAny || typeof cameraAny !== 'object') {
+    (merged as any).camera = cloneJson(baseCamera);
+  } else {
+    const modeRaw = String(cameraAny.mode ?? baseCamera?.mode ?? 'auto');
+    cameraAny.mode = modeRaw === 'manual' ? 'manual' : 'auto';
+
+    const padding = Number(cameraAny.padding);
+    cameraAny.padding = Number.isFinite(padding) ? clamp(padding, 0.5, 0.999) : clamp(Number(baseCamera?.padding) || 0.92, 0.5, 0.999);
+
+    const distance = Number(cameraAny.distance);
+    cameraAny.distance = Number.isFinite(distance) ? clamp(distance, 0.01, 200) : clamp(Number(baseCamera?.distance) || 17.3, 0.01, 200);
+
+    const zoom = Number(cameraAny.zoom);
+    cameraAny.zoom = Number.isFinite(zoom) ? clamp(zoom, 0.01, 20) : clamp(Number(baseCamera?.zoom) || 1, 0.01, 20);
+
+    const panX = Number(cameraAny.panX);
+    cameraAny.panX = Number.isFinite(panX) ? clamp(panX, -100, 100) : clamp(Number(baseCamera?.panX) || 0, -100, 100);
+
+    const panY = Number(cameraAny.panY);
+    cameraAny.panY = Number.isFinite(panY) ? clamp(panY, -100, 100) : clamp(Number(baseCamera?.panY) || 0, -100, 100);
+
+    const azimuth = Number(cameraAny.azimuth);
+    cameraAny.azimuth = Number.isFinite(azimuth) ? azimuth : Number(baseCamera?.azimuth) || 45;
+
+    const elevation = Number(cameraAny.elevation);
+    cameraAny.elevation = Number.isFinite(elevation) ? clamp(elevation, -80, 80) : clamp(Number(baseCamera?.elevation) || 35.3, -80, 80);
+
+    const near = Number(cameraAny.near);
+    cameraAny.near = Number.isFinite(near) ? clamp(near, 0.001, 10000) : clamp(Number(baseCamera?.near) || 0.001, 0.001, 10000);
+
+    const far = Number(cameraAny.far);
+    const rawFar = Number.isFinite(far) ? clamp(far, 0.01, 100000) : clamp(Number(baseCamera?.far) || 1000, 0.01, 100000);
+    cameraAny.far = Math.max(cameraAny.near + 0.001, rawFar);
+  }
+
   // Edge config validation.
   if (typeof (merged as any).edge?.hollow !== 'boolean') {
     (merged as any).edge = { ...(merged as any).edge, hollow: !!(merged as any).edge?.hollow };

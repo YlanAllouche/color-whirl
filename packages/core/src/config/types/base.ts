@@ -323,12 +323,25 @@ export interface CollisionsConfig {
 }
 
 export interface CameraConfig {
+  mode: 'auto' | 'manual';
+  /** 0.5..0.999: content viewport occupancy used by Auto mode and Fit action */
+  padding: number;
   /** Distance from origin in scene units */
   distance: number;
+  /** Manual orthographic zoom multiplier */
+  zoom: number;
+  /** Manual pan in camera-plane units (X) */
+  panX: number;
+  /** Manual pan in camera-plane units (Y) */
+  panY: number;
   /** Rotation around the Y axis, in degrees */
   azimuth: number;
   /** Rotation above/below the horizon, in degrees */
   elevation: number;
+  /** Manual near plane */
+  near: number;
+  /** Manual far plane */
+  far: number;
 }
 
 export interface LightingConfig {

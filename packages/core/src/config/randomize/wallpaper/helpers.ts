@@ -295,9 +295,16 @@ export function createRandomConfigContext(seed: number, type: WallpaperType): Ra
       ambientIntensity: tri(0.0, DEFAULT_POPSICLE_CONFIG.lighting.ambientIntensity, 1.0)
     },
     camera: {
+      mode: 'auto',
+      padding: DEFAULT_POPSICLE_CONFIG.camera.padding,
       distance: tri(5, DEFAULT_POPSICLE_CONFIG.camera.distance, 50),
+      zoom: DEFAULT_POPSICLE_CONFIG.camera.zoom,
+      panX: DEFAULT_POPSICLE_CONFIG.camera.panX,
+      panY: DEFAULT_POPSICLE_CONFIG.camera.panY,
       azimuth: tri(0, DEFAULT_POPSICLE_CONFIG.camera.azimuth, 360),
-      elevation: tri(-80, DEFAULT_POPSICLE_CONFIG.camera.elevation, 80)
+      elevation: tri(-80, DEFAULT_POPSICLE_CONFIG.camera.elevation, 80),
+      near: DEFAULT_POPSICLE_CONFIG.camera.near,
+      far: DEFAULT_POPSICLE_CONFIG.camera.far
     },
     environment: {
       enabled: chance(0.85),

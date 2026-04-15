@@ -154,10 +154,17 @@ export const DEFAULT_POPSICLE_CONFIG: PopsicleConfig = {
     ambientIntensity: 0.3
   },
   camera: {
+    mode: 'auto',
+    padding: 0.92,
     // Roughly matches the previous hard-coded (10, 10, 10) isometric camera.
     distance: 17.3,
+    zoom: 1,
+    panX: 0,
+    panY: 0,
     azimuth: 45,
-    elevation: 35.3
+    elevation: 35.3,
+    near: 0.001,
+    far: 1000
   },
   environment: {
     enabled: true,
