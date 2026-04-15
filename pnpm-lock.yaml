@@ -46,6 +46,9 @@ importers:
         specifier: ^0.9.5
         version: 0.9.8(three@0.180.0)
     devDependencies:
+      '@types/node':
+        specifier: ^22.15.17
+        version: 22.19.17
       '@types/three':
         specifier: ^0.160.0
         version: 0.160.0
@@ -798,6 +801,12 @@ packages:
     resolution: {integrity: sha512-Uarfe6J91b9HAUXxjvSOdiO2UPOKLm07Q1oh0JHxoZ1y8HoqxDAu3gVrsrOHeiio0kSsoVBt4wFrKOm0dKxVPQ==}
     dependencies:
       undici-types: 6.21.0
+
+  /@types/node@22.19.17:
+    resolution: {integrity: sha512-wGdMcf+vPYM6jikpS/qhg6WiqSV/OhG+jeeHT/KlVqxYfD40iYJf9/AE1uQxVWFvU7MipKRkRv8NSHiCGgPr8Q==}
+    dependencies:
+      undici-types: 6.21.0
+    dev: true
 
   /@types/pug@2.0.10:
     resolution: {integrity: sha512-Sk/uYFOBAB7mb74XcpizmH0KOR2Pv3D2Hmrh1Dmy5BmK3MpdSa5kqZcg6EKBdklU0bFXX9gCfzvpnyUehrPIuA==}

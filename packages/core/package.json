@@ -21,6 +21,7 @@
     "three-mesh-bvh": "^0.9.5"
   },
   "devDependencies": {
+    "@types/node": "^22.15.17",
     "@xmldom/xmldom": "^0.8.11",
     "@types/three": "^0.160.0",
     "typescript": "^5.4.0"
