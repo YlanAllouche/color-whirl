@@ -18,13 +18,11 @@ import {
   createSpheres3DScene,
   createTriangles3DScene,
   createSvg3DScene,
-  type WallpaperAppStateV1
-} from '@wallpaper-maker/core';
-import {
+  type WallpaperAppStateV1,
   applyRandomizedWidgetPaths,
   isRandomizeWidgetSupported,
   type RandomizeWidgetId
-} from '../../../../core/src/config/randomize/wallpaper/widgets.js';
+} from '@wallpaper-maker/core';
 
 import { PopsiclePreview, type PreviewRenderMode } from '$lib/popsicle/preview';
 
