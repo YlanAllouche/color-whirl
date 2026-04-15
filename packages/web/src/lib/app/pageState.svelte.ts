@@ -64,6 +64,13 @@ import {
   type PreviewRefs,
   type PreviewRendererCtx
 } from '$lib/app/preview/renderers';
+import {
+  createDefaultPerfState,
+  pushSample,
+  sampleStats,
+  type PerfActionId,
+  type PerfState
+} from '$lib/app/perf/metrics';
 
 type WeightTarget = 'spheres' | 'circles' | 'polygons' | 'triangles2d' | 'prisms' | 'hexgrid' | 'ridges' | 'svg' | 'bands' | 'flowlines' | 'diamondgrid';
 type ExportFormat = 'png' | 'jpg' | 'webp' | 'svg';
@@ -72,6 +79,8 @@ type PaletteRandomizeScheme = 'auto' | 'analogous' | 'triadic' | 'complementary'
 
 const RENDER_SETTLE_MS = 280;
 const SETTINGS_MAXIMIZED_KEY = 'ui.layout.settingsMaximized';
+const PERFORMANCE_HUD_VISIBLE_KEY = 'ui.perf.hudVisible';
+const PERF_SAMPLE_WINDOW = 180;
 
 export type PageState = ReturnType<typeof createPageState>;
 
@@ -100,7 +109,8 @@ export function createPageState() {
     selectedColorPresetId: COLOR_PRESETS[0]?.id ?? '',
     randomizationProfile: 'safe' as RandomizationProfile,
     paletteRandomizeScheme: 'auto' as PaletteRandomizeScheme,
-    paletteRandomizeHueBetweenSteps: null as number | null
+    paletteRandomizeHueBetweenSteps: null as number | null,
+    performance: createDefaultPerfState(false) as PerfState
   });
 
   let camDragPointerId = -1;
@@ -111,6 +121,77 @@ export function createPageState() {
     basic3dPreview: null,
     fallbackCanvas: null
   };
+
+  const frameTimeSamples: number[] = [];
+  const fpsSamples: number[] = [];
+  const renderTimeSamples: number[] = [];
+  const actionSamples: Record<PerfActionId, number[]> = {
+    randomizeCurrent: [],
+    randomizeAll: [],
+    randomizeWidget: [],
+    export: [],
+    fitCamera: []
+  };
+
+  function updateFrameMetrics(frameMs: number) {
+    if (!Number.isFinite(frameMs) || frameMs <= 0) return;
+    pushSample(frameTimeSamples, frameMs, PERF_SAMPLE_WINDOW);
+    pushSample(fpsSamples, 1000 / frameMs, PERF_SAMPLE_WINDOW);
+
+    const frameStats = sampleStats(frameTimeSamples);
+    const fpsStats = sampleStats(fpsSamples);
+    state.performance.frameTimeAvgMs = frameStats.avg;
+    state.performance.frameTimeP95Ms = frameStats.p95;
+    state.performance.fpsAvg = fpsStats.avg;
+    state.performance.fpsP95 = fpsStats.p95;
+  }
+
+  function updateRenderMetrics(renderMs: number) {
+    if (!Number.isFinite(renderMs) || renderMs < 0) return;
+    pushSample(renderTimeSamples, renderMs, PERF_SAMPLE_WINDOW);
+    const stats = sampleStats(renderTimeSamples);
+    state.performance.renderTimeAvgMs = stats.avg;
+    state.performance.renderTimeP95Ms = stats.p95;
+  }
+
+  function updateActionMetrics(actionId: PerfActionId, durationMs: number) {
+    if (!Number.isFinite(durationMs) || durationMs < 0) return;
+    const samples = actionSamples[actionId];
+    pushSample(samples, durationMs, PERF_SAMPLE_WINDOW);
+
+    const stats = sampleStats(samples);
+    const next = state.performance.actions[actionId];
+    next.count += 1;
+    next.totalMs += durationMs;
+    next.lastMs = durationMs;
+    next.avgMs = stats.avg;
+    next.p95Ms = stats.p95;
+  }
+
+  function updateMemoryMetrics() {
+    const perfAny = performance as any;
+    const memory = perfAny?.memory;
+    if (!memory) {
+      state.performance.memorySupported = false;
+      state.performance.memoryUsedMB = null;
+      state.performance.memoryLimitMB = null;
+      return;
+    }
+
+    state.performance.memorySupported = true;
+    const used = Number(memory.usedJSHeapSize);
+    const limit = Number(memory.jsHeapSizeLimit);
+    state.performance.memoryUsedMB = Number.isFinite(used) ? used / (1024 * 1024) : null;
+    state.performance.memoryLimitMB = Number.isFinite(limit) ? limit / (1024 * 1024) : null;
+  }
+
+  function setHudVisible(next: boolean) {
+    state.performance.hudVisible = !!next;
+  }
+
+  function togglePerformanceHud() {
+    setHudVisible(!state.performance.hudVisible);
+  }
 
   const colorPresetGroups: Array<{ group: string; presets: ColorPreset[] }> = COLOR_PRESET_GROUPS
     .map((group) => ({ group, presets: COLOR_PRESETS.filter((p) => p.group === group) }))
@@ -166,7 +247,10 @@ export function createPageState() {
   }
 
   function renderCurrentOnce(quality: FallbackQuality, opts?: { cameraOnly?: boolean }) {
+    const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
     renderCurrentOnceImpl(previewRendererCtx, quality, opts);
+    const endedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    updateRenderMetrics(endedAt - startedAt);
   }
 
   const previewScheduler = createPreviewScheduler({
@@ -271,6 +355,7 @@ export function createPageState() {
   }
 
   async function handleExport() {
+    const startedAt = performance.now();
     state.isExporting = true;
 
     try {
@@ -303,6 +388,7 @@ export function createPageState() {
       alert('Export failed. Please try again.');
     } finally {
       state.isExporting = false;
+      updateActionMetrics('export', performance.now() - startedAt);
     }
   }
 
@@ -582,13 +668,19 @@ export function createPageState() {
     }
   }
 
-  function generateRandomGeneratedColors() {
+  function applyRandomCurrentConfig() {
     const seed = randomSeedU32();
     markNextUrlWriteAsPush();
     state.config = mergeWithLocks(
       (generateRandomConfigNoPresetsFromSeed as any)(seed, state.config.type, getPaletteRandomizeOptions()) as any
     ) as WallpaperConfig;
     schedulePreviewRender();
+  }
+
+  function generateRandomGeneratedColors() {
+    const startedAt = performance.now();
+    applyRandomCurrentConfig();
+    updateActionMetrics('randomizeCurrent', performance.now() - startedAt);
   }
 
   function generateRandomColorsOnly() {
@@ -606,6 +698,7 @@ export function createPageState() {
   }
 
   function generateRandomIncludingType() {
+    const startedAt = performance.now();
     const seed = randomSeedU32();
     const types: WallpaperType[] = [
       'popsicle',
@@ -632,6 +725,7 @@ export function createPageState() {
       (generateRandomConfigNoPresetsFromSeed as any)(seed, nextType, getPaletteRandomizeOptions()) as any
     ) as WallpaperConfig;
     schedulePreviewRender();
+    updateActionMetrics('randomizeAll', performance.now() - startedAt);
   }
 
   function canRandomizeWidget(widgetId: string): boolean {
@@ -640,6 +734,7 @@ export function createPageState() {
 
   function randomizeWidget(widgetId: string) {
     if (!canRandomizeWidget(widgetId)) return;
+    const startedAt = performance.now();
 
     const seed = randomSeedU32();
     const randomized = (generateRandomConfigNoPresetsFromSeed as any)(seed, state.config.type, getPaletteRandomizeOptions()) as WallpaperConfig;
@@ -653,6 +748,52 @@ export function createPageState() {
     markNextUrlWriteAsPush();
     state.config = mergeWithLocks(targeted) as WallpaperConfig;
     schedulePreviewRender();
+    updateActionMetrics('randomizeWidget', performance.now() - startedAt);
+  }
+
+  async function runBenchmarkIterations(iterations = 50) {
+    const total = Math.max(1, Math.round(Number(iterations) || 50));
+    if (state.performance.benchmark.running) return;
+
+    state.performance.benchmark.running = true;
+    state.performance.benchmark.presetLabel = `${total} iterations`;
+    state.performance.benchmark.totalIterations = total;
+    state.performance.benchmark.completedIterations = 0;
+    state.performance.benchmark.totalMs = 0;
+    state.performance.benchmark.avgMs = 0;
+    state.performance.benchmark.p95Ms = 0;
+
+    const iterationSamples: number[] = [];
+    const startedAt = performance.now();
+
+    try {
+      for (let i = 0; i < total; i += 1) {
+        const iterationStart = performance.now();
+        applyRandomCurrentConfig();
+
+        await new Promise<void>((resolve) => {
+          requestAnimationFrame(() => resolve());
+        });
+
+        if ((i + 1) % 5 === 0) {
+          await new Promise<void>((resolve) => {
+            window.setTimeout(resolve, 0);
+          });
+        }
+
+        const iterationMs = performance.now() - iterationStart;
+        pushSample(iterationSamples, iterationMs, total);
+        const stats = sampleStats(iterationSamples);
+
+        state.performance.benchmark.completedIterations = i + 1;
+        state.performance.benchmark.totalMs = performance.now() - startedAt;
+        state.performance.benchmark.avgMs = stats.avg;
+        state.performance.benchmark.p95Ms = stats.p95;
+      }
+    } finally {
+      state.performance.benchmark.running = false;
+      state.performance.benchmark.totalMs = performance.now() - startedAt;
+    }
   }
 
   function getAppState(): WallpaperAppStateV1 {
@@ -701,6 +842,7 @@ export function createPageState() {
   }
 
   function fitManualCamera() {
+    const startedAt = performance.now();
     const current = state.config;
     if (current.type !== 'popsicle' && current.type !== 'spheres3d' && current.type !== 'triangles3d' && current.type !== 'svg3d') return;
 
@@ -762,6 +904,7 @@ export function createPageState() {
       } catch {
         // Ignore.
       }
+      updateActionMetrics('fitCamera', performance.now() - startedAt);
     }
   }
 
@@ -866,9 +1009,16 @@ export function createPageState() {
     writeLocalStorageBool(SETTINGS_MAXIMIZED_KEY, state.settingsMaximized);
   });
 
+  $effect(() => {
+    if (!state.settingsMaximizedReady) return;
+    writeLocalStorageBool(PERFORMANCE_HUD_VISIBLE_KEY, state.performance.hudVisible);
+  });
+
   onMount(() => {
     const storedSettingsMaximized = readLocalStorageBool(SETTINGS_MAXIMIZED_KEY);
     if (storedSettingsMaximized !== null) state.settingsMaximized = storedSettingsMaximized;
+    const storedHudVisible = readLocalStorageBool(PERFORMANCE_HUD_VISIBLE_KEY);
+    if (storedHudVisible !== null) setHudVisible(storedHudVisible);
     state.settingsMaximizedReady = true;
     const hasUrlParams = window.location.search.length > 0;
 
@@ -908,6 +1058,39 @@ export function createPageState() {
     }
 
     schedulePreviewRender();
+
+    let frameLoopId = 0;
+    let lastFrameAt = 0;
+    const frameLoop = (now: number) => {
+      if (lastFrameAt > 0) {
+        updateFrameMetrics(now - lastFrameAt);
+      }
+      lastFrameAt = now;
+      frameLoopId = window.requestAnimationFrame(frameLoop);
+    };
+    frameLoopId = window.requestAnimationFrame(frameLoop);
+
+    updateMemoryMetrics();
+    const memoryIntervalId = window.setInterval(() => {
+      updateMemoryMetrics();
+    }, 1000);
+
+    let longTaskObserver: PerformanceObserver | null = null;
+    if (typeof PerformanceObserver !== 'undefined' && PerformanceObserver.supportedEntryTypes?.includes('longtask')) {
+      state.performance.longTaskSupported = true;
+      longTaskObserver = new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) {
+          const duration = Number(entry.duration) || 0;
+          if (duration > 50) {
+            state.performance.longTaskCount += 1;
+            state.performance.longTaskTotalMs += duration;
+          }
+        }
+      });
+      longTaskObserver.observe({ entryTypes: ['longtask'] });
+    } else {
+      state.performance.longTaskSupported = false;
+    }
 
     const resizeObserver = new ResizeObserver(() => {
       schedulePreviewRender();
@@ -952,6 +1135,9 @@ export function createPageState() {
     }
 
     return () => {
+      if (frameLoopId) window.cancelAnimationFrame(frameLoopId);
+      window.clearInterval(memoryIntervalId);
+      longTaskObserver?.disconnect();
       resizeObserver.disconnect();
       window.removeEventListener('pointerup', handleGlobalPointerUp);
       window.removeEventListener('pointercancel', handleGlobalPointerUp);
@@ -1024,7 +1210,9 @@ export function createPageState() {
       setRandomWeights,
       updateWeight,
       toggleLookColumns,
-      fitManualCamera
+      fitManualCamera,
+      togglePerformanceHud,
+      runBenchmarkIterations
     }
   };
 }

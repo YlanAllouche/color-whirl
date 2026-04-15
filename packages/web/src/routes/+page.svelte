@@ -53,6 +53,9 @@
       bind:cliViewMode={state.cliViewMode}
       bind:exportFormat={state.exportFormat}
       bind:renderMode={state.renderMode}
+      performance={state.performance}
+      togglePerformanceHud={actions.togglePerformanceHud}
+      runBenchmarkIterations={actions.runBenchmarkIterations}
     />
   </svelte:fragment>
 
@@ -76,6 +79,7 @@
       onSettingsOverlayVisibleChange={(next) => {
         state.settingsOverlayVisible = next;
       }}
+      performance={state.performance}
     />
   </svelte:fragment>
 

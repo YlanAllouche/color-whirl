@@ -498,6 +498,87 @@
   min-height: 4.5rem;
 }
 
+.performance-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.45rem;
+}
+
+.performance-card {
+  border: 1px solid var(--stroke0);
+  border-radius: 8px;
+  padding: 0.45rem 0.55rem;
+  background: rgba(18, 18, 20, 0.68);
+}
+
+.performance-card-wide {
+  grid-column: 1 / -1;
+}
+
+.performance-label {
+  font-size: 0.7rem;
+  color: var(--text2);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.performance-value {
+  font-size: 0.83rem;
+  margin-top: 0.2rem;
+  color: var(--text0);
+  font-weight: 620;
+}
+
+.performance-actions {
+  margin-top: 0.55rem;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.45rem;
+}
+
+.performance-actions button {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.performance-benchmark {
+  margin-top: 0.55rem;
+  border-top: 1px solid var(--stroke0);
+  padding-top: 0.5rem;
+}
+
+.performance-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.8rem;
+  margin-top: 0.2rem;
+  font-size: 0.8rem;
+  color: var(--text1);
+}
+
+.performance-table {
+  margin-top: 0.45rem;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.performance-row {
+  display: grid;
+  grid-template-columns: 1.8fr 0.6fr 0.7fr 0.7fr 0.7fr;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  align-items: center;
+}
+
+.performance-head {
+  color: var(--text2);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  font-size: 0.68rem;
+}
+
 .cli-buttons {
   display: flex;
   flex-direction: column;

@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { WallpaperConfig } from '@wallpaper-maker/core';
   import type { PreviewRenderMode } from '$lib/popsicle/preview';
+  import type { PerfState } from '$lib/app/perf/metrics';
 
   import GlobalInspector from '$lib/ui/inspector/GlobalInspector.svelte';
 
@@ -33,6 +34,9 @@
     cliViewMode: 'bash' | 'json';
     exportFormat: ExportFormat;
     renderMode: PreviewRenderMode;
+    performance: PerfState;
+    togglePerformanceHud: () => void;
+    runBenchmarkIterations: (iterations?: number) => void | Promise<void>;
   };
 
   let {
@@ -58,7 +62,10 @@
     copyCliCommand,
     cliViewMode = $bindable(),
     exportFormat = $bindable(),
-    renderMode = $bindable()
+    renderMode = $bindable(),
+    performance,
+    togglePerformanceHud,
+    runBenchmarkIterations
   }: Props = $props();
 </script>
 
@@ -86,4 +93,7 @@
   bind:cliViewMode
   bind:exportFormat
   bind:renderMode
+  {performance}
+  {togglePerformanceHud}
+  {runBenchmarkIterations}
 />

@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { WallpaperConfig } from '@wallpaper-maker/core';
+  import type { PerfState } from '$lib/app/perf/metrics';
 
   import PreviewCanvas from '$lib/ui/layout/PreviewCanvas.svelte';
 
@@ -13,6 +14,7 @@
     cameraDragActive: boolean;
     settingsMaximized: boolean;
     settingsOverlayVisible: boolean;
+    performance: PerfState;
     onCameraDragActiveChange?: (next: boolean) => void;
     onSettingsMaximizedChange?: (next: boolean) => void;
     onSettingsOverlayVisibleChange?: (next: boolean) => void;
@@ -28,6 +30,7 @@
     cameraDragActive,
     settingsMaximized,
     settingsOverlayVisible,
+    performance,
     onCameraDragActiveChange,
     onSettingsMaximizedChange,
     onSettingsOverlayVisibleChange
@@ -44,6 +47,7 @@
   {cameraDragActive}
   {settingsMaximized}
   {settingsOverlayVisible}
+  {performance}
   {onCameraDragActiveChange}
   {onSettingsMaximizedChange}
   {onSettingsOverlayVisibleChange}

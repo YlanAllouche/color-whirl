@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { WallpaperConfig } from '@wallpaper-maker/core';
   import type { PreviewRenderMode } from '$lib/popsicle/preview';
+  import type { PerfState } from '$lib/app/perf/metrics';
 
   import InspectorColumn from '$lib/ui/inspector/InspectorColumn.svelte';
   import RandomizeSection from '$lib/ui/sections/RandomizeSection.svelte';
@@ -9,6 +10,7 @@
   import ResolutionSection from '$lib/ui/sections/ResolutionSection.svelte';
   import ExportSection from '$lib/ui/sections/ExportSection.svelte';
   import CliSection from '$lib/ui/sections/CliSection.svelte';
+  import PerformanceSection from '$lib/ui/sections/PerformanceSection.svelte';
 
   type ExportFormat = 'png' | 'jpg' | 'webp' | 'svg';
   type RandomizationProfile = 'safe' | 'exploratory';
@@ -45,6 +47,9 @@
     cliViewMode: 'bash' | 'json';
     exportFormat: ExportFormat;
     renderMode: PreviewRenderMode;
+    performance: PerfState;
+    togglePerformanceHud: () => void;
+    runBenchmarkIterations: (iterations?: number) => void | Promise<void>;
   };
 
   let {
@@ -70,7 +75,10 @@
     copyCliCommand,
     cliViewMode = $bindable(),
     exportFormat = $bindable(),
-    renderMode = $bindable()
+    renderMode = $bindable(),
+    performance,
+    togglePerformanceHud,
+    runBenchmarkIterations
   }: Props = $props();
 </script>
 
@@ -99,6 +107,7 @@
     {/if}
     <ResolutionSection {config} {RESOLUTION_PRESETS} applyResolutionPreset={applyResolutionPreset} />
     <ExportSection bind:exportFormat {isExporting} {handleExport} />
+    <PerformanceSection {performance} {togglePerformanceHud} {runBenchmarkIterations} />
     <CliSection {cliCommand} {copyCliCommand} bind:cliViewMode />
   </InspectorColumn>
 </div>

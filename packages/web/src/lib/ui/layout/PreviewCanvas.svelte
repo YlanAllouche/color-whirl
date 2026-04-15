@@ -1,6 +1,7 @@
 <script lang="ts">
   import { DEFAULT_CONFIG, type WallpaperConfig } from '@wallpaper-maker/core';
   import { onDestroy } from 'svelte';
+  import type { PerfState } from '$lib/app/perf/metrics';
 
   type Props = {
     config: WallpaperConfig;
@@ -13,6 +14,7 @@
     settingsMaximized?: boolean;
     settingsOverlayVisible?: boolean;
     overlayVisible?: boolean;
+    performance: PerfState;
     onCameraDragActiveChange?: (next: boolean) => void;
     onSettingsMaximizedChange?: (next: boolean) => void;
     onSettingsOverlayVisibleChange?: (next: boolean) => void;
@@ -29,6 +31,7 @@
     settingsMaximized: settingsMaximizedProp = false,
     settingsOverlayVisible: settingsOverlayVisibleProp = false,
     overlayVisible = false,
+    performance,
     onCameraDragActiveChange,
     onSettingsMaximizedChange,
     onSettingsOverlayVisibleChange
@@ -335,6 +338,42 @@
           <button type="button" class="camera-btn" onclick={(e) => nudgeCamera('distance', +0.2, e)} title="Zoom out (Shift = 10x)">-</button>
         </div>
         <div class="camera-overlay-hint">Drag to orbit, wheel to zoom</div>
+      </div>
+    {/if}
+
+    {#if performance.hudVisible}
+      <div class="preview-overlay perf-overlay visible" aria-hidden="true">
+        <div class="perf-overlay-title">Performance HUD</div>
+        <div class="perf-overlay-grid">
+          <span>FPS</span><strong>{performance.fpsAvg.toFixed(1)} / {performance.fpsP95.toFixed(1)}</strong>
+          <span>Frame ms</span><strong>{performance.frameTimeAvgMs.toFixed(1)} / {performance.frameTimeP95Ms.toFixed(1)}</strong>
+          <span>Render ms</span><strong>{performance.renderTimeAvgMs.toFixed(1)} / {performance.renderTimeP95Ms.toFixed(1)}</strong>
+          <span>Long tasks</span>
+          <strong>
+            {#if performance.longTaskSupported}
+              {performance.longTaskCount} ({performance.longTaskTotalMs.toFixed(0)}ms)
+            {:else}
+              n/a
+            {/if}
+          </strong>
+          <span>Memory</span>
+          <strong>
+            {#if performance.memorySupported && performance.memoryUsedMB !== null}
+              {performance.memoryUsedMB.toFixed(1)} MB
+            {:else}
+              n/a
+            {/if}
+          </strong>
+        </div>
+        {#if performance.benchmark.running || performance.benchmark.totalIterations > 0}
+          <div class="perf-overlay-benchmark">
+            <span>Benchmark</span>
+            <strong>
+              {performance.benchmark.completedIterations}/{performance.benchmark.totalIterations}
+              - avg {performance.benchmark.avgMs.toFixed(1)}ms, p95 {performance.benchmark.p95Ms.toFixed(1)}ms
+            </strong>
+          </div>
+        {/if}
       </div>
     {/if}
   </div>
