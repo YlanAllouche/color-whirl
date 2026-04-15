@@ -17,8 +17,8 @@ import {
   type PopsicleConfig
 } from './preview-utils.js';
 import {
+  applyOrthoCameraFromConfig,
   autoFitOrthoCameraToBox,
-  cameraZoomFromDistance,
   computeBounds,
   computeBoundsPerStick,
   degToRad,
@@ -138,16 +138,7 @@ export class PopsicleRasterPipeline {
     this.camera.top = frustumSize / 2;
     this.camera.bottom = frustumSize / -2;
 
-    const azimuthRad = degToRad(effective.camera.azimuth);
-    const elevationRad = degToRad(effective.camera.elevation);
-    this.camera.position.set(
-      effective.camera.distance * Math.cos(elevationRad) * Math.sin(azimuthRad),
-      effective.camera.distance * Math.sin(elevationRad),
-      effective.camera.distance * Math.cos(elevationRad) * Math.cos(azimuthRad)
-    );
-    this.camera.zoom = cameraZoomFromDistance(effective.camera.distance);
-    this.camera.updateProjectionMatrix();
-    this.camera.lookAt(0, 0, 0);
+    applyOrthoCameraFromConfig(this.camera, effective.camera);
 
     // Renderer + background
     applyToneMapping(this.renderer, effective);
@@ -279,12 +270,15 @@ export class PopsicleRasterPipeline {
       outlineScale: 1 + maxOutlineThickness
     });
 
-    // Auto-fit camera before placing meshes (bounds are centered at origin by construction).
-    try {
-      const padding = effective.bloom?.enabled ? 0.86 : 0.92;
-      autoFitOrthoCameraToBox(this.camera, symmetricBoxFromSize(bounds.size), padding);
-    } catch {
-      // Ignore.
+    if (effective.camera.mode !== 'manual') {
+      // Auto-fit camera before placing meshes (bounds are centered at origin by construction).
+      try {
+        const requestedPadding = Math.max(0.5, Math.min(0.999, Number(effective.camera.padding) || 0.92));
+        const padding = effective.bloom?.enabled ? Math.min(requestedPadding, 0.86) : requestedPadding;
+        autoFitOrthoCameraToBox(this.camera, symmetricBoxFromSize(bounds.size), padding);
+      } catch {
+        // Ignore.
+      }
     }
 
     const geometriesByPalette: Array<{ base: THREE.BufferGeometry; ov: THREE.BufferGeometry }> = new Array(nColors);
@@ -698,16 +692,7 @@ export async function renderRasterToCanvas(config: PopsicleConfig): Promise<HTML
     0.1,
     1000
   );
-  const azimuthRad = degToRad(config.camera.azimuth);
-  const elevationRad = degToRad(config.camera.elevation);
-  camera.position.set(
-    config.camera.distance * Math.cos(elevationRad) * Math.sin(azimuthRad),
-    config.camera.distance * Math.sin(elevationRad),
-    config.camera.distance * Math.cos(elevationRad) * Math.cos(azimuthRad)
-  );
-  camera.zoom = cameraZoomFromDistance(config.camera.distance);
-  camera.updateProjectionMatrix();
-  camera.lookAt(0, 0, 0);
+  applyOrthoCameraFromConfig(camera, config.camera);
 
   // Lights
   let keyLight: THREE.DirectionalLight | null = null;

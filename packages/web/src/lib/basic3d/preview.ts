@@ -4,7 +4,13 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 
 import type { Spheres3DConfig, Triangles3DConfig, Svg3DConfig } from '@wallpaper-maker/core';
-import { createSpheres3DScene, createTriangles3DScene, createSvg3DScene } from '@wallpaper-maker/core';
+import {
+  applyOrthographicCameraFromConfig,
+  autoFitOrthographicCameraToBox,
+  createSpheres3DScene,
+  createTriangles3DScene,
+  createSvg3DScene
+} from '@wallpaper-maker/core';
 
 export type Basic3DType = 'spheres3d' | 'triangles3d' | 'svg3d';
 export type Basic3DConfig = Spheres3DConfig | Triangles3DConfig | Svg3DConfig;
@@ -12,97 +18,6 @@ export type PreviewQuality = 'interactive' | 'final';
 export type RenderMode = 'raster' | 'path';
 
 export type RenderSize = { width: number; height: number };
-
-function clamp(n: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, n));
-}
-
-function degToRad(deg: number): number {
-  return (deg * Math.PI) / 180;
-}
-
-function wrapDeg360(deg: number): number {
-  const d = deg % 360;
-  return d < 0 ? d + 360 : d;
-}
-
-function cameraZoomFromDistance(distance: number): number {
-  // Match the generators' orthographic zoom mapping.
-  const referenceDistance = 17.3;
-  const safeDistance = Math.max(0.1, distance);
-  return referenceDistance / safeDistance;
-}
-
-function autoFitOrthoCameraToScene(camera: THREE.OrthographicCamera, scene: THREE.Scene, padding: number = 0.92): void {
-  const pad = clamp(Number(padding), 0.5, 0.999);
-  const box = new THREE.Box3().setFromObject(scene);
-  if (box.isEmpty()) return;
-
-  // Push back if the camera would slice geometry.
-  camera.updateMatrixWorld(true);
-
-  const tmpDir = new THREE.Vector3();
-
-  const min = box.min;
-  const max = box.max;
-  const corners = [
-    new THREE.Vector3(min.x, min.y, min.z),
-    new THREE.Vector3(min.x, min.y, max.z),
-    new THREE.Vector3(min.x, max.y, min.z),
-    new THREE.Vector3(min.x, max.y, max.z),
-    new THREE.Vector3(max.x, min.y, min.z),
-    new THREE.Vector3(max.x, min.y, max.z),
-    new THREE.Vector3(max.x, max.y, min.z),
-    new THREE.Vector3(max.x, max.y, max.z)
-  ];
-
-  const measure = () => {
-    camera.updateMatrixWorld(true);
-    let maxAbsX = 0;
-    let maxAbsY = 0;
-    let minZ = Infinity;
-    let maxZ = -Infinity;
-    for (let i = 0; i < corners.length; i++) {
-      const p = corners[i].clone().applyMatrix4(camera.matrixWorldInverse);
-      maxAbsX = Math.max(maxAbsX, Math.abs(p.x));
-      maxAbsY = Math.max(maxAbsY, Math.abs(p.y));
-      minZ = Math.min(minZ, p.z);
-      maxZ = Math.max(maxZ, p.z);
-    }
-    return { maxAbsX, maxAbsY, minZ, maxZ };
-  };
-
-  let m = measure();
-  const minNear = 0.001;
-  const zThreshold = -minNear + 1e-4;
-  if (m.maxZ > zThreshold) {
-    const delta = (m.maxZ - zThreshold) + Math.max(0.01, (m.maxZ - m.minZ) * 0.02);
-    camera.getWorldDirection(tmpDir);
-    camera.position.addScaledVector(tmpDir, -delta);
-    m = measure();
-  }
-
-  const halfW0 = Math.abs(camera.right - camera.left) * 0.5;
-  const halfH0 = Math.abs(camera.top - camera.bottom) * 0.5;
-  const eps = 1e-6;
-  const zoomMaxX = m.maxAbsX > eps ? (halfW0 * pad) / m.maxAbsX : Infinity;
-  const zoomMaxY = m.maxAbsY > eps ? (halfH0 * pad) / m.maxAbsY : Infinity;
-  const zoomMax = Math.min(zoomMaxX, zoomMaxY);
-  if (Number.isFinite(zoomMax) && zoomMax > 0) camera.zoom = Math.min(camera.zoom, zoomMax);
-
-  const nearDist = Math.max(0, -m.maxZ);
-  const farDist = Math.max(0, -m.minZ);
-  if (Number.isFinite(nearDist) && Number.isFinite(farDist) && farDist > 0) {
-    const depth = Math.max(eps, farDist - nearDist);
-    const zPad = Math.max(0.05, depth * 0.05);
-    const nextNear = Math.max(minNear, nearDist - zPad);
-    const nextFar = Math.max(nextNear + 1.0, farDist + zPad);
-    camera.near = nextNear;
-    camera.far = nextFar;
-  }
-
-  camera.updateProjectionMatrix();
-}
 
 function disposeMaterial(mat: any): void {
   if (!mat) return;
@@ -146,7 +61,7 @@ function signatureWithoutCameraAndBloom(config: Basic3DConfig): string {
   // These configs are plain data; JSON.stringify is stable enough here.
   const normalized: any = {
     ...config,
-    camera: { distance: 0, azimuth: 0, elevation: 0 }
+    camera: {}
   };
   if (normalized.bloom) {
     normalized.bloom = { ...normalized.bloom, enabled: false, strength: 0, radius: 0, threshold: 0 };
@@ -298,21 +213,18 @@ export class Basic3DPreview {
     this.camera.top = frustumSize / 2;
     this.camera.bottom = frustumSize / -2;
 
-    const azimuthRad = degToRad(wrapDeg360(config.camera.azimuth));
-    const elevationDeg = clamp(config.camera.elevation, -80, 80);
-    const elevationRad = degToRad(elevationDeg);
-    const d = Math.max(0.01, config.camera.distance);
-    this.camera.position.set(d * Math.cos(elevationRad) * Math.sin(azimuthRad), d * Math.sin(elevationRad), d * Math.cos(elevationRad) * Math.cos(azimuthRad));
-    this.camera.zoom = cameraZoomFromDistance(d);
-    this.camera.updateProjectionMatrix();
-    this.camera.lookAt(0, 0, 0);
+    applyOrthographicCameraFromConfig(this.camera, config.camera);
 
-    // Auto-fit after applying user camera settings.
-    try {
-      const padding = bloomEnabled ? 0.86 : 0.92;
-      autoFitOrthoCameraToScene(this.camera, this.scene, padding);
-    } catch {
-      // Ignore.
+    if (config.camera.mode !== 'manual') {
+      // Auto-fit after applying user camera settings.
+      try {
+        const bounds = new THREE.Box3().setFromObject(this.scene);
+        const requestedPadding = Math.max(0.5, Math.min(0.999, Number(config.camera.padding) || 0.92));
+        const padding = bloomEnabled ? Math.min(requestedPadding, 0.86) : requestedPadding;
+        autoFitOrthographicCameraToBox(this.camera, bounds, { padding, minNear: 0.001, pushBackIfSlicing: true });
+      } catch {
+        // Ignore.
+      }
     }
 
     // Bloom wiring is outside the generators; toggle/update without rebuilding.

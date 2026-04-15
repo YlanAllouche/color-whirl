@@ -4,6 +4,7 @@ export * from './materials.js';
 export * from './palette.js';
 export * from './bubbles.js';
 export * from './generators/index.js';
+export * from './generators/camera-fit.js';
 export * from './generators/popsicle/index.js';
 export * from './generators/spheres3d/index.js';
 export * from './generators/triangles3d/index.js';

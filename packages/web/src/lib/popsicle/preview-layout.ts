@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { applyOrthographicCameraFromConfig, autoFitOrthographicCameraToBox } from '@wallpaper-maker/core';
 
 export type Bounds = {
   min: THREE.Vector3;
@@ -22,73 +23,26 @@ export function cameraZoomFromDistance(distance: number): number {
   return referenceDistance / safeDistance;
 }
 
+export function applyOrthoCameraFromConfig(
+  camera: THREE.OrthographicCamera,
+  config: {
+    mode?: 'auto' | 'manual';
+    distance: number;
+    zoom?: number;
+    panX?: number;
+    panY?: number;
+    azimuth: number;
+    elevation: number;
+    near?: number;
+    far?: number;
+  }
+): void {
+  applyOrthographicCameraFromConfig(camera, config);
+}
+
 export function autoFitOrthoCameraToBox(camera: THREE.OrthographicCamera, box: THREE.Box3, padding: number = 0.92): void {
   const pad = clamp(Number(padding), 0.5, 0.999);
-  if (box.isEmpty()) return;
-
-  camera.updateMatrixWorld(true);
-
-  const tmpDir = new THREE.Vector3();
-
-  const min = box.min;
-  const max = box.max;
-  const corners = [
-    new THREE.Vector3(min.x, min.y, min.z),
-    new THREE.Vector3(min.x, min.y, max.z),
-    new THREE.Vector3(min.x, max.y, min.z),
-    new THREE.Vector3(min.x, max.y, max.z),
-    new THREE.Vector3(max.x, min.y, min.z),
-    new THREE.Vector3(max.x, min.y, max.z),
-    new THREE.Vector3(max.x, max.y, min.z),
-    new THREE.Vector3(max.x, max.y, max.z)
-  ];
-
-  const measure = () => {
-    camera.updateMatrixWorld(true);
-    let maxAbsX = 0;
-    let maxAbsY = 0;
-    let minZ = Infinity;
-    let maxZ = -Infinity;
-    for (let i = 0; i < corners.length; i++) {
-      const p = corners[i].clone().applyMatrix4(camera.matrixWorldInverse);
-      maxAbsX = Math.max(maxAbsX, Math.abs(p.x));
-      maxAbsY = Math.max(maxAbsY, Math.abs(p.y));
-      minZ = Math.min(minZ, p.z);
-      maxZ = Math.max(maxZ, p.z);
-    }
-    return { maxAbsX, maxAbsY, minZ, maxZ };
-  };
-
-  let m = measure();
-  const minNear = 0.001;
-  const zThreshold = -minNear + 1e-4;
-  if (m.maxZ > zThreshold) {
-    const delta = (m.maxZ - zThreshold) + Math.max(0.01, (m.maxZ - m.minZ) * 0.02);
-    camera.getWorldDirection(tmpDir);
-    camera.position.addScaledVector(tmpDir, -delta);
-    m = measure();
-  }
-
-  const halfW0 = Math.abs(camera.right - camera.left) * 0.5;
-  const halfH0 = Math.abs(camera.top - camera.bottom) * 0.5;
-  const eps = 1e-6;
-  const zoomMaxX = m.maxAbsX > eps ? (halfW0 * pad) / m.maxAbsX : Infinity;
-  const zoomMaxY = m.maxAbsY > eps ? (halfH0 * pad) / m.maxAbsY : Infinity;
-  const zoomMax = Math.min(zoomMaxX, zoomMaxY);
-  if (Number.isFinite(zoomMax) && zoomMax > 0) camera.zoom = Math.min(camera.zoom, zoomMax);
-
-  const nearDist = Math.max(0, -m.maxZ);
-  const farDist = Math.max(0, -m.minZ);
-  if (Number.isFinite(nearDist) && Number.isFinite(farDist) && farDist > 0) {
-    const depth = Math.max(eps, farDist - nearDist);
-    const zPad = Math.max(0.05, depth * 0.05);
-    const nextNear = Math.max(minNear, nearDist - zPad);
-    const nextFar = Math.max(nextNear + 1.0, farDist + zPad);
-    camera.near = nextNear;
-    camera.far = nextFar;
-  }
-
-  camera.updateProjectionMatrix();
+  autoFitOrthographicCameraToBox(camera, box, { padding: pad, minNear: 0.001, pushBackIfSlicing: true });
 }
 
 export function symmetricBoxFromSize(size: THREE.Vector3): THREE.Box3 {

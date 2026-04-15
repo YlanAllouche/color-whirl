@@ -453,19 +453,42 @@ export class PopsiclePathTracer {
       outlineScale: outlineScaleForBounds
     });
     const sphereRadius = 0.5 * bounds.size.length();
-    const padding = config.bloom?.enabled ? 0.86 : 0.92;
+    const requestedPadding = Math.max(0.5, Math.min(0.999, Number(config.camera.padding) || 0.92));
+    const padding = config.bloom?.enabled ? Math.min(requestedPadding, 0.86) : requestedPadding;
     const minDist = minDistanceToFitBoundingSphere(sphereRadius, aspect, baseFov, padding);
-    const d = Math.max(baseDistance, minDist);
+    const d = config.camera.mode === 'manual' ? baseDistance : Math.max(baseDistance, minDist);
 
-    const camera = new THREE.PerspectiveCamera(clamp(baseFov, 5, 80), aspect, 0.1, Math.max(2000, d + sphereRadius * 4 + 50));
+    const near = config.camera.mode === 'manual' ? Math.max(0.001, Number(config.camera.near) || 0.001) : 0.1;
+    const far =
+      config.camera.mode === 'manual'
+        ? Math.max(near + 0.001, Number(config.camera.far) || near + 1000)
+        : Math.max(2000, d + sphereRadius * 4 + 50);
+
+    const camera = new THREE.PerspectiveCamera(clamp(baseFov, 5, 80), aspect, near, far);
     const azimuthRad = degToRad(config.camera.azimuth);
     const elevationRad = degToRad(config.camera.elevation);
-    camera.position.set(
+    const position = new THREE.Vector3(
       d * Math.cos(elevationRad) * Math.sin(azimuthRad),
       d * Math.sin(elevationRad),
       d * Math.cos(elevationRad) * Math.cos(azimuthRad)
     );
-    camera.lookAt(0, 0, 0);
+    const target = new THREE.Vector3(0, 0, 0);
+
+    if (config.camera.mode === 'manual') {
+      const forward = target.clone().sub(position).normalize();
+      let right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0));
+      if (right.lengthSq() < 1e-8) right = new THREE.Vector3(1, 0, 0);
+      right.normalize();
+      const up = new THREE.Vector3().crossVectors(right, forward).normalize();
+      const panX = Number.isFinite(Number(config.camera.panX)) ? Number(config.camera.panX) : 0;
+      const panY = Number.isFinite(Number(config.camera.panY)) ? Number(config.camera.panY) : 0;
+      const panOffset = right.multiplyScalar(panX).add(up.multiplyScalar(panY));
+      position.add(panOffset);
+      target.add(panOffset);
+    }
+
+    camera.position.copy(position);
+    camera.lookAt(target);
     camera.updateProjectionMatrix();
     return camera;
   }
