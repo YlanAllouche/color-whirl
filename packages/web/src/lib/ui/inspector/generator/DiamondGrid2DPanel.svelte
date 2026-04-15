@@ -28,6 +28,10 @@
     <input type="range" bind:value={config.diamondgrid.marginPx} min="0" max="40" step="1" />
   </label>
   <label class="control-row slider">
+    <button type="button" class="setting-title" class:locked={isLocked('diamondgrid.sizeVariance')} onclick={() => toggleLock('diamondgrid.sizeVariance')} title="Click to lock/unlock for randomize">Size variance: {config.diamondgrid.sizeVariance.toFixed(2)}</button>
+    <input type="range" bind:value={config.diamondgrid.sizeVariance} min="0" max="1" step="0.01" />
+  </label>
+  <label class="control-row slider">
     <button type="button" class="setting-title" class:locked={isLocked('diamondgrid.overscanPx')} onclick={() => toggleLock('diamondgrid.overscanPx')} title="Click to lock/unlock for randomize">Overscan: {Math.round(config.diamondgrid.overscanPx)}px</button>
     <input type="range" bind:value={config.diamondgrid.overscanPx} min="0" max="400" step="5" />
   </label>
@@ -35,6 +39,41 @@
     <button type="button" class="setting-title" class:locked={isLocked('diamondgrid.fillOpacity')} onclick={() => toggleLock('diamondgrid.fillOpacity')} title="Click to lock/unlock for randomize">Fill opacity: {config.diamondgrid.fillOpacity.toFixed(2)}</button>
     <input type="range" bind:value={config.diamondgrid.fillOpacity} min="0" max="1" step="0.01" />
   </label>
+
+  <details class="control-details">
+    <summary class="control-details-summary">Panel / Clip</summary>
+    <label class="control-row checkbox">
+      <input type="checkbox" bind:checked={config.diamondgrid.panel.enabled} />
+      <button
+        type="button"
+        class="setting-title"
+        class:locked={isLocked('diamondgrid.panel.enabled')}
+        onclick={(e) => {
+          e.preventDefault();
+          toggleLock('diamondgrid.panel.enabled');
+        }}
+        title="Click to lock/unlock for randomize"
+      >
+        Enable
+      </button>
+    </label>
+    <label class="control-row slider">
+      <button type="button" class="setting-title" class:locked={isLocked('diamondgrid.panel.rectFrac.x')} onclick={() => toggleLock('diamondgrid.panel.rectFrac.x')} title="Click to lock/unlock for randomize">X: {Math.round(config.diamondgrid.panel.rectFrac.x * 100)}%</button>
+      <input type="range" bind:value={config.diamondgrid.panel.rectFrac.x} min="0" max="1" step="0.01" disabled={!config.diamondgrid.panel.enabled} />
+    </label>
+    <label class="control-row slider">
+      <button type="button" class="setting-title" class:locked={isLocked('diamondgrid.panel.rectFrac.y')} onclick={() => toggleLock('diamondgrid.panel.rectFrac.y')} title="Click to lock/unlock for randomize">Y: {Math.round(config.diamondgrid.panel.rectFrac.y * 100)}%</button>
+      <input type="range" bind:value={config.diamondgrid.panel.rectFrac.y} min="0" max="1" step="0.01" disabled={!config.diamondgrid.panel.enabled} />
+    </label>
+    <label class="control-row slider">
+      <button type="button" class="setting-title" class:locked={isLocked('diamondgrid.panel.rectFrac.w')} onclick={() => toggleLock('diamondgrid.panel.rectFrac.w')} title="Click to lock/unlock for randomize">Width: {Math.round(config.diamondgrid.panel.rectFrac.w * 100)}%</button>
+      <input type="range" bind:value={config.diamondgrid.panel.rectFrac.w} min="0.02" max="1" step="0.01" disabled={!config.diamondgrid.panel.enabled} />
+    </label>
+    <label class="control-row slider">
+      <button type="button" class="setting-title" class:locked={isLocked('diamondgrid.panel.rectFrac.h')} onclick={() => toggleLock('diamondgrid.panel.rectFrac.h')} title="Click to lock/unlock for randomize">Height: {Math.round(config.diamondgrid.panel.rectFrac.h * 100)}%</button>
+      <input type="range" bind:value={config.diamondgrid.panel.rectFrac.h} min="0.02" max="1" step="0.01" disabled={!config.diamondgrid.panel.enabled} />
+    </label>
+  </details>
 
   <details class="control-details">
     <summary class="control-details-summary">Origin</summary>
@@ -101,6 +140,18 @@
     <label class="control-row slider">
       <button type="button" class="setting-title" class:locked={isLocked('diamondgrid.bevel.amount')} onclick={() => toggleLock('diamondgrid.bevel.amount')} title="Click to lock/unlock for randomize">Amount: {config.diamondgrid.bevel.amount.toFixed(2)}</button>
       <input type="range" bind:value={config.diamondgrid.bevel.amount} min="0" max="1" step="0.01" disabled={!config.diamondgrid.bevel.enabled} />
+    </label>
+    <label class="control-row">
+      <button type="button" class="setting-title" class:locked={isLocked('diamondgrid.bevel.mode')} onclick={() => toggleLock('diamondgrid.bevel.mode')} title="Click to lock/unlock for randomize">Mode</button>
+      <Dropdown
+        bind:value={config.diamondgrid.bevel.mode}
+        ariaLabel="Diamond grid bevel mode"
+        disabled={!config.diamondgrid.bevel.enabled}
+        options={[
+          { value: 'convex', label: 'Convex' },
+          { value: 'concave', label: 'Concave' }
+        ]}
+      />
     </label>
     <label class="control-row slider">
       <button type="button" class="setting-title" class:locked={isLocked('diamondgrid.bevel.lightDeg')} onclick={() => toggleLock('diamondgrid.bevel.lightDeg')} title="Click to lock/unlock for randomize">Light angle: {Math.round(config.diamondgrid.bevel.lightDeg)}°</button>

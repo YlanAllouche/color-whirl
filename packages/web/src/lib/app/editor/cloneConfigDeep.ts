@@ -195,6 +195,10 @@ export function cloneConfigDeep(src: WallpaperConfig): WallpaperConfig {
         diamondgrid: {
           ...src.diamondgrid,
           originPx: { ...src.diamondgrid.originPx },
+          panel: {
+            ...((src as any).diamondgrid?.panel ?? {}),
+            rectFrac: { ...((src as any).diamondgrid?.panel?.rectFrac ?? {}) }
+          },
           stroke: { ...src.diamondgrid.stroke },
           coloring: { ...src.diamondgrid.coloring, colorWeights: [...(src.diamondgrid.coloring.colorWeights ?? [])] },
           bevel: { ...src.diamondgrid.bevel }

@@ -250,9 +250,15 @@ export function touchPreviewDeps(config: WallpaperConfig, renderMode: unknown, e
     void c.diamondgrid?.tileWidthPx;
     void c.diamondgrid?.tileHeightPx;
     void c.diamondgrid?.marginPx;
+    void c.diamondgrid?.sizeVariance;
     void c.diamondgrid?.originPx?.x;
     void c.diamondgrid?.originPx?.y;
     void c.diamondgrid?.overscanPx;
+    void c.diamondgrid?.panel?.enabled;
+    void c.diamondgrid?.panel?.rectFrac?.x;
+    void c.diamondgrid?.panel?.rectFrac?.y;
+    void c.diamondgrid?.panel?.rectFrac?.w;
+    void c.diamondgrid?.panel?.rectFrac?.h;
     void c.diamondgrid?.fillOpacity;
     void c.diamondgrid?.stroke?.enabled;
     void c.diamondgrid?.stroke?.widthPx;
@@ -263,6 +269,7 @@ export function touchPreviewDeps(config: WallpaperConfig, renderMode: unknown, e
     void c.diamondgrid?.coloring?.colorWeights?.join(',');
     void c.diamondgrid?.bevel?.enabled;
     void c.diamondgrid?.bevel?.amount;
+    void c.diamondgrid?.bevel?.mode;
     void c.diamondgrid?.bevel?.lightDeg;
     void c.diamondgrid?.bevel?.variation;
   }
