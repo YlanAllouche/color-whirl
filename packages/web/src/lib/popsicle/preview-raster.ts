@@ -273,8 +273,7 @@ export class PopsicleRasterPipeline {
     if (effective.camera.mode !== 'manual') {
       // Auto-fit camera before placing meshes (bounds are centered at origin by construction).
       try {
-        const requestedPadding = Math.max(0.5, Math.min(0.999, Number(effective.camera.padding) || 0.92));
-        const padding = effective.bloom?.enabled ? Math.min(requestedPadding, 0.86) : requestedPadding;
+        const padding = Math.max(0.5, Math.min(0.999, Number(effective.camera.padding) || 0.92));
         autoFitOrthoCameraToBox(this.camera, symmetricBoxFromSize(bounds.size), padding);
       } catch {
         // Ignore.

@@ -112,7 +112,7 @@
           >
             Zoom: {config.camera.zoom.toFixed(3)}
           </button>
-          <input type="range" bind:value={config.camera.zoom} min="0.05" max="20" step="0.01" />
+          <input type="range" bind:value={config.camera.zoom} min="0.05" max="80" step="0.01" />
         </label>
 
         <label class="control-row slider">

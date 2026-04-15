@@ -125,7 +125,7 @@ export function normalizeWallpaperConfig(input: any): WallpaperConfig {
     cameraAny.distance = Number.isFinite(distance) ? clamp(distance, 0.01, 200) : clamp(Number(baseCamera?.distance) || 17.3, 0.01, 200);
 
     const zoom = Number(cameraAny.zoom);
-    cameraAny.zoom = Number.isFinite(zoom) ? clamp(zoom, 0.01, 20) : clamp(Number(baseCamera?.zoom) || 1, 0.01, 20);
+    cameraAny.zoom = Number.isFinite(zoom) ? clamp(zoom, 0.01, 80) : clamp(Number(baseCamera?.zoom) || 1, 0.01, 80);
 
     const panX = Number(cameraAny.panX);
     cameraAny.panX = Number.isFinite(panX) ? clamp(panX, -100, 100) : clamp(Number(baseCamera?.panX) || 0, -100, 100);

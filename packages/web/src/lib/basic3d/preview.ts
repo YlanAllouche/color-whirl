@@ -219,8 +219,7 @@ export class Basic3DPreview {
       // Auto-fit after applying user camera settings.
       try {
         const bounds = new THREE.Box3().setFromObject(this.scene);
-        const requestedPadding = Math.max(0.5, Math.min(0.999, Number(config.camera.padding) || 0.92));
-        const padding = bloomEnabled ? Math.min(requestedPadding, 0.86) : requestedPadding;
+        const padding = Math.max(0.5, Math.min(0.999, Number(config.camera.padding) || 0.92));
         autoFitOrthographicCameraToBox(this.camera, bounds, { padding, minNear: 0.001, pushBackIfSlicing: true });
       } catch {
         // Ignore.

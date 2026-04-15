@@ -188,6 +188,17 @@
     grid-column: 1 / -1;
   }
 
+  .editor-shell.settings-maximized .panel-left .inspector,
+  .editor-shell.settings-maximized .panel-right .inspector {
+    background: linear-gradient(180deg, rgba(20, 20, 24, 0.97), rgba(14, 14, 18, 0.95));
+    box-shadow: 0 14px 36px rgba(0, 0, 0, 0.42);
+  }
+
+  .editor-shell.settings-maximized .panel-left .inspector-top,
+  .editor-shell.settings-maximized .panel-right .inspector-top {
+    background: rgba(12, 12, 16, 0.88);
+  }
+
   .editor-shell.settings-maximized .preview-area {
     padding: 0;
   }

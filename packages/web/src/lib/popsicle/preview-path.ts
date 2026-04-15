@@ -453,8 +453,7 @@ export class PopsiclePathTracer {
       outlineScale: outlineScaleForBounds
     });
     const sphereRadius = 0.5 * bounds.size.length();
-    const requestedPadding = Math.max(0.5, Math.min(0.999, Number(config.camera.padding) || 0.92));
-    const padding = config.bloom?.enabled ? Math.min(requestedPadding, 0.86) : requestedPadding;
+    const padding = Math.max(0.5, Math.min(0.999, Number(config.camera.padding) || 0.92));
     const minDist = minDistanceToFitBoundingSphere(sphereRadius, aspect, baseFov, padding);
     const d = config.camera.mode === 'manual' ? baseDistance : Math.max(baseDistance, minDist);
 

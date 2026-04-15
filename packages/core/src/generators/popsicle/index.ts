@@ -722,8 +722,7 @@ void wmApplyCollisionMask(inout vec4 col) {
     try {
       scene.updateWorldMatrix(true, true);
       const bounds = new THREE.Box3().setFromObject(group);
-      const requestedPadding = clamp(Number(cameraConfig.padding), 0.5, 0.999);
-      const padding = config.bloom?.enabled ? Math.min(requestedPadding, 0.86) : requestedPadding;
+      const padding = clamp(Number(cameraConfig.padding), 0.5, 0.999);
       autoFitOrthographicCameraToBox(camera, bounds, { padding, minNear: 0.001, pushBackIfSlicing: true });
     } catch {
       // Ignore auto-fit failures.
