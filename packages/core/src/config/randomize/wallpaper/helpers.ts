@@ -32,7 +32,11 @@ export function createRandomConfigContext(seed: number, type: WallpaperType, opt
   const profile = options?.profile === 'exploratory' ? 'exploratory' : 'safe';
   const isExploratory = profile === 'exploratory';
 
-  const theme = generateRandomColorThemeFromSeed(seed ^ 0x9e3779b9, 5);
+  const theme = generateRandomColorThemeFromSeed(seed ^ 0x9e3779b9, 5, {
+    scheme: options?.paletteScheme,
+    hueBetweenAnchors: options?.paletteSchemeAnchors,
+    hueBetweenSteps: options?.paletteSchemeSteps
+  });
 
   const textures: TextureType[] = ['glossy', 'matte', 'metallic', 'drywall', 'glass', 'mirror', 'cel'];
   const texture = textures[Math.floor(rng() * textures.length)];

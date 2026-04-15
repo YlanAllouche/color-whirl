@@ -1,4 +1,5 @@
 import type { WallpaperConfig, WallpaperType } from '../../types.js';
+import type { PaletteScheme } from '../colors.js';
 
 import { createRandomConfigContext } from './helpers.js';
 import { createBands2dConfig } from './bands2d.js';
@@ -19,6 +20,9 @@ export type RandomizationProfile = 'safe' | 'exploratory';
 
 export type RandomizeWallpaperOptions = {
   profile?: RandomizationProfile;
+  paletteScheme?: PaletteScheme;
+  paletteSchemeSteps?: number;
+  paletteSchemeAnchors?: [string, string] | string[];
 };
 
 /** Generate a random wallpaper configuration, including colors, without using presets. */
