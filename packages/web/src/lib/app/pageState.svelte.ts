@@ -20,6 +20,11 @@ import {
   createSvg3DScene,
   type WallpaperAppStateV1
 } from '@wallpaper-maker/core';
+import {
+  applyRandomizedWidgetPaths,
+  isRandomizeWidgetSupported,
+  type RandomizeWidgetId
+} from '../../../../core/src/config/randomize/wallpaper/widgets.js';
 
 import { PopsiclePreview, type PreviewRenderMode } from '$lib/popsicle/preview';
 
@@ -32,7 +37,15 @@ import {
   toggleLock as toggleLockImpl,
   type LockMap
 } from '$lib/app/config/locks';
-import { buildAppState, decodeCfgParam, encodeCfgParam, getCfgParamFromSearch, scheduleReplaceCfgInUrl, shouldSkipUrlUpdate } from '$lib/app/url/cfg';
+import {
+  buildAppState,
+  decodeCfgParam,
+  encodeCfgParam,
+  getCfgParamFromSearch,
+  scheduleWriteCfgInUrl,
+  shouldSkipUrlUpdate,
+  type UrlWriteMode
+} from '$lib/app/url/cfg';
 import { createPreviewScheduler } from '$lib/app/preview/scheduler';
 import { cloneConfigDeep } from '$lib/app/editor/cloneConfigDeep';
 import { touchPreviewDeps } from '$lib/app/editor/touchPreviewDeps';
@@ -82,12 +95,15 @@ export function createPageState() {
     urlSyncEnabled: false,
     cliCommand: '',
     cliViewMode: 'bash' as 'bash' | 'json',
-    locks: {} as LockMap,
+    locks: {
+      'bubbles.enabled': true
+    } as LockMap,
     selectedColorPresetId: COLOR_PRESETS[0]?.id ?? '',
     randomizationProfile: 'safe' as RandomizationProfile
   });
 
   let camDragPointerId = -1;
+  let pendingUrlWriteMode: UrlWriteMode = 'replace';
 
   const previewRefs: PreviewRefs = {
     preview: null,
@@ -174,6 +190,22 @@ export function createPageState() {
       return (a[0] >>> 0) || 1;
     } catch {
       return (Math.floor(Math.random() * 0xffffffff) >>> 0) || 1;
+    }
+  }
+
+  function markNextUrlWriteAsPush() {
+    pendingUrlWriteMode = 'push';
+  }
+
+  function restoreStateFromCfgParam(cfg: string): boolean {
+    try {
+      const stateFromUrl = decodeCfgParam(cfg);
+      state.config = normalizeWallpaperConfig(stateFromUrl.c as any) as WallpaperConfig;
+      state.exportFormat = stateFromUrl.f;
+      state.renderMode = stateFromUrl.m;
+      return true;
+    } catch {
+      return false;
     }
   }
 
@@ -486,6 +518,7 @@ export function createPageState() {
 
   function generateRandomGeneratedColors() {
     const seed = randomSeedU32();
+    markNextUrlWriteAsPush();
     state.config = mergeWithLocks(
       (generateRandomConfigNoPresetsFromSeed as any)(seed, state.config.type, { profile: state.randomizationProfile }) as any
     ) as WallpaperConfig;
@@ -514,9 +547,33 @@ export function createPageState() {
     if (types.length > 1 && nextType === currentType) {
       nextType = types[(types.indexOf(nextType) + 1) % types.length] ?? nextType;
     }
+    markNextUrlWriteAsPush();
     state.config = mergeWithLocks(
       (generateRandomConfigNoPresetsFromSeed as any)(seed, nextType, { profile: state.randomizationProfile }) as any
     ) as WallpaperConfig;
+    schedulePreviewRender();
+  }
+
+  function canRandomizeWidget(widgetId: string): boolean {
+    return isRandomizeWidgetSupported(widgetId, state.config.type);
+  }
+
+  function randomizeWidget(widgetId: string) {
+    if (!canRandomizeWidget(widgetId)) return;
+
+    const seed = randomSeedU32();
+    const randomized = (generateRandomConfigNoPresetsFromSeed as any)(seed, state.config.type, {
+      profile: state.randomizationProfile
+    }) as WallpaperConfig;
+
+    const targeted = applyRandomizedWidgetPaths({
+      currentConfig: state.config,
+      randomizedConfig: randomized,
+      widgetId: widgetId as RandomizeWidgetId
+    });
+
+    markNextUrlWriteAsPush();
+    state.config = mergeWithLocks(targeted) as WallpaperConfig;
     schedulePreviewRender();
   }
 
@@ -641,9 +698,11 @@ export function createPageState() {
 
     const cfg = encodeCfgParam(getAppState());
     const url = new URL(window.location.href);
+    const mode = pendingUrlWriteMode;
+    pendingUrlWriteMode = 'replace';
     if (shouldSkipUrlUpdate(url, cfg)) return;
 
-    return scheduleReplaceCfgInUrl(cfg, { debounceMs: 120 });
+    return scheduleWriteCfgInUrl(cfg, { debounceMs: mode === 'push' ? 0 : 120, mode });
   });
 
   $effect(() => {
@@ -739,10 +798,9 @@ export function createPageState() {
       if (hasUrlParams) {
         const cfg = getCfgParamFromSearch(window.location.search);
         if (cfg) {
-          const stateFromUrl = decodeCfgParam(cfg);
-          state.config = normalizeWallpaperConfig(stateFromUrl.c as any) as WallpaperConfig;
-          state.exportFormat = stateFromUrl.f;
-          state.renderMode = stateFromUrl.m;
+          if (!restoreStateFromCfgParam(cfg)) {
+            state.config = (generateRandomConfigNoPresets as any)({ profile: state.randomizationProfile }) as WallpaperConfig;
+          }
         } else {
           state.config = (generateRandomConfigNoPresets as any)({ profile: state.randomizationProfile }) as WallpaperConfig;
         }
@@ -802,6 +860,15 @@ export function createPageState() {
     window.addEventListener('pointercancel', handleGlobalPointerUp, { passive: true });
     window.addEventListener('blur', handleGlobalBlur);
 
+    const handlePopState = () => {
+      const cfg = getCfgParamFromSearch(window.location.search);
+      if (!cfg) return;
+      if (!restoreStateFromCfgParam(cfg)) return;
+      schedulePreviewRender();
+    };
+
+    window.addEventListener('popstate', handlePopState);
+
     if (state.canvasContainer) {
       resizeObserver.observe(state.canvasContainer);
     }
@@ -811,6 +878,7 @@ export function createPageState() {
       window.removeEventListener('pointerup', handleGlobalPointerUp);
       window.removeEventListener('pointercancel', handleGlobalPointerUp);
       window.removeEventListener('blur', handleGlobalBlur);
+      window.removeEventListener('popstate', handlePopState);
       previewScheduler.dispose();
       previewRefs.preview?.dispose();
       previewRefs.preview = null;
@@ -866,6 +934,8 @@ export function createPageState() {
       switchType,
       generateRandomGeneratedColors,
       generateRandomIncludingType,
+      canRandomizeWidget,
+      randomizeWidget,
       isLocked,
       toggleLock,
       copyCliCommand,

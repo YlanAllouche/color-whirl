@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { setContext } from 'svelte';
   import type { WallpaperConfig } from '@wallpaper-maker/core';
   import type { ColorPreset } from '$lib/color-presets';
 
@@ -50,6 +51,8 @@
     setEqualWeights: (target: any) => void;
     setRandomWeights: (target: any) => void;
     updateWeight: (target: any, index: number, value: number) => void;
+    canRandomizeWidget: (widgetId: string) => boolean;
+    randomizeWidget: (widgetId: string) => void;
     onFitCamera: () => void;
     collisionDragActive: boolean;
   };
@@ -83,9 +86,16 @@
     setEqualWeights,
     setRandomWeights,
     updateWeight,
+    canRandomizeWidget,
+    randomizeWidget,
     onFitCamera,
     collisionDragActive = $bindable()
   }: Props = $props();
+
+  setContext('wm.panelRandomize', {
+    canRandomizeWidget: (widgetId: string) => canRandomizeWidget(widgetId),
+    randomizeWidget: (widgetId: string) => randomizeWidget(widgetId)
+  });
 </script>
 
 <div class="inspector-host" oninput={schedulePreviewRender} onchange={schedulePreviewRender}>

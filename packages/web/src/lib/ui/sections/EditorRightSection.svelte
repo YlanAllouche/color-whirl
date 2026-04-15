@@ -48,6 +48,8 @@
     setEqualWeights: (target: WeightTarget) => void;
     setRandomWeights: (target: WeightTarget) => void;
     updateWeight: (target: WeightTarget, index: number, value: number) => void;
+    canRandomizeWidget: (widgetId: string) => boolean;
+    randomizeWidget: (widgetId: string) => void;
     onFitCamera: () => void;
     selectedColorPresetId: string;
     collisionDragActive: boolean;
@@ -81,6 +83,8 @@
     setEqualWeights,
     setRandomWeights,
     updateWeight,
+    canRandomizeWidget,
+    randomizeWidget,
     onFitCamera,
     selectedColorPresetId = $bindable(),
     collisionDragActive = $bindable()
@@ -115,6 +119,8 @@
   {setEqualWeights}
   {setRandomWeights}
   {updateWeight}
+  {canRandomizeWidget}
+  {randomizeWidget}
   {onFitCamera}
   bind:selectedColorPresetId
   bind:collisionDragActive

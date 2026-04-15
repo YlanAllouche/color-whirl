@@ -391,6 +391,25 @@
   flex: 1;
 }
 
+.panel-randomize {
+  display: inline-grid;
+  place-items: center;
+  width: 1.45rem;
+  height: 1.45rem;
+  margin-right: 0.15rem;
+  border: 1px solid var(--stroke1);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text1);
+  cursor: pointer;
+}
+
+.panel-randomize:hover {
+  border-color: var(--accent-stroke);
+  background: rgba(249, 115, 22, 0.14);
+  color: var(--text0);
+}
+
 .panel-chevron {
   opacity: 0.75;
   transition: transform 180ms cubic-bezier(0.2, 0.9, 0.25, 1);

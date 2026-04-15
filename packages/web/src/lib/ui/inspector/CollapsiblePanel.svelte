@@ -1,7 +1,12 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { getContext, onMount } from 'svelte';
   import LucideIcon from '$lib/ui/icons/LucideIcon.svelte';
   import { readLocalStorageBool, writeLocalStorageBool } from '$lib/ui/prefs/storage';
+
+  type PanelRandomizeContext = {
+    canRandomizeWidget: (widgetId: string) => boolean;
+    randomizeWidget: (widgetId: string) => void;
+  };
 
   type Props = {
     id: string;
@@ -13,10 +18,13 @@
 
   let { id, title, icon, defaultOpen = true, searchKeys }: Props = $props();
 
+  const randomizeCtx = getContext<PanelRandomizeContext | undefined>('wm.panelRandomize');
+
   const storageKey = $derived(`ui.panel.${id}.open`);
   let open = $state(defaultOpen);
   let searchForcedOpen = $state(false);
   let effectiveOpen = $derived(open || searchForcedOpen);
+  let showRandomizeButton = $derived(!!randomizeCtx?.canRandomizeWidget(id));
 
   function searchForcedOpenAction(node: HTMLElement) {
     const handle = (event: Event) => {
@@ -55,7 +63,7 @@
     type="button"
     class="panel-header"
     aria-expanded={effectiveOpen}
-    on:click={() => {
+    onclick={() => {
       open = !open;
     }}
   >
@@ -66,6 +74,28 @@
     {/if}
     <span class="panel-title">{title}</span>
     <span class="panel-spacer"></span>
+    {#if showRandomizeButton}
+      <span
+        class="panel-randomize"
+        title={`Randomize ${title}`}
+        aria-label={`Randomize ${title}`}
+        role="button"
+        tabindex="0"
+        onclick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          randomizeCtx?.randomizeWidget(id);
+        }}
+        onkeydown={(event) => {
+          if (event.key !== 'Enter' && event.key !== ' ') return;
+          event.preventDefault();
+          event.stopPropagation();
+          randomizeCtx?.randomizeWidget(id);
+        }}
+      >
+        <LucideIcon name="dice-5" size={14} />
+      </span>
+    {/if}
     <LucideIcon name="chevron-down" size={16} class="panel-chevron" />
   </button>
 

@@ -4,10 +4,10 @@ import {
   type WallpaperAppStateV1,
   type WallpaperConfig
 } from '@wallpaper-maker/core';
-import { replaceState } from '$app/navigation';
 import type { PreviewRenderMode } from '$lib/popsicle/preview';
 
 export type ExportFormat = 'png' | 'jpg' | 'webp' | 'svg';
+export type UrlWriteMode = 'replace' | 'push';
 
 export function buildAppState(input: {
   config: WallpaperConfig;
@@ -40,15 +40,24 @@ export function shouldSkipUrlUpdate(url: URL, cfg: string): boolean {
   return url.searchParams.get('cfg') === cfg && url.searchParams.size === 1;
 }
 
-export function scheduleReplaceCfgInUrl(cfg: string, opts?: { debounceMs?: number }): () => void {
+export function scheduleWriteCfgInUrl(
+  cfg: string,
+  opts?: { debounceMs?: number; mode?: UrlWriteMode }
+): () => void {
   if (typeof window === 'undefined') return () => {};
 
   const debounceMs = Math.max(0, Math.round(opts?.debounceMs ?? 120));
+  const mode: UrlWriteMode = opts?.mode === 'push' ? 'push' : 'replace';
   const handle = window.setTimeout(() => {
     const u = new URL(window.location.href);
     u.search = '';
     u.searchParams.set('cfg', cfg);
-    replaceState(u, {});
+    const href = u.toString();
+    if (mode === 'push') {
+      window.history.pushState({}, '', href);
+      return;
+    }
+    window.history.replaceState({}, '', href);
   }, debounceMs);
 
   return () => {

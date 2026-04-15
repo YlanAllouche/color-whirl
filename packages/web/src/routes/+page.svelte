@@ -105,6 +105,8 @@
       setEqualWeights={actions.setEqualWeights}
       setRandomWeights={actions.setRandomWeights}
       updateWeight={actions.updateWeight}
+      canRandomizeWidget={actions.canRandomizeWidget}
+      randomizeWidget={actions.randomizeWidget}
       onFitCamera={actions.fitManualCamera}
       bind:selectedColorPresetId={state.selectedColorPresetId}
       bind:collisionDragActive={state.collisionDragActive}
