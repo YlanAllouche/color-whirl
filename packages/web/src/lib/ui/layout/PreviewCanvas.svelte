@@ -57,6 +57,8 @@
 
   const CAMERA_DISTANCE_MIN = 5;
   const CAMERA_DISTANCE_MAX = 50;
+  const CAMERA_ZOOM_MIN = 0.05;
+  const CAMERA_ZOOM_MAX = 20;
   const CAMERA_ELEVATION_MIN = -80;
   const CAMERA_ELEVATION_MAX = 80;
   const OVERLAY_IDLE_MS = 800;
@@ -111,6 +113,15 @@
     config.camera.distance = DEFAULT_CONFIG.camera.distance;
     config.camera.azimuth = DEFAULT_CONFIG.camera.azimuth;
     config.camera.elevation = DEFAULT_CONFIG.camera.elevation;
+    config.camera.zoom = DEFAULT_CONFIG.camera.zoom;
+    config.camera.panX = DEFAULT_CONFIG.camera.panX;
+    config.camera.panY = DEFAULT_CONFIG.camera.panY;
+    config.camera.near = DEFAULT_CONFIG.camera.near;
+    config.camera.far = DEFAULT_CONFIG.camera.far;
+  }
+
+  function isManualCameraMode(): boolean {
+    return !!is3DType && config.camera.mode === 'manual';
   }
 
   function nudgeCamera(kind: 'azimuth' | 'elevation' | 'distance', delta: number, e?: MouseEvent) {
@@ -120,7 +131,12 @@
     } else if (kind === 'elevation') {
       config.camera.elevation = clamp(config.camera.elevation + delta * mult, CAMERA_ELEVATION_MIN, CAMERA_ELEVATION_MAX);
     } else {
-      config.camera.distance = clamp(config.camera.distance + delta * mult, CAMERA_DISTANCE_MIN, CAMERA_DISTANCE_MAX);
+      if (isManualCameraMode()) {
+        const factor = Math.pow(1.08, delta * mult);
+        config.camera.zoom = clamp(config.camera.zoom / factor, CAMERA_ZOOM_MIN, CAMERA_ZOOM_MAX);
+      } else {
+        config.camera.distance = clamp(config.camera.distance + delta * mult, CAMERA_DISTANCE_MIN, CAMERA_DISTANCE_MAX);
+      }
     }
   }
 
@@ -184,10 +200,13 @@
     const target = e.target as HTMLElement | null;
     if (target?.closest?.('.preview-overlay') || target?.closest?.('[data-settings-overlay]') || target?.closest?.('.fullscreen-toggle')) return;
 
-    // Smooth, multiplicative zoom.
     const factor = Math.pow(1.0015, e.deltaY);
-    const next = clamp(config.camera.distance * factor, CAMERA_DISTANCE_MIN, CAMERA_DISTANCE_MAX);
-    config.camera.distance = next;
+    if (isManualCameraMode()) {
+      config.camera.zoom = clamp(config.camera.zoom / factor, CAMERA_ZOOM_MIN, CAMERA_ZOOM_MAX);
+    } else {
+      const next = clamp(config.camera.distance * factor, CAMERA_DISTANCE_MIN, CAMERA_DISTANCE_MAX);
+      config.camera.distance = next;
+    }
     e.preventDefault();
   }
 

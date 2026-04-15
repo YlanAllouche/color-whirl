@@ -50,6 +50,7 @@
     setEqualWeights: (target: any) => void;
     setRandomWeights: (target: any) => void;
     updateWeight: (target: any, index: number, value: number) => void;
+    onFitCamera: () => void;
     collisionDragActive: boolean;
   };
 
@@ -82,6 +83,7 @@
     setEqualWeights,
     setRandomWeights,
     updateWeight,
+    onFitCamera,
     collisionDragActive = $bindable()
   }: Props = $props();
 </script>
@@ -123,7 +125,7 @@
     <VoronoiSection {config} {is3DType} {isLocked} {toggleLock} />
     <EmissionSection {config} {showEmissionSection} {isLocked} {toggleLock} />
     <GeneratorSection {config} {isLocked} {toggleLock} {renderError} {schedulePreviewRender} {setEqualWeights} {setRandomWeights} {updateWeight} />
-    <CameraSection {config} {is3DType} {isLocked} {toggleLock} />
+    <CameraSection {config} {is3DType} {isLocked} {toggleLock} onFitCamera={onFitCamera} />
     <LightingSection {config} {is3DType} {isLocked} {toggleLock} />
     <CollisionsSection
       {config}

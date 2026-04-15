@@ -14,6 +14,10 @@ import {
   exportToSVG,
   downloadFile,
   renderWallpaperToCanvas,
+  createPopsicleScene,
+  createSpheres3DScene,
+  createTriangles3DScene,
+  createSvg3DScene,
   type WallpaperAppStateV1
 } from '@wallpaper-maker/core';
 
@@ -555,6 +559,71 @@ export function createPageState() {
     state.lookColumns = state.lookColumns === 2 ? 1 : 2;
   }
 
+  function fitManualCamera() {
+    const current = state.config;
+    if (current.type !== 'popsicle' && current.type !== 'spheres3d' && current.type !== 'triangles3d' && current.type !== 'svg3d') return;
+
+    const source = cloneConfigDeep(current as any) as any;
+    source.camera = {
+      ...source.camera,
+      mode: 'auto',
+      panX: 0,
+      panY: 0
+    };
+
+    let built: { scene: any; camera: any; renderer: any } | null = null;
+    try {
+      if (current.type === 'popsicle') {
+        built = createPopsicleScene(source, { preserveDrawingBuffer: false, pixelRatio: 1 });
+      } else if (current.type === 'spheres3d') {
+        built = createSpheres3DScene(source, { preserveDrawingBuffer: false, pixelRatio: 1 });
+      } else if (current.type === 'triangles3d') {
+        built = createTriangles3DScene(source, { preserveDrawingBuffer: false, pixelRatio: 1 });
+      } else if (current.type === 'svg3d') {
+        built = createSvg3DScene(source, { preserveDrawingBuffer: false, pixelRatio: 1 });
+      }
+      if (!built) return;
+
+      const fittedDistance = Math.max(0.01, Number(built.camera.position.length()) || 0.01);
+      const fittedZoom = Math.max(0.01, Number(built.camera.zoom) || 1);
+      const fittedNear = Math.max(0.001, Number(built.camera.near) || 0.001);
+      const fittedFar = Math.max(fittedNear + 0.001, Number(built.camera.far) || fittedNear + 1000);
+
+      state.config.camera.mode = 'manual';
+      state.config.camera.distance = fittedDistance;
+      state.config.camera.zoom = fittedZoom;
+      state.config.camera.panX = 0;
+      state.config.camera.panY = 0;
+      state.config.camera.near = fittedNear;
+      state.config.camera.far = fittedFar;
+
+      schedulePreviewRender();
+    } catch (err) {
+      console.error('Manual fit failed:', err);
+    } finally {
+      try {
+        built?.scene?.userData?.__wmDisposeCollisionMasking?.();
+      } catch {
+        // Ignore.
+      }
+      try {
+        built?.scene?.userData?.__wmDisposeProceduralEnvironment?.();
+      } catch {
+        // Ignore.
+      }
+      try {
+        if (built?.scene?.userData) delete built.scene.userData.__wmDisposeProceduralEnvironment;
+      } catch {
+        // Ignore.
+      }
+      try {
+        built?.renderer?.dispose?.();
+      } catch {
+        // Ignore.
+      }
+    }
+  }
+
   $effect(() => {
     void state.cliViewMode;
     state.cliCommand = buildCliWidgetText();
@@ -799,7 +868,8 @@ export function createPageState() {
       setEqualWeights,
       setRandomWeights,
       updateWeight,
-      toggleLookColumns
+      toggleLookColumns,
+      fitManualCamera
     }
   };
 }

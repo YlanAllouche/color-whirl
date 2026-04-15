@@ -48,6 +48,7 @@
     setEqualWeights: (target: WeightTarget) => void;
     setRandomWeights: (target: WeightTarget) => void;
     updateWeight: (target: WeightTarget, index: number, value: number) => void;
+    onFitCamera: () => void;
     selectedColorPresetId: string;
     collisionDragActive: boolean;
   };
@@ -80,6 +81,7 @@
     setEqualWeights,
     setRandomWeights,
     updateWeight,
+    onFitCamera,
     selectedColorPresetId = $bindable(),
     collisionDragActive = $bindable()
   }: Props = $props();
@@ -113,6 +115,7 @@
   {setEqualWeights}
   {setRandomWeights}
   {updateWeight}
+  {onFitCamera}
   bind:selectedColorPresetId
   bind:collisionDragActive
 />
