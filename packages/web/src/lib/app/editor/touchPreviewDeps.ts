@@ -265,13 +265,6 @@ export function touchPreviewDeps(config: WallpaperConfig, renderMode: unknown, e
     void c.diamondgrid?.bevel?.amount;
     void c.diamondgrid?.bevel?.lightDeg;
     void c.diamondgrid?.bevel?.variation;
-    void c.diamondgrid?.sparkles?.enabled;
-    void c.diamondgrid?.sparkles?.density;
-    void c.diamondgrid?.sparkles?.countMax;
-    void c.diamondgrid?.sparkles?.sizeMinPx;
-    void c.diamondgrid?.sparkles?.sizeMaxPx;
-    void c.diamondgrid?.sparkles?.opacity;
-    void c.diamondgrid?.sparkles?.color;
   }
   if (c.type === 'circles2d') {
     void c.circles?.mode;

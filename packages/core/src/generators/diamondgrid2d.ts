@@ -78,22 +78,6 @@ function diamondCenter(originX: number, originY: number, a: number, b: number, u
   };
 }
 
-function drawStar(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, rotRad: number) {
-  const p = new Path2D();
-  const spikes = 4;
-  const r2 = r * 0.42;
-  for (let i = 0; i < spikes * 2; i++) {
-    const a = rotRad + (i / (spikes * 2)) * Math.PI * 2;
-    const rr = i % 2 === 0 ? r : r2;
-    const px = x + Math.cos(a) * rr;
-    const py = y + Math.sin(a) * rr;
-    if (i === 0) p.moveTo(px, py);
-    else p.lineTo(px, py);
-  }
-  p.closePath();
-  ctx.fill(p);
-}
-
 export function renderDiamondGrid2DToCanvas(config: DiamondGrid2DConfig, canvas?: HTMLCanvasElement): HTMLCanvasElement {
   const c = canvas ?? document.createElement('canvas');
   c.width = Math.max(1, Math.round(config.width));
@@ -132,14 +116,6 @@ export function renderDiamondGrid2DToCanvas(config: DiamondGrid2DConfig, canvas?
   const bevelAmt = clamp01(Number(dg?.bevel?.amount) || 0);
   const bevelLightDeg = Number(dg?.bevel?.lightDeg) || 0;
   const bevelVar = clamp01(Number(dg?.bevel?.variation) || 0);
-
-  const sparkEnabled = !!dg?.sparkles?.enabled;
-  const sparkDensity = clamp01(Number(dg?.sparkles?.density) || 0);
-  const sparkCountMax = Math.max(1, Math.min(12, Math.round(Number(dg?.sparkles?.countMax) || 1)));
-  const sparkSizeMin = Math.max(0.1, Number(dg?.sparkles?.sizeMinPx) || 0.1);
-  const sparkSizeMax = Math.max(sparkSizeMin, Number(dg?.sparkles?.sizeMaxPx) || sparkSizeMin);
-  const sparkOpacity = clamp01(Number(dg?.sparkles?.opacity) || 0);
-  const sparkColor = typeof dg?.sparkles?.color === 'string' ? String(dg.sparkles.color) : '#ffffff';
 
   const a0 = tileW * 0.5;
   const b0 = tileH * 0.5;
@@ -235,32 +211,6 @@ export function renderDiamondGrid2DToCanvas(config: DiamondGrid2DConfig, canvas?
         ctx.lineWidth = strokeW;
         ctx.strokeStyle = rgba(strokeColor, strokeOpacity);
         ctx.stroke(p);
-      }
-
-      if (sparkEnabled && sparkOpacity > 0 && sparkDensity > 0) {
-        if (cellRand01(seedU32, uu, vv, 7001) < sparkDensity) {
-          const count = 1 + Math.floor(cellRand01(seedU32, uu, vv, 7002) * sparkCountMax);
-          ctx.save();
-          ctx.globalCompositeOperation = 'screen';
-          ctx.fillStyle = rgba(sparkColor, sparkOpacity);
-          for (let si = 0; si < count; si++) {
-            // Rejection sample inside diamond.
-            let rx = (cellRand01(seedU32, uu * 97 + si, vv * 131 + si, 7101) - 0.5) * 2;
-            let ry = (cellRand01(seedU32, uu * 97 + si, vv * 131 + si, 7102) - 0.5) * 2;
-            let tries = 0;
-            while (Math.abs(rx) + Math.abs(ry) > 1 && tries < 6) {
-              rx = (cellRand01(seedU32, uu * 97 + si, vv * 131 + si, 7101 + tries) - 0.5) * 2;
-              ry = (cellRand01(seedU32, uu * 97 + si, vv * 131 + si, 7102 + tries) - 0.5) * 2;
-              tries++;
-            }
-            const sx = cx + rx * a * 0.75;
-            const sy = cy + ry * b * 0.75;
-            const r = sparkSizeMin + cellRand01(seedU32, uu * 37 + si, vv * 41 + si, 7103) * (sparkSizeMax - sparkSizeMin);
-            const rot = cellRand01(seedU32, uu * 17 + si, vv * 19 + si, 7104) * Math.PI * 2;
-            drawStar(ctx, sx, sy, r, rot);
-          }
-          ctx.restore();
-        }
       }
 
     }

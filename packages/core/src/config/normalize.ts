@@ -557,20 +557,7 @@ export function normalizeWallpaperConfig(input: any): WallpaperConfig {
       dAny.bevel.lightDeg = Number.isFinite(ld) ? ld : Number(baseDg?.bevel?.lightDeg) || 0;
       const bv = Number(dAny.bevel.variation);
       dAny.bevel.variation = Number.isFinite(bv) ? clamp(bv, 0, 1) : clamp(Number(baseDg?.bevel?.variation) || 0, 0, 1);
-
-      if (!dAny.sparkles || typeof dAny.sparkles !== 'object') dAny.sparkles = cloneJson(baseDg?.sparkles);
-      dAny.sparkles.enabled = typeof dAny.sparkles.enabled === 'boolean' ? dAny.sparkles.enabled : !!dAny.sparkles.enabled;
-      const sd = Number(dAny.sparkles.density);
-      dAny.sparkles.density = Number.isFinite(sd) ? clamp(sd, 0, 1) : clamp(Number(baseDg?.sparkles?.density) || 0, 0, 1);
-      const cm1 = Number(dAny.sparkles.countMax);
-      dAny.sparkles.countMax = Number.isFinite(cm1) ? Math.max(1, Math.min(32, Math.round(cm1))) : Math.max(1, Math.min(32, Math.round(Number(baseDg?.sparkles?.countMax) || 1)));
-      const smin = Number(dAny.sparkles.sizeMinPx);
-      const smax = Number(dAny.sparkles.sizeMaxPx);
-      dAny.sparkles.sizeMinPx = Number.isFinite(smin) ? Math.max(0.1, smin) : Math.max(0.1, Number(baseDg?.sparkles?.sizeMinPx) || 0.1);
-      dAny.sparkles.sizeMaxPx = Number.isFinite(smax) ? Math.max(dAny.sparkles.sizeMinPx, smax) : Math.max(dAny.sparkles.sizeMinPx, Number(baseDg?.sparkles?.sizeMaxPx) || dAny.sparkles.sizeMinPx);
-      const sop = Number(dAny.sparkles.opacity);
-      dAny.sparkles.opacity = Number.isFinite(sop) ? clamp(sop, 0, 1) : clamp(Number(baseDg?.sparkles?.opacity) || 0, 0, 1);
-      if (typeof dAny.sparkles.color !== 'string') dAny.sparkles.color = String(dAny.sparkles.color ?? baseDg?.sparkles?.color ?? '#ffffff');
+      if (Object.prototype.hasOwnProperty.call(dAny, 'sparkles')) delete dAny.sparkles;
     }
   }
 

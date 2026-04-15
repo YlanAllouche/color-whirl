@@ -53,30 +53,6 @@
   </details>
 
   <details class="control-details">
-    <summary class="control-details-summary">Sparkles</summary>
-    <label class="control-row checkbox">
-      <input type="checkbox" bind:checked={config.diamondgrid.sparkles.enabled} />
-      <button type="button" class="setting-title" class:locked={isLocked('diamondgrid.sparkles.enabled')} onclick={(e) => { e.preventDefault(); toggleLock('diamondgrid.sparkles.enabled'); }} title="Click to lock/unlock for randomize">Enable</button>
-    </label>
-    <label class="control-row slider">
-      <button type="button" class="setting-title" class:locked={isLocked('diamondgrid.sparkles.density')} onclick={() => toggleLock('diamondgrid.sparkles.density')} title="Click to lock/unlock for randomize">Density: {config.diamondgrid.sparkles.density.toFixed(3)}</button>
-      <input type="range" bind:value={config.diamondgrid.sparkles.density} min="0" max="0.5" step="0.001" disabled={!config.diamondgrid.sparkles.enabled} />
-    </label>
-    <label class="control-row slider">
-      <button type="button" class="setting-title" class:locked={isLocked('diamondgrid.sparkles.countMax')} onclick={() => toggleLock('diamondgrid.sparkles.countMax')} title="Click to lock/unlock for randomize">Count max: {config.diamondgrid.sparkles.countMax}</button>
-      <input type="range" bind:value={config.diamondgrid.sparkles.countMax} min="1" max="12" step="1" disabled={!config.diamondgrid.sparkles.enabled} />
-    </label>
-    <label class="control-row slider">
-      <button type="button" class="setting-title" class:locked={isLocked('diamondgrid.sparkles.sizeMaxPx')} onclick={() => toggleLock('diamondgrid.sparkles.sizeMaxPx')} title="Click to lock/unlock for randomize">Size max: {config.diamondgrid.sparkles.sizeMaxPx.toFixed(1)}px</button>
-      <input type="range" bind:value={config.diamondgrid.sparkles.sizeMaxPx} min="1" max="60" step="0.5" disabled={!config.diamondgrid.sparkles.enabled} />
-    </label>
-    <label class="control-row slider">
-      <button type="button" class="setting-title" class:locked={isLocked('diamondgrid.sparkles.opacity')} onclick={() => toggleLock('diamondgrid.sparkles.opacity')} title="Click to lock/unlock for randomize">Opacity: {config.diamondgrid.sparkles.opacity.toFixed(2)}</button>
-      <input type="range" bind:value={config.diamondgrid.sparkles.opacity} min="0" max="1" step="0.01" disabled={!config.diamondgrid.sparkles.enabled} />
-    </label>
-  </details>
-
-  <details class="control-details">
     <summary class="control-details-summary">Palette</summary>
     <label class="control-row">
       <button type="button" class="setting-title" class:locked={isLocked('diamondgrid.coloring.paletteMode')} onclick={() => toggleLock('diamondgrid.coloring.paletteMode')} title="Click to lock/unlock for randomize">Mode</button>

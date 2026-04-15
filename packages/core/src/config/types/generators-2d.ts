@@ -324,16 +324,5 @@ export interface DiamondGrid2DConfig extends BaseWallpaperConfig {
       /** 0..1 */
       variation: number;
     };
-    sparkles: {
-      enabled: boolean;
-      /** 0..1 */
-      density: number;
-      countMax: number;
-      sizeMinPx: number;
-      sizeMaxPx: number;
-      /** 0..1 */
-      opacity: number;
-      color: string;
-    };
   };
 }

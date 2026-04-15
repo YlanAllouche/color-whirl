@@ -34,15 +34,6 @@ export function createDiamondgrid2dConfig(context: RandomConfigContext): Wallpap
         amount: clamp(tri(0, 0.48, 1.0), 0, 1),
         lightDeg: randomWeighted(0, 360, 315),
         variation: clamp(tri(0, 0.15, 0.6), 0, 1)
-      },
-      sparkles: {
-        enabled: rng() < 0.24,
-        density: clamp(tri(0, 0.035, 0.12), 0, 1),
-        countMax: Math.max(1, Math.min(6, Math.round(tri(1, 2, 6)))),
-        sizeMinPx: clamp(tri(0.75, 1.6, 3.0), 0.1, 200),
-        sizeMaxPx: clamp(tri(3, 9, 18), 0.1, 600),
-        opacity: clamp(tri(0.08, 0.28, 0.75), 0, 1),
-        color: '#ffffff'
       }
     }
   };

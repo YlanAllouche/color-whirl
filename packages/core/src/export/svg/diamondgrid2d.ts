@@ -1,5 +1,5 @@
 import type { PaletteAssignMode, WallpaperConfig } from '../../types.js';
-import { cellRand01, clamp, clamp01, normalizeWeights, sampleWeightedIndex01, svgEnd, svgStart } from './utils.js';
+import { cellRand01, clamp01, normalizeWeights, sampleWeightedIndex01, svgEnd, svgStart } from './utils.js';
 
 export function generateDiamondGrid2DSVG(config: Extract<WallpaperConfig, { type: 'diamondgrid2d' }>): string {
   const { width, height, colors, backgroundColor } = config;
@@ -72,15 +72,6 @@ export function generateDiamondGrid2DSVG(config: Extract<WallpaperConfig, { type
       ? ` stroke="${strokeColor}" stroke-opacity="${strokeOpacity.toFixed(3)}" stroke-width="${sw}" stroke-linejoin="${strokeJoin}"`
       : '';
 
-  const spark = dg.sparkles ?? {};
-  const sparkEnabled = !!spark.enabled;
-  const sparkDensity = clamp01(Number(spark.density) || 0);
-  const sparkCountMax = Math.max(1, Math.min(12, Math.round(Number(spark.countMax) || 1)));
-  const sparkSizeMin = Math.max(0.1, Number(spark.sizeMinPx) || 0.1);
-  const sparkSizeMax = Math.max(sparkSizeMin, Number(spark.sizeMaxPx) || sparkSizeMin);
-  const sparkOpacity = clamp01(Number(spark.opacity) || 0);
-  const sparkColor = typeof spark.color === 'string' ? String(spark.color) : '#ffffff';
-
   let svg = svgStart(width, height, backgroundColor);
 
   for (let v = v0; v <= v1; v++) {
@@ -97,29 +88,6 @@ export function generateDiamondGrid2DSVG(config: Extract<WallpaperConfig, { type
         `${(cx - a).toFixed(3)},${cy.toFixed(3)}`
       ];
       svg += `  <polygon points="${pts.join(' ')}" fill="${col}" fill-opacity="${fillOpacity.toFixed(3)}"${strokeAttr}/>` + '\n';
-
-      if (sparkEnabled && sparkOpacity > 0 && sparkDensity > 0 && cellRand01(seed, u, v, 7001) < sparkDensity) {
-        const count = 1 + Math.floor(cellRand01(seed, u, v, 7002) * sparkCountMax);
-        for (let si = 0; si < count; si++) {
-          const rx0 = (cellRand01(seed, u * 97 + si, v * 131 + si, 7101) - 0.5) * 2;
-          const ry0 = (cellRand01(seed, u * 97 + si, v * 131 + si, 7102) - 0.5) * 2;
-          const rx = clamp(rx0, -1, 1);
-          const ry = clamp(ry0, -1, 1);
-          const sx = cx + rx * a * 0.75;
-          const sy = cy + ry * b * 0.75;
-          const r = sparkSizeMin + cellRand01(seed, u * 37 + si, v * 41 + si, 7103) * (sparkSizeMax - sparkSizeMin);
-          const rot = cellRand01(seed, u * 17 + si, v * 19 + si, 7104) * Math.PI * 2;
-          const spikes = 4;
-          const r2 = r * 0.42;
-          const pts2: string[] = [];
-          for (let k = 0; k < spikes * 2; k++) {
-            const ang = rot + (k / (spikes * 2)) * Math.PI * 2;
-            const rr = k % 2 === 0 ? r : r2;
-            pts2.push(`${(sx + Math.cos(ang) * rr).toFixed(3)} ${(sy + Math.sin(ang) * rr).toFixed(3)}`);
-          }
-          svg += `  <path d="M ${pts2.join(' L ')} Z" fill="${sparkColor}" fill-opacity="${sparkOpacity.toFixed(3)}"/>\n`;
-        }
-      }
     }
   }
 

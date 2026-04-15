@@ -460,8 +460,7 @@ export function cloneConfigDeep(src: WallpaperConfig): WallpaperConfig {
           originPx: { ...((src as any).diamondgrid?.originPx ?? {}) },
           stroke: { ...((src as any).diamondgrid?.stroke ?? {}) },
           coloring: { ...((src as any).diamondgrid?.coloring ?? {}), colorWeights: [...(((src as any).diamondgrid?.coloring?.colorWeights ?? []) as any)] },
-          bevel: { ...((src as any).diamondgrid?.bevel ?? {}) },
-          sparkles: { ...((src as any).diamondgrid?.sparkles ?? {}) }
+          bevel: { ...((src as any).diamondgrid?.bevel ?? {}) }
         }
       } as any;
     case 'svg2d':

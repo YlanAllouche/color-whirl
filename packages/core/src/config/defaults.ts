@@ -444,16 +444,7 @@ export const DEFAULT_DIAMONDGRID2D_CONFIG: DiamondGrid2DConfig = {
     fillOpacity: 0.96,
     stroke: { enabled: false, widthPx: 2, color: '#0b0b10', opacity: 0.6, join: 'round' },
     coloring: { paletteMode: 'weighted', colorWeights: [0.34, 0.28, 0.18, 0.12, 0.08] },
-    bevel: { enabled: true, amount: 0.48, lightDeg: 315, variation: 0.15 },
-    sparkles: {
-      enabled: false,
-      density: 0.03,
-      countMax: 2,
-      sizeMinPx: 1.0,
-      sizeMaxPx: 10.0,
-      opacity: 0.28,
-      color: '#ffffff'
-    }
+    bevel: { enabled: true, amount: 0.48, lightDeg: 315, variation: 0.15 }
   }
 };
 
