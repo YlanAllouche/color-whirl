@@ -15,3 +15,5 @@ export {
   getRandomizeWidgetPaths,
   isRandomizeWidgetSupported
 } from './randomize/wallpaper/widgets.js';
+
+export { RANDOMIZE_TUNING } from './randomize/wallpaper/tuning.js';

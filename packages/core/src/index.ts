@@ -20,3 +20,4 @@ export * from './generators/svg2d.js';
 export * from './generators/svg3d.js';
 export * from './export/index.js';
 export * from './svg-tone-extraction.js';
+export * from './config/randomize.js';

@@ -1,30 +1,7 @@
 import type { WallpaperConfig, WallpaperType } from '../../types/index.js';
+import { DEFAULT_CONFIG_BY_TYPE } from '../../defaults.js';
 
-export type RandomizeWidgetId =
-  | 'appearance'
-  | 'voronoi'
-  | 'emission'
-  | 'camera'
-  | 'lighting'
-  | 'collisions'
-  | 'facades'
-  | 'edge'
-  | 'outline'
-  | 'bubbles'
-  | 'popsicle'
-  | 'spheres3d'
-  | 'bands2d'
-  | 'flowlines2d'
-  | 'diamondgrid2d'
-  | 'circles2d'
-  | 'polygon2d'
-  | 'svg2d'
-  | 'svg3d'
-  | 'triangles2d'
-  | 'ridges2d'
-  | 'triangles3d'
-  | 'hexgrid2d'
-  | 'svg-icons';
+export type RandomizeWidgetId = string;
 
 type WidgetRandomizeConfig = {
   paths: string[];
@@ -32,7 +9,10 @@ type WidgetRandomizeConfig = {
   enabled?: boolean;
 };
 
-const WIDGET_RANDOMIZE_MAP: Record<RandomizeWidgetId, WidgetRandomizeConfig> = {
+const WIDGET_RANDOMIZE_MAP: Record<string, WidgetRandomizeConfig> = {
+  colors: {
+    paths: ['colors', 'backgroundColor']
+  },
   appearance: {
     paths: ['texture', 'textureParams'],
     types: ['popsicle', 'spheres3d', 'triangles3d', 'svg3d']
@@ -146,6 +126,15 @@ const WIDGET_RANDOMIZE_MAP: Record<RandomizeWidgetId, WidgetRandomizeConfig> = {
   }
 };
 
+function getFallbackWidgetPaths(widgetId: string, type: WallpaperType): string[] {
+  // Keep fallback conservative: only plain dot-free keys that exist on the type config.
+  if (!/^[A-Za-z0-9_]+$/.test(widgetId)) return [];
+  const base = (DEFAULT_CONFIG_BY_TYPE as any)?.[type];
+  if (!base || typeof base !== 'object') return [];
+  if (!Object.prototype.hasOwnProperty.call(base, widgetId)) return [];
+  return [widgetId];
+}
+
 function cloneAny<T>(value: T): T {
   try {
     return structuredClone(value);
@@ -178,10 +167,12 @@ function setAtPath(obj: any, path: string, value: any): void {
 
 export function getRandomizeWidgetPaths(widgetId: string, type: WallpaperType): string[] {
   const rule = (WIDGET_RANDOMIZE_MAP as Record<string, WidgetRandomizeConfig | undefined>)[widgetId];
-  if (!rule) return [];
-  if (rule.enabled === false) return [];
-  if (Array.isArray(rule.types) && !rule.types.includes(type)) return [];
-  return [...rule.paths];
+  if (rule) {
+    if (rule.enabled === false) return [];
+    if (Array.isArray(rule.types) && !rule.types.includes(type)) return [];
+    if (rule.paths.length > 0) return [...rule.paths];
+  }
+  return getFallbackWidgetPaths(widgetId, type);
 }
 
 export function isRandomizeWidgetSupported(widgetId: string, type: WallpaperType): boolean {

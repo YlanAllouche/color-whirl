@@ -10,6 +10,7 @@ import { createRng, randomTriangular, randomWeighted } from '../rng.js';
 import { clamp, deepMerge } from '../utils.js';
 
 import type { RandomizeWallpaperOptions } from './index.js';
+import { RANDOMIZE_TUNING } from './tuning.js';
 
 export type RandomConfigContext = {
   base: BaseWallpaperConfig;
@@ -42,13 +43,20 @@ export function createRandomConfigContext(seed: number, type: WallpaperType, opt
   // - Extremely unlikely to be very transparent
   const randomStickOpacity = (): number => {
     const r = rng();
-    if (r < 0.9) return 1.0;
+    if (r < RANDOMIZE_TUNING.stickOpacity.mostlyOpaqueThreshold) return 1.0;
     // Mostly imperceptible translucency.
-    if (r < 0.995) return clamp(randomWeighted(rng, 0.92, 1.0, 0.992), 0, 1);
+    if (r < RANDOMIZE_TUNING.stickOpacity.slightTranslucencyThreshold) {
+      const range = RANDOMIZE_TUNING.stickOpacity.slight;
+      return clamp(randomWeighted(rng, range.min, range.max, range.mode), 0, 1);
+    }
     // Rare: noticeable translucency.
-    if (r < 0.9995) return clamp(randomWeighted(rng, 0.5, 0.92, 0.85), 0, 1);
+    if (r < RANDOMIZE_TUNING.stickOpacity.noticeableTranslucencyThreshold) {
+      const range = RANDOMIZE_TUNING.stickOpacity.noticeable;
+      return clamp(randomWeighted(rng, range.min, range.max, range.mode), 0, 1);
+    }
     // Extremely rare: quite transparent.
-    return clamp(randomWeighted(rng, 0.15, 0.5, 0.35), 0, 1);
+    const range = RANDOMIZE_TUNING.stickOpacity.transparent;
+    return clamp(randomWeighted(rng, range.min, range.max, range.mode), 0, 1);
   };
 
   const tri = (min: number, mode: number, max: number): number => randomTriangular(rng, min, mode, max);
@@ -73,24 +81,28 @@ export function createRandomConfigContext(seed: number, type: WallpaperType, opt
   const emissionPaletteIndex = Math.floor(rng() * Math.max(1, theme.colors.length));
   const emissionIntensityBase = clamp(tri(0, DEFAULT_POPSICLE_CONFIG.emission.intensity, 14), 0, 20);
   const emissionIntensitySeed = emissionIntensityBase > 0 ? emissionIntensityBase : DEFAULT_POPSICLE_CONFIG.emission.intensity;
-  const fallbackGlobalEmission = chance(0.08);
-  const bloomEnabled = chance(0.35);
+  const fallbackGlobalEmission = chance(RANDOMIZE_TUNING.global.fallbackEmissionChance);
+  const bloomEnabled = chance(RANDOMIZE_TUNING.global.bloomEnabledChance);
 
   const is3DType = type === 'popsicle' || type === 'spheres3d' || type === 'triangles3d' || type === 'svg3d';
 
   // Rare: procedural cavity cutouts (raster-only; best-effort for other renderers).
-  const bubblesEnabled = (type === 'popsicle' || type === 'spheres3d') && chance(0.035);
+  const bubblesEnabled = (type === 'popsicle' || type === 'spheres3d') && chance(RANDOMIZE_TUNING.global.bubblesEnabledChance);
 
   // Collisions are allowed for 2D types but are disabled for 3D random configs.
   // (3D carve collisions are both expensive and historically problematic.)
-  const collisionsMode = !is3DType && chance(0.12) ? 'carve' : 'none';
-  const collisionsEdge = chance(0.28) ? 'soft' : 'hard';
+  const collisionsMode = !is3DType && chance(RANDOMIZE_TUNING.global.collisionsCarveChance) ? 'carve' : 'none';
+  const collisionsEdge = chance(RANDOMIZE_TUNING.global.collisionsSoftEdgeChance) ? 'soft' : 'hard';
   const collisionsFeather =
     collisionsMode === 'carve' && collisionsEdge === 'soft'
       ? Math.round(tri(0, DEFAULT_POPSICLE_CONFIG.collisions.carve.featherPx, 16))
       : 0;
 
-  const cameraMode: 'auto' | 'manual' = is3DType && chance(isExploratory ? 0.35 : 0.08) ? 'manual' : 'auto';
+  const cameraMode: 'auto' | 'manual' =
+    is3DType &&
+    chance(isExploratory ? RANDOMIZE_TUNING.global.manualCameraChanceExploratory : RANDOMIZE_TUNING.global.manualCameraChanceSafe)
+      ? 'manual'
+      : 'auto';
   const cameraPadding = isExploratory
     ? clamp(tri(0.6, DEFAULT_POPSICLE_CONFIG.camera.padding, 0.995), 0.5, 0.999)
     : clamp(tri(0.82, DEFAULT_POPSICLE_CONFIG.camera.padding, 0.99), 0.5, 0.999);
@@ -142,11 +154,11 @@ export function createRandomConfigContext(seed: number, type: WallpaperType, opt
       },
       cel: {
         bands: Math.max(2, Math.min(8, Math.round(tri(2, DEFAULT_POPSICLE_CONFIG.textureParams.cel.bands, 8)))),
-        halftone: chance(0.25)
+        halftone: chance(RANDOMIZE_TUNING.texture.celHalftoneChance)
       }
     },
     voronoi: (() => {
-      const enabled = is3DType && chance(0.22);
+      const enabled = is3DType && chance(RANDOMIZE_TUNING.voronoi.enabledChance3D);
       const textureBias =
         texture === 'mirror'
           ? { roughness: 0.52, normal: 0.42, amount: 0.86, scale: 5.4 }
@@ -162,26 +174,52 @@ export function createRandomConfigContext(seed: number, type: WallpaperType, opt
                     amount: DEFAULT_POPSICLE_CONFIG.voronoi.amount,
                     scale: DEFAULT_POPSICLE_CONFIG.voronoi.scale
                   };
-      const kind = enabled ? (chance(0.78) ? 'edges' : 'cells') : DEFAULT_POPSICLE_CONFIG.voronoi.kind;
+      const kind = enabled ? (chance(RANDOMIZE_TUNING.voronoi.edgesKindChance) ? 'edges' : 'cells') : DEFAULT_POPSICLE_CONFIG.voronoi.kind;
       const materialKind =
         !enabled
           ? DEFAULT_POPSICLE_CONFIG.voronoi.materialKind
           : kind === 'cells'
-            ? (chance(0.62) ? 'edges' : chance(0.75) ? 'match' : 'cells')
-            : (chance(0.78) ? 'match' : chance(0.85) ? 'edges' : 'cells');
+            ? (chance(RANDOMIZE_TUNING.voronoi.materialCellsEdgesChance)
+                ? 'edges'
+                : chance(RANDOMIZE_TUNING.voronoi.materialCellsMatchChance)
+                  ? 'match'
+                  : 'cells')
+            : (chance(RANDOMIZE_TUNING.voronoi.materialEdgesMatchChance)
+                ? 'match'
+                : chance(RANDOMIZE_TUNING.voronoi.materialEdgesEdgesChance)
+                  ? 'edges'
+                  : 'cells');
 
-      const crackleEnabled = enabled && (kind === 'edges' || materialKind === 'edges') && chance(0.22);
-      const nucleusEnabled = enabled && chance(kind === 'cells' ? 0.65 : 0.25);
+      const crackleEnabled = enabled && (kind === 'edges' || materialKind === 'edges') && chance(RANDOMIZE_TUNING.voronoi.crackleChance);
+      const nucleusEnabled = enabled && chance(kind === 'cells' ? RANDOMIZE_TUNING.voronoi.nucleusCellsChance : RANDOMIZE_TUNING.voronoi.nucleusEdgesChance);
 
       const materialMode =
         !enabled
           ? DEFAULT_POPSICLE_CONFIG.voronoi.materialMode
           : texture === 'glass'
-            ? (chance(0.72) ? 'normal' : chance(0.8) ? 'both' : chance(0.9) ? 'roughness' : 'none')
+            ? (chance(RANDOMIZE_TUNING.voronoi.glassNormalChance)
+                ? 'normal'
+                : chance(RANDOMIZE_TUNING.voronoi.glassBothChance)
+                  ? 'both'
+                  : chance(RANDOMIZE_TUNING.voronoi.glassRoughnessChance)
+                    ? 'roughness'
+                    : 'none')
             : texture === 'matte'
-              ? (chance(0.7) ? 'roughness' : chance(0.75) ? 'both' : chance(0.9) ? 'normal' : 'none')
+              ? (chance(RANDOMIZE_TUNING.voronoi.matteRoughnessChance)
+                  ? 'roughness'
+                  : chance(RANDOMIZE_TUNING.voronoi.matteBothChance)
+                    ? 'both'
+                    : chance(RANDOMIZE_TUNING.voronoi.matteNormalChance)
+                      ? 'normal'
+                      : 'none')
               : texture === 'mirror'
-                ? (chance(0.66) ? 'normal' : chance(0.72) ? 'both' : chance(0.9) ? 'roughness' : 'none')
+                ? (chance(RANDOMIZE_TUNING.voronoi.mirrorNormalChance)
+                    ? 'normal'
+                    : chance(RANDOMIZE_TUNING.voronoi.mirrorBothChance)
+                      ? 'both'
+                      : chance(RANDOMIZE_TUNING.voronoi.mirrorRoughnessChance)
+                        ? 'roughness'
+                        : 'none')
                 : (() => {
                     const r = rng();
                     if (r < 0.5) return 'both';
@@ -193,7 +231,7 @@ export function createRandomConfigContext(seed: number, type: WallpaperType, opt
       return {
         ...DEFAULT_POPSICLE_CONFIG.voronoi,
         enabled,
-        space: chance(0.72) ? 'world' : 'object',
+        space: chance(RANDOMIZE_TUNING.voronoi.spaceWorldChance) ? 'world' : 'object',
         kind,
         scale: clamp(tri(0.8, textureBias.scale, 16), 0.1, 80),
         seedOffset: Math.round(tri(-50, 0, 50)),
@@ -203,7 +241,7 @@ export function createRandomConfigContext(seed: number, type: WallpaperType, opt
         colorStrength: enabled
           ? clamp(tri(0.12, DEFAULT_POPSICLE_CONFIG.voronoi.colorStrength, 1.0), 0, 1)
           : DEFAULT_POPSICLE_CONFIG.voronoi.colorStrength,
-        colorMode: (['darken', 'lighten', 'tint'] as const)[chance(0.6) ? 0 : Math.floor(rng() * 3)],
+        colorMode: (['darken', 'lighten', 'tint'] as const)[chance(RANDOMIZE_TUNING.voronoi.colorModeDarkenChance) ? 0 : Math.floor(rng() * 3)],
         tintColor: '#ffffff',
         materialMode,
         materialKind,
@@ -234,15 +272,21 @@ export function createRandomConfigContext(seed: number, type: WallpaperType, opt
     })(),
     backgroundColor: theme.backgroundColor,
     facades: (() => {
-      const tintEnabled = chance(0.18);
-      const materialEnabled = chance(0.18);
-      const wearEnabled = chance(0.12);
-      const rimEnabled = chance(0.25);
+      const tintEnabled = chance(RANDOMIZE_TUNING.facades.tintEnabledChance);
+      const materialEnabled = chance(RANDOMIZE_TUNING.facades.materialEnabledChance);
+      const wearEnabled = chance(RANDOMIZE_TUNING.facades.wearEnabledChance);
+      const rimEnabled = chance(RANDOMIZE_TUNING.facades.rimEnabledChance);
 
       const sideEnabled = tintEnabled || materialEnabled;
       const grazingEnabled = wearEnabled || rimEnabled;
       const grazingMode =
-        rimEnabled && !wearEnabled ? 'add' : wearEnabled && !rimEnabled ? 'mix' : chance(0.5) ? 'add' : 'mix';
+        rimEnabled && !wearEnabled
+          ? 'add'
+          : wearEnabled && !rimEnabled
+            ? 'mix'
+            : chance(RANDOMIZE_TUNING.facades.grazingModeAddChance)
+              ? 'add'
+              : 'mix';
 
       return {
         side: {
@@ -271,7 +315,7 @@ export function createRandomConfigContext(seed: number, type: WallpaperType, opt
           noise: wearEnabled ? clamp(tri(0, 0.6, 1), 0, 1) : 0
         },
         outline: {
-          enabled: chance(0.1),
+          enabled: chance(RANDOMIZE_TUNING.facades.outlineEnabledChance),
           color: DEFAULT_POPSICLE_CONFIG.facades.outline.color,
           thickness: clamp(tri(0, DEFAULT_POPSICLE_CONFIG.facades.outline.thickness, 0.12), 0, 0.2),
           opacity: clamp(tri(0.2, DEFAULT_POPSICLE_CONFIG.facades.outline.opacity, 1.0), 0, 1)
@@ -314,7 +358,7 @@ export function createRandomConfigContext(seed: number, type: WallpaperType, opt
     collisions: {
       mode: collisionsMode,
       carve: {
-        direction: collisionsMode === 'carve' && chance(0.18) ? 'twoWay' : 'oneWay',
+        direction: collisionsMode === 'carve' && chance(RANDOMIZE_TUNING.global.collisionsTwoWayChance) ? 'twoWay' : 'oneWay',
         marginPx: collisionsMode === 'carve' ? Math.round(tri(0, DEFAULT_POPSICLE_CONFIG.collisions.carve.marginPx, 24)) : 0,
         edge: collisionsMode === 'carve' ? collisionsEdge : DEFAULT_POPSICLE_CONFIG.collisions.carve.edge,
         featherPx: collisionsFeather,
@@ -324,7 +368,7 @@ export function createRandomConfigContext(seed: number, type: WallpaperType, opt
       }
     },
     lighting: {
-      enabled: chance(0.8),
+      enabled: chance(RANDOMIZE_TUNING.global.lightingEnabledChance),
       intensity: tri(0.2, DEFAULT_POPSICLE_CONFIG.lighting.intensity, 3.5),
       position: {
         x: tri(-10, DEFAULT_POPSICLE_CONFIG.lighting.position.x, 10),
@@ -346,20 +390,26 @@ export function createRandomConfigContext(seed: number, type: WallpaperType, opt
       far: cameraFar
     },
     environment: {
-      enabled: chance(0.85),
+      enabled: chance(RANDOMIZE_TUNING.global.envEnabledChance),
       intensity: tri(0.0, DEFAULT_POPSICLE_CONFIG.environment.intensity, 2.8),
       rotation: tri(0, DEFAULT_POPSICLE_CONFIG.environment.rotation, 360),
-      style: (['studio', 'overcast', 'sunset'] as const)[chance(0.7) ? 0 : chance(0.65) ? 1 : 2]
+      style: (['studio', 'overcast', 'sunset'] as const)[
+        chance(RANDOMIZE_TUNING.environment.styleStudioChance)
+          ? 0
+          : chance(RANDOMIZE_TUNING.environment.styleOvercastChance)
+            ? 1
+            : 2
+      ]
     },
     shadows: {
-      enabled: chance(0.75),
-      type: chance(0.2) ? 'vsm' : 'pcfsoft',
+      enabled: chance(RANDOMIZE_TUNING.global.shadowsEnabledChance),
+      type: chance(RANDOMIZE_TUNING.global.shadowTypeVsmChance) ? 'vsm' : 'pcfsoft',
       mapSize: ([512, 1024, 2048, 4096] as const)[Math.max(0, Math.min(3, Math.round(tri(0, 2, 3))))],
       bias: tri(-0.005, DEFAULT_POPSICLE_CONFIG.shadows.bias, 0.001),
       normalBias: tri(0.0, DEFAULT_POPSICLE_CONFIG.shadows.normalBias, 0.08)
     },
     rendering: {
-      toneMapping: chance(0.88) ? 'aces' : 'none',
+      toneMapping: chance(RANDOMIZE_TUNING.global.toneMappingAcesChance) ? 'aces' : 'none',
       exposure: tri(0.6, DEFAULT_POPSICLE_CONFIG.rendering.exposure, 1.8)
     },
     // Do not randomize geometry.quality here (parameter-like).
@@ -379,7 +429,7 @@ export function createRandomConfigContext(seed: number, type: WallpaperType, opt
     paletteOverrides[pi] = merged;
   };
 
-  const allowOverrides = chance(0.06);
+  const allowOverrides = chance(RANDOMIZE_TUNING.global.paletteOverridesChance);
   if (allowOverrides && paletteCount > 0) {
     const emissionIndices = new Set<number>();
     const addEmissionTarget = () => {
@@ -394,9 +444,9 @@ export function createRandomConfigContext(seed: number, type: WallpaperType, opt
       emissionIndices.add(idx);
     };
 
-    if (chance(0.55)) addEmissionTarget();
-    if (chance(0.22) && paletteCount > 1) addEmissionTarget();
-    if (chance(0.08) && paletteCount > 2) addEmissionTarget();
+    if (chance(RANDOMIZE_TUNING.paletteOverrides.firstEmissionTargetChance)) addEmissionTarget();
+    if (chance(RANDOMIZE_TUNING.paletteOverrides.secondEmissionTargetChance) && paletteCount > 1) addEmissionTarget();
+    if (chance(RANDOMIZE_TUNING.paletteOverrides.thirdEmissionTargetChance) && paletteCount > 2) addEmissionTarget();
 
     let emissionOrder = 0;
     for (const idx of emissionIndices) {
@@ -409,9 +459,15 @@ export function createRandomConfigContext(seed: number, type: WallpaperType, opt
     }
 
     // Very rare: per-color texture for 3D types.
-    if (is3DType && chance(0.12)) {
+    if (is3DType && chance(RANDOMIZE_TUNING.texture.perColorTextureChance3D)) {
       const idx = Math.floor(rng() * paletteCount);
-      const t: TextureType = chance(0.55) ? 'glass' : chance(0.6) ? 'mirror' : chance(0.5) ? 'metallic' : 'matte';
+      const t: TextureType = chance(RANDOMIZE_TUNING.texture.perColorTextureGlassChance)
+        ? 'glass'
+        : chance(RANDOMIZE_TUNING.texture.perColorTextureMirrorChance)
+          ? 'mirror'
+          : chance(RANDOMIZE_TUNING.texture.perColorTextureMetallicChance)
+            ? 'metallic'
+            : 'matte';
       const params: any =
         t === 'glass'
           ? { glass: { style: (['simple', 'frosted', 'thick', 'stylized'] as const)[Math.floor(rng() * 4)] } }
@@ -420,7 +476,7 @@ export function createRandomConfigContext(seed: number, type: WallpaperType, opt
     }
 
     // Rare: per-color geometry multipliers (subtle accent near 1.0).
-    if (chance(0.18)) {
+    if (chance(RANDOMIZE_TUNING.paletteOverrides.perColorGeometryChance)) {
       const idx = Math.floor(rng() * paletteCount);
       const mult = () => clamp(tri(0.85, 1.0, 1.18), 0.5, 2.0);
 
@@ -446,7 +502,7 @@ export function createRandomConfigContext(seed: number, type: WallpaperType, opt
     }
 
     // Rare: per-color voronoi override (accent texture).
-    if (is3DType && (base as any).voronoi?.enabled && chance(0.12)) {
+    if (is3DType && (base as any).voronoi?.enabled && chance(RANDOMIZE_TUNING.voronoi.perColorDisableChance3D)) {
       const idx = Math.floor(rng() * paletteCount);
       setOverride(idx, {
         voronoi: {
@@ -455,7 +511,7 @@ export function createRandomConfigContext(seed: number, type: WallpaperType, opt
       });
     }
 
-    if (is3DType && chance(0.16)) {
+    if (is3DType && chance(RANDOMIZE_TUNING.voronoi.perColorEnableChance3D)) {
       const idx = Math.floor(rng() * paletteCount);
       setOverride(idx, {
         voronoi: {
@@ -464,18 +520,25 @@ export function createRandomConfigContext(seed: number, type: WallpaperType, opt
           scale: clamp(tri(0.6, 3.5, 18), 0.1, 80),
           kind: rng() < 0.7 ? 'edges' : 'cells',
           materialKind: rng() < 0.7 ? 'match' : rng() < 0.85 ? 'edges' : 'cells',
-          crackleAmount: rng() < 0.22 ? clamp(tri(0.05, 0.25, 0.85), 0, 1) : 0,
+          crackleAmount: rng() < RANDOMIZE_TUNING.voronoi.perColorCrackleChance ? clamp(tri(0.05, 0.25, 0.85), 0, 1) : 0,
           crackleScale: clamp(tri(2, DEFAULT_POPSICLE_CONFIG.voronoi.crackleScale, 60), 0, 200),
           nucleus: {
-            enabled: rng() < 0.25,
+            enabled: rng() < RANDOMIZE_TUNING.voronoi.perColorNucleusChance,
             size: clamp(tri(0.03, DEFAULT_POPSICLE_CONFIG.voronoi.nucleus.size, 0.18), 0, 1),
             softness: clamp(tri(0.05, DEFAULT_POPSICLE_CONFIG.voronoi.nucleus.softness, 0.85), 0, 1),
             strength: clamp(tri(0.25, DEFAULT_POPSICLE_CONFIG.voronoi.nucleus.strength, 1.0), 0, 1),
             color: '#ffffff'
           },
           colorStrength: clamp(tri(0.05, 0.25, 1.0), 0, 1),
-          colorMode: rng() < 0.6 ? 'darken' : rng() < 0.5 ? 'lighten' : 'tint',
-          materialMode: rng() < 0.2 ? 'none' : rng() < 0.5 ? 'roughness' : rng() < 0.75 ? 'normal' : 'both',
+          colorMode: rng() < RANDOMIZE_TUNING.voronoi.perColorColorModeDarkenChance ? 'darken' : rng() < 0.5 ? 'lighten' : 'tint',
+          materialMode:
+            rng() < RANDOMIZE_TUNING.voronoi.perColorMaterialNoneChance
+              ? 'none'
+              : rng() < RANDOMIZE_TUNING.voronoi.perColorMaterialRoughnessChance
+                ? 'roughness'
+                : rng() < RANDOMIZE_TUNING.voronoi.perColorMaterialNormalChance
+                  ? 'normal'
+                  : 'both',
           tintColor: '#ffffff'
         }
       });
