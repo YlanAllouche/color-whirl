@@ -164,6 +164,13 @@
   pointer-events: none;
 }
 
+.perf-overlay.perf-overlay-maximized-docked {
+  left: 50%;
+  top: auto;
+  bottom: 14px;
+  transform: translateX(-50%);
+}
+
 .perf-overlay-title {
   font-size: 0.72rem;
   font-weight: 700;

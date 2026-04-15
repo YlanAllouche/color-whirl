@@ -342,7 +342,11 @@
     {/if}
 
     {#if performance.hudVisible}
-      <div class="preview-overlay perf-overlay visible" aria-hidden="true">
+      <div
+        class="preview-overlay perf-overlay visible"
+        class:perf-overlay-maximized-docked={settingsMaximized && settingsOverlayVisible}
+        aria-hidden="true"
+      >
         <div class="perf-overlay-title">Performance HUD</div>
         <div class="perf-overlay-grid">
           <span>FPS</span><strong>{performance.fpsAvg.toFixed(1)} / {performance.fpsP95.toFixed(1)}</strong>

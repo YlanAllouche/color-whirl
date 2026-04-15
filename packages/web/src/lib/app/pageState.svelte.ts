@@ -769,7 +769,9 @@ export function createPageState() {
     try {
       for (let i = 0; i < total; i += 1) {
         const iterationStart = performance.now();
+        const actionStart = performance.now();
         applyRandomCurrentConfig();
+        updateActionMetrics('randomizeCurrent', performance.now() - actionStart);
 
         await new Promise<void>((resolve) => {
           requestAnimationFrame(() => resolve());
