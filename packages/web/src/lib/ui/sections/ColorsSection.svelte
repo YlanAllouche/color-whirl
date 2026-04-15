@@ -7,7 +7,14 @@
   import Dropdown from '$lib/ui/components/Dropdown.svelte';
 
   type PaletteBlock = 'emission' | 'texture' | 'grazing' | 'side' | 'outline' | 'edge' | 'geometry' | 'bubbles' | 'voronoi';
-  type HarmonyMode = 'monochromatic' | 'adjacent' | 'complementary';
+  type HarmonyMode =
+    | 'auto'
+    | 'monochromatic'
+    | 'analogous'
+    | 'triadic'
+    | 'complementary'
+    | 'split-complementary'
+    | 'hue-between';
 
   type Props = {
     config: WallpaperConfig;
@@ -55,6 +62,9 @@
   let harmonyMode = $state<HarmonyMode>('monochromatic');
   let harmonyLength = $state(5);
   let harmonyIncludeAccent = $state(true);
+  let harmonyVariation = $state(0);
+  let harmonyAffectBackground = $state(true);
+  let harmonyRespectLocks = $state(true);
   let harmonyAnchorA = $state('#ff5f56');
   let harmonyAnchorB = $state('#4db6ff');
   let harmonyInitialized = $state(false);
@@ -80,6 +90,12 @@
   function wrapHue(h: number): number {
     const wrapped = h % 360;
     return wrapped < 0 ? wrapped + 360 : wrapped;
+  }
+
+  function shortestHueDelta(from: number, to: number): number {
+    const a = wrapHue(from);
+    const b = wrapHue(to);
+    return ((b - a + 540) % 360) - 180;
   }
 
   function parseHex(input: string): Rgb | null {
@@ -168,6 +184,34 @@
     return rgbToHsv(rgb);
   }
 
+  function pickAutoHarmonyMode(a: Hsv, b: Hsv): Exclude<HarmonyMode, 'auto'> {
+    const hueDistance = Math.abs(shortestHueDelta(a.h, b.h));
+    if (hueDistance < 24) return 'monochromatic';
+    if (hueDistance < 72) return 'analogous';
+    if (hueDistance > 146) return 'complementary';
+    return 'triadic';
+  }
+
+  function harmonyNoise(seed: number): number {
+    const n = Math.sin(seed) * 43758.5453123;
+    return (n - Math.floor(n)) * 2 - 1;
+  }
+
+  function applyVariation(base: Hsv, index: number, channelSeed: number): Hsv {
+    const amount = clamp(harmonyVariation, 0, 100) / 100;
+    if (amount <= 0.0001) return base;
+
+    const hueJitter = 14 * amount;
+    const satJitter = 18 * amount;
+    const valJitter = 16 * amount;
+
+    return {
+      h: wrapHue(base.h + harmonyNoise(channelSeed * 17.13 + index * 3.97 + 1.2) * hueJitter),
+      s: clamp(base.s + harmonyNoise(channelSeed * 31.77 + index * 5.33 + 2.6) * satJitter, 4, 100),
+      v: clamp(base.v + harmonyNoise(channelSeed * 47.91 + index * 6.71 + 4.8) * valJitter, 8, 100)
+    };
+  }
+
   function updateColorFromHex(index: number, raw: string) {
     const next = normalizeHex(raw);
     if (!next) return;
@@ -227,20 +271,64 @@
     const b = colorToHsv(harmonyAnchorB);
     const n = clamp(Math.round(harmonyLength), 2, 24);
     const out: string[] = [];
+    const mode = harmonyMode === 'auto' ? pickAutoHarmonyMode(a, b) : harmonyMode;
+    const seedBase = a.h * 0.37 + a.s * 0.11 + b.h * 0.19 + b.v * 0.07 + n * 13.0;
 
-    if (harmonyMode === 'complementary') {
-      const hues = [a.h, b.h, wrapHue(a.h + 180), wrapHue(b.h + 180)];
+    if (mode === 'hue-between') {
+      const dh = shortestHueDelta(a.h, b.h);
       for (let i = 0; i < n; i++) {
         const t = n <= 1 ? 0 : i / (n - 1);
-        const hue = hues[i % hues.length];
-        const sat = a.s + (b.s - a.s) * t;
-        const val = a.v + (b.v - a.v) * (1 - t);
-        out.push(toHex(hsvToRgb({ h: hue, s: clamp(sat, 32, 98), v: clamp(val, 26, 100) })));
+        const hsv: Hsv = {
+          h: wrapHue(a.h + dh * t),
+          s: clamp(a.s + (b.s - a.s) * t, 8, 100),
+          v: clamp(a.v + (b.v - a.v) * t, 8, 100)
+        };
+        out.push(toHex(hsvToRgb(applyVariation(hsv, i, seedBase))));
       }
       return out;
     }
 
-    const reserveAccent = harmonyIncludeAccent && (harmonyMode === 'monochromatic' || harmonyMode === 'adjacent') ? 1 : 0;
+    if (mode === 'split-complementary') {
+      const hues = [a.h, wrapHue(a.h + 150), wrapHue(a.h + 210), b.h];
+      for (let i = 0; i < n; i++) {
+        const t = n <= 1 ? 0 : i / (n - 1);
+        const hsv: Hsv = {
+          h: hues[i % hues.length],
+          s: clamp(a.s + (b.s - a.s) * t * 0.7 + 8, 18, 100),
+          v: clamp(a.v + (b.v - a.v) * (1 - t * 0.35), 18, 100)
+        };
+        out.push(toHex(hsvToRgb(applyVariation(hsv, i, seedBase + 9.1))));
+      }
+      return out;
+    }
+
+    if (mode === 'triadic') {
+      const hues = [a.h, wrapHue(a.h + 120), wrapHue(a.h + 240), b.h];
+      for (let i = 0; i < n; i++) {
+        const t = n <= 1 ? 0 : i / (n - 1);
+        const hsv: Hsv = {
+          h: hues[i % hues.length],
+          s: clamp(a.s + (b.s - a.s) * (0.4 + t * 0.6), 14, 100),
+          v: clamp(28 + (a.v * (1 - t) + b.v * t) * 0.72, 18, 100)
+        };
+        out.push(toHex(hsvToRgb(applyVariation(hsv, i, seedBase + 5.4))));
+      }
+      return out;
+    }
+
+    if (mode === 'complementary') {
+      const hues = [a.h, b.h, wrapHue(a.h + 180), wrapHue(b.h + 180)];
+      for (let i = 0; i < n; i++) {
+        const t = n <= 1 ? 0 : i / (n - 1);
+        const hue = hues[i % hues.length];
+        const sat = clamp(a.s + (b.s - a.s) * t, 32, 98);
+        const val = clamp(a.v + (b.v - a.v) * (1 - t), 26, 100);
+        out.push(toHex(hsvToRgb(applyVariation({ h: hue, s: sat, v: val }, i, seedBase + 2.7))));
+      }
+      return out;
+    }
+
+    const reserveAccent = harmonyIncludeAccent && (mode === 'monochromatic' || mode === 'analogous') ? 1 : 0;
     const mainCount = Math.max(1, n - reserveAccent);
 
     for (let i = 0; i < mainCount; i++) {
@@ -248,24 +336,54 @@
       const sat = a.s + (b.s - a.s) * t;
       const val = clamp(18 + 80 * (0.25 + t * 0.75), 18, 100);
       const hue =
-        harmonyMode === 'monochromatic'
+        mode === 'monochromatic'
           ? a.h
-          : wrapHue(a.h + (t - 0.5) * 60 + (b.h - a.h) * 0.15);
-      out.push(toHex(hsvToRgb({ h: hue, s: clamp(sat, 12, 100), v: val })));
+          : wrapHue(a.h + (t - 0.5) * 60 + shortestHueDelta(a.h, b.h) * 0.15);
+      const hsv = { h: hue, s: clamp(sat, 12, 100), v: val };
+      out.push(toHex(hsvToRgb(applyVariation(hsv, i, seedBase + 12.2))));
     }
 
     if (reserveAccent > 0) {
       const accentHue = wrapHue(a.h + 180);
       const accentSat = clamp(0.6 * a.s + 0.4 * b.s + 14, 24, 100);
       const accentVal = clamp(0.55 * a.v + 0.45 * b.v + 12, 20, 100);
-      out.unshift(toHex(hsvToRgb({ h: accentHue, s: accentSat, v: accentVal })));
+      out.unshift(toHex(hsvToRgb(applyVariation({ h: accentHue, s: accentSat, v: accentVal }, -1, seedBase + 27.8))));
     }
 
     return out.slice(0, n);
   }
 
+  function makeHarmonyBackground(palette: string[]): string {
+    const first = colorToHsv(palette[0] ?? harmonyAnchorA);
+    const last = colorToHsv(palette[palette.length - 1] ?? harmonyAnchorB);
+    const hue = wrapHue(first.h + shortestHueDelta(first.h, last.h) * 0.5);
+    const sat = clamp(Math.min(first.s, last.s) * 0.2 + 8, 6, 24);
+    const val = clamp(Math.min(first.v, last.v) * 0.18 + 9, 6, 22);
+    return toHex(hsvToRgb({ h: hue, s: sat, v: val }));
+  }
+
   function applyHarmonyPalette() {
-    replaceColors(makeHarmonyPalette());
+    const generated = makeHarmonyPalette();
+    const nextColors = generated.slice();
+
+    if (harmonyRespectLocks) {
+      if (isLocked('colors')) {
+        nextColors.splice(0, nextColors.length, ...config.colors.slice());
+      } else {
+        const limit = Math.min(nextColors.length, config.colors.length);
+        for (let i = 0; i < limit; i++) {
+          if (!isLocked(`colors.${i}`)) continue;
+          const current = normalizeHex(config.colors[i] ?? '') ?? config.colors[i];
+          if (current) nextColors[i] = current;
+        }
+      }
+    }
+
+    if (harmonyAffectBackground && !(harmonyRespectLocks && isLocked('backgroundColor'))) {
+      config.backgroundColor = makeHarmonyBackground(nextColors);
+    }
+
+    replaceColors(nextColors);
   }
 
   function swapColorWithBackground(index: number) {
@@ -402,9 +520,13 @@
         value={harmonyMode}
         ariaLabel="Harmony mode"
         options={[
+          { value: 'auto', label: 'Auto' },
           { value: 'monochromatic', label: 'Monochromatic' },
-          { value: 'adjacent', label: 'Adjacent' },
-          { value: 'complementary', label: 'Complementary' }
+          { value: 'analogous', label: 'Analogous' },
+          { value: 'triadic', label: 'Triadic' },
+          { value: 'complementary', label: 'Complementary' },
+          { value: 'split-complementary', label: 'Split-Complementary' },
+          { value: 'hue-between', label: 'Hue-Between' }
         ]}
         onChange={(v) => {
           harmonyMode = String(v) as HarmonyMode;
@@ -435,12 +557,34 @@
       />
     </label>
 
-    {#if harmonyMode !== 'complementary'}
+    {#if harmonyMode !== 'complementary' && harmonyMode !== 'split-complementary' && harmonyMode !== 'hue-between' && harmonyMode !== 'triadic'}
       <label class="control-row checkbox">
         <input type="checkbox" bind:checked={harmonyIncludeAccent} />
         <span class="setting-title">Add complementary accent</span>
       </label>
     {/if}
+
+    <label class="control-row slider">
+      <span class="setting-title">Variation</span>
+      <input
+        type="range"
+        min="0"
+        max="100"
+        step="1"
+        bind:value={harmonyVariation}
+      />
+      <span class="mono">{harmonyVariation}%</span>
+    </label>
+
+    <label class="control-row checkbox">
+      <input type="checkbox" bind:checked={harmonyAffectBackground} />
+      <span class="setting-title">Affect background</span>
+    </label>
+
+    <label class="control-row checkbox">
+      <input type="checkbox" bind:checked={harmonyRespectLocks} />
+      <span class="setting-title">Respect swatch locks</span>
+    </label>
 
     <div class="row-actions">
       <button type="button" class="palette-nav" onclick={applyHarmonyPalette}>Apply harmony palette</button>
