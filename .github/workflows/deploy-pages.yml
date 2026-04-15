@@ -35,6 +35,9 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      - name: Build core package
+        run: pnpm -F @wallpaper-maker/core build
+
       - name: Build static web app
         run: BASE_PATH=/${{ github.event.repository.name }} pnpm -F @wallpaper-maker/web build
 
