@@ -19,6 +19,71 @@ function getBoxCorners(box: THREE.Box3): THREE.Vector3[] {
   ];
 }
 
+export type OrthoCameraConfigInput = {
+  mode?: 'auto' | 'manual';
+  distance: number;
+  zoom?: number;
+  panX?: number;
+  panY?: number;
+  azimuth: number;
+  elevation: number;
+  near?: number;
+  far?: number;
+};
+
+function degToRad(deg: number): number {
+  return (deg * Math.PI) / 180;
+}
+
+function cameraZoomFromDistance(distance: number): number {
+  const referenceDistance = 17.3;
+  const safeDistance = Math.max(0.1, distance);
+  return referenceDistance / safeDistance;
+}
+
+export function applyOrthographicCameraFromConfig(camera: THREE.OrthographicCamera, config: OrthoCameraConfigInput): void {
+  const azimuthRad = degToRad(Number(config.azimuth) || 0);
+  const elevationDeg = clamp(Number(config.elevation) || 0, -80, 80);
+  const elevationRad = degToRad(elevationDeg);
+  const d = Math.max(0.01, Number(config.distance) || 0.01);
+
+  const target = new THREE.Vector3(0, 0, 0);
+  const position = new THREE.Vector3(
+    d * Math.cos(elevationRad) * Math.sin(azimuthRad),
+    d * Math.sin(elevationRad),
+    d * Math.cos(elevationRad) * Math.cos(azimuthRad)
+  );
+
+  if (config.mode === 'manual') {
+    const forward = target.clone().sub(position).normalize();
+    let right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0));
+    if (right.lengthSq() < 1e-8) right = new THREE.Vector3(1, 0, 0);
+    right.normalize();
+    const up = new THREE.Vector3().crossVectors(right, forward).normalize();
+    const panX = Number.isFinite(Number(config.panX)) ? Number(config.panX) : 0;
+    const panY = Number.isFinite(Number(config.panY)) ? Number(config.panY) : 0;
+    const panOffset = right.multiplyScalar(panX).add(up.multiplyScalar(panY));
+    position.add(panOffset);
+    target.add(panOffset);
+
+    const zoom = Number(config.zoom);
+    camera.zoom = Number.isFinite(zoom) ? Math.max(0.01, zoom) : 1;
+
+    const near = Number(config.near);
+    const far = Number(config.far);
+    const nextNear = Number.isFinite(near) ? Math.max(0.001, near) : 0.001;
+    const nextFarRaw = Number.isFinite(far) ? far : 1000;
+    camera.near = nextNear;
+    camera.far = Math.max(nextNear + 0.001, nextFarRaw);
+  } else {
+    camera.zoom = cameraZoomFromDistance(d);
+  }
+
+  camera.position.copy(position);
+  camera.lookAt(target);
+  camera.updateProjectionMatrix();
+}
+
 /**
  * Best-effort auto-framing for orthographic cameras.
  *

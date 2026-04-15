@@ -4,12 +4,11 @@ import { buildBubbles, buildBubblesSeed, buildBubblesInteriorWalls } from '../..
 import { createStickMeshMaterial } from '../../materials.js';
 import { resolvePaletteConfig } from '../../palette.js';
 import { renderWithOptionalBloom } from '../postprocessing.js';
-import { autoFitOrthographicCameraToBox } from '../camera-fit.js';
+import { applyOrthographicCameraFromConfig, autoFitOrthographicCameraToBox } from '../camera-fit.js';
 import type { StickDimensions } from './geometry.js';
 import { createRoundedBox, getStackingOffset, getStickDimensions } from './geometry.js';
 import { hash01 } from './sampling.js';
 import {
-  cameraZoomFromDistance,
   chainOnBeforeCompile,
   clamp,
   createProceduralEnvironment,
@@ -74,16 +73,7 @@ export function createPopsicleScene(
     0.1,
     1000
   );
-  const azimuthRad = degToRad(cameraConfig.azimuth);
-  const elevationRad = degToRad(cameraConfig.elevation);
-  camera.position.set(
-    cameraConfig.distance * Math.cos(elevationRad) * Math.sin(azimuthRad),
-    cameraConfig.distance * Math.sin(elevationRad),
-    cameraConfig.distance * Math.cos(elevationRad) * Math.cos(azimuthRad)
-  );
-  camera.zoom = cameraZoomFromDistance(cameraConfig.distance);
-  camera.updateProjectionMatrix();
-  camera.lookAt(0, 0, 0);
+  applyOrthographicCameraFromConfig(camera, cameraConfig);
 
   if (lighting.enabled) {
     const ambientLight = new THREE.AmbientLight(0xffffff, lighting.ambientIntensity);
@@ -727,14 +717,17 @@ void wmApplyCollisionMask(inout vec4 col) {
   // No shadow catcher: keep shadows stick-to-stick only.
   void envDisposable;
 
-  // Auto-fit camera to prevent cropped renders.
-  try {
-    scene.updateWorldMatrix(true, true);
-    const bounds = new THREE.Box3().setFromObject(group);
-    const padding = config.bloom?.enabled ? 0.86 : 0.92;
-    autoFitOrthographicCameraToBox(camera, bounds, { padding, minNear: 0.001, pushBackIfSlicing: true });
-  } catch {
-    // Ignore auto-fit failures.
+  if (cameraConfig.mode !== 'manual') {
+    // Auto-fit camera to prevent cropped renders.
+    try {
+      scene.updateWorldMatrix(true, true);
+      const bounds = new THREE.Box3().setFromObject(group);
+      const requestedPadding = clamp(Number(cameraConfig.padding), 0.5, 0.999);
+      const padding = config.bloom?.enabled ? Math.min(requestedPadding, 0.86) : requestedPadding;
+      autoFitOrthographicCameraToBox(camera, bounds, { padding, minNear: 0.001, pushBackIfSlicing: true });
+    } catch {
+      // Ignore auto-fit failures.
+    }
   }
 
   return { scene, camera, renderer };

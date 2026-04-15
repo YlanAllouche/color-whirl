@@ -4,7 +4,7 @@ import type { Svg3DConfig, EnvironmentStyle, PaletteAssignMode } from '../types.
 import { createRng } from '../types.js';
 import { createSurfaceMaterial } from '../materials.js';
 import { renderWithOptionalBloom } from './postprocessing.js';
-import { autoFitOrthographicCameraToBox } from './camera-fit.js';
+import { applyOrthographicCameraFromConfig, autoFitOrthographicCameraToBox } from './camera-fit.js';
 import { inferSvgRenderMode, validateSvgSource } from '../svg-utils.js';
 import { resolvePaletteConfig } from '../palette.js';
 import { extractSvgToneGeometries3D } from '../svg-tone-extraction.js';
@@ -21,17 +21,6 @@ function clamp01(n: number): number {
 
 function degToRad(deg: number): number {
   return (deg * Math.PI) / 180;
-}
-
-function wrapDeg360(deg: number): number {
-  const d = deg % 360;
-  return d < 0 ? d + 360 : d;
-}
-
-function cameraZoomFromDistance(distance: number): number {
-  const referenceDistance = 17.3;
-  const safeDistance = Math.max(0.1, distance);
-  return referenceDistance / safeDistance;
 }
 
 function normalizeWeights(weights: number[], n: number): number[] {
@@ -406,14 +395,7 @@ export function createSvg3DScene(
     1000
   );
 
-  const azimuthRad = degToRad(wrapDeg360(config.camera.azimuth));
-  const elevationDeg = clamp(Number(config.camera.elevation) || 0, -80, 80);
-  const elevationRad = degToRad(elevationDeg);
-  const d = Math.max(0.01, Number(config.camera.distance) || 0.01);
-  camera.position.set(d * Math.cos(elevationRad) * Math.sin(azimuthRad), d * Math.sin(elevationRad), d * Math.cos(elevationRad) * Math.cos(azimuthRad));
-  camera.zoom = cameraZoomFromDistance(d);
-  camera.updateProjectionMatrix();
-  camera.lookAt(0, 0, 0);
+  applyOrthographicCameraFromConfig(camera, config.camera);
 
   const renderer = new THREE.WebGLRenderer({
     antialias: true,
@@ -636,14 +618,17 @@ export function createSvg3DScene(
   // SVG coordinates are Y-down; flip for three's Y-up.
   scene.scale.y = -1;
 
-  // Auto-fit camera to prevent cropped renders.
-  try {
-    scene.updateWorldMatrix(true, true);
-    const bounds = new THREE.Box3().setFromObject(scene);
-    const padding = config.bloom?.enabled ? 0.86 : 0.92;
-    autoFitOrthographicCameraToBox(camera, bounds, { padding, minNear: 0.001, pushBackIfSlicing: true });
-  } catch {
-    // Ignore.
+  if (config.camera.mode !== 'manual') {
+    // Auto-fit camera to prevent cropped renders.
+    try {
+      scene.updateWorldMatrix(true, true);
+      const bounds = new THREE.Box3().setFromObject(scene);
+      const requestedPadding = clamp(Number(config.camera.padding), 0.5, 0.999);
+      const padding = config.bloom?.enabled ? Math.min(requestedPadding, 0.86) : requestedPadding;
+      autoFitOrthographicCameraToBox(camera, bounds, { padding, minNear: 0.001, pushBackIfSlicing: true });
+    } catch {
+      // Ignore.
+    }
   }
 
   // Avoid unused warning

@@ -4,11 +4,10 @@ import { createSurfaceMaterial } from '../../materials.js';
 import { createRng } from '../../types.js';
 import { resolvePaletteConfig } from '../../palette.js';
 import { renderWithOptionalBloom } from '../postprocessing.js';
-import { autoFitOrthographicCameraToBox } from '../camera-fit.js';
+import { applyOrthographicCameraFromConfig, autoFitOrthographicCameraToBox } from '../camera-fit.js';
 import { createBulgedPrismGeometry } from './geometry.js';
 import { normalizeWeights, pickIndex } from './sampling.js';
 import {
-  cameraZoomFromDistance,
   chainOnBeforeCompile,
   clamp,
   clamp01,
@@ -44,16 +43,7 @@ export function createTriangles3DScene(
     1000
   );
 
-  const azimuthRad = degToRad(config.camera.azimuth);
-  const elevationRad = degToRad(config.camera.elevation);
-  camera.position.set(
-    config.camera.distance * Math.cos(elevationRad) * Math.sin(azimuthRad),
-    config.camera.distance * Math.sin(elevationRad),
-    config.camera.distance * Math.cos(elevationRad) * Math.cos(azimuthRad)
-  );
-  camera.zoom = cameraZoomFromDistance(config.camera.distance);
-  camera.updateProjectionMatrix();
-  camera.lookAt(0, 0, 0);
+  applyOrthographicCameraFromConfig(camera, config.camera);
 
   const renderer = new THREE.WebGLRenderer({
     antialias: true,
@@ -544,14 +534,17 @@ void wmApplyCollisionMask(inout vec4 col) {
     scene.position.sub(center);
   }
 
-  // Auto-fit camera to prevent cropped renders.
-  try {
-    scene.updateWorldMatrix(true, true);
-    const bounds = new THREE.Box3().setFromObject(scene);
-    const padding = config.bloom?.enabled ? 0.86 : 0.92;
-    autoFitOrthographicCameraToBox(camera, bounds, { padding, minNear: 0.001, pushBackIfSlicing: true });
-  } catch {
-    // Ignore auto-fit failures.
+  if (config.camera.mode !== 'manual') {
+    // Auto-fit camera to prevent cropped renders.
+    try {
+      scene.updateWorldMatrix(true, true);
+      const bounds = new THREE.Box3().setFromObject(scene);
+      const requestedPadding = clamp(Number(config.camera.padding), 0.5, 0.999);
+      const padding = config.bloom?.enabled ? Math.min(requestedPadding, 0.86) : requestedPadding;
+      autoFitOrthographicCameraToBox(camera, bounds, { padding, minNear: 0.001, pushBackIfSlicing: true });
+    } catch {
+      // Ignore auto-fit failures.
+    }
   }
 
   void envDisposable;
