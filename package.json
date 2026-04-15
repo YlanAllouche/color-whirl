@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "pnpm -F @wallpaper-maker/web dev",
-    "build": "pnpm -F @wallpaper-maker/core build && pnpm -F @wallpaper-maker/cli build",
+    "build": "pnpm -F @wallpaper-maker/core build && pnpm -F colorwhirl build && pnpm -F @wallpaper-maker/web build",
     "cli": "node packages/cli/dist/index.js"
   },
   "devDependencies": {

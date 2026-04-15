@@ -1,9 +1,9 @@
 {
-  "name": "@wallpaper-maker/cli",
+  "name": "colorwhirl",
   "version": "1.0.0",
   "type": "module",
   "bin": {
-    "wallpaper-maker": "./dist/index.js"
+    "colorwhirl": "./dist/index.js"
   },
   "scripts": {
     "build": "tsc",

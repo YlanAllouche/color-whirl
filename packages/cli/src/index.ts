@@ -16,44 +16,49 @@ import { resolve } from 'path';
 const program = new Command();
 
 program
-  .name('wallpaper-maker')
-  .description('Generate beautiful wallpapers from the command line')
+  .name('colorwhirl')
+  .description('Generate configurable wallpapers from the command line')
   .version('1.0.0');
 
-program
-  .command('generate')
-  .description('Generate a wallpaper')
+async function runGenerate(options: any) {
+  try {
+    const { config, format } = await buildConfigAndFormat(options);
+    console.log('Generating wallpaper...');
+    console.log(`Type: ${config.type}`);
+    console.log(`Resolution: ${config.width}x${config.height}`);
+    console.log(`Colors: ${config.colors.join(', ')}`);
+
+    const result = await generateWallpaper(config, format);
+
+    const outputPath = options.output || `colorwhirl-${Date.now()}.${format}`;
+    const resolvedPath = resolve(outputPath);
+
+    if (typeof result.data === 'string') {
+      await writeFile(resolvedPath, result.data, 'utf-8');
+    } else {
+      await writeFile(resolvedPath, result.data);
+    }
+
+    console.log(`✓ Wallpaper saved to: ${resolvedPath}`);
+  } catch (error) {
+    console.error('Error generating wallpaper:', error);
+    process.exit(1);
+  }
+}
+
+function registerGenerateOptions(cmd: Command) {
+  return cmd
   .option(
     '-c, --config <config>',
     'Config value: base64url app state, inline JSON (config or app state), or path to a JSON file (prefix with @ to force file)'
   )
   .option('-f, --format <format>', 'Output format (png, jpg, webp, svg)')
-  .option('-o, --output <path>', 'Output file path')
-  .action(async (options) => {
-    try {
-      const { config, format } = await buildConfigAndFormat(options);
-      console.log('Generating wallpaper...');
-      console.log(`Type: ${config.type}`);
-      console.log(`Resolution: ${config.width}x${config.height}`);
-      console.log(`Colors: ${config.colors.join(', ')}`);
-      
-      const result = await generateWallpaper(config, format);
-      
-      const outputPath = options.output || `wallpaper-${Date.now()}.${format}`;
-      const resolvedPath = resolve(outputPath);
-      
-      if (typeof result.data === 'string') {
-        await writeFile(resolvedPath, result.data, 'utf-8');
-      } else {
-        await writeFile(resolvedPath, result.data);
-      }
-      
-      console.log(`✓ Wallpaper saved to: ${resolvedPath}`);
-    } catch (error) {
-      console.error('Error generating wallpaper:', error);
-      process.exit(1);
-    }
-  });
+  .option('-o, --output <path>', 'Output file path');
+}
+
+registerGenerateOptions(program).action(runGenerate);
+
+registerGenerateOptions(program.command('generate').description('Backward-compatible alias for the root generate command')).action(runGenerate);
 
 type ParsedInput = {
   config: WallpaperConfig;
