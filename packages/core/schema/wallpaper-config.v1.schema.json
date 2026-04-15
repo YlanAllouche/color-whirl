@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://colorwhirl.dev/schema/wallpaper-config.v1.schema.json",
+  "title": "ColorWhirl WallpaperConfig v1 (loose)",
+  "description": "Loose but guided schema for ColorWhirl recipes. Unknown fields are allowed for forward compatibility.",
+  "type": "object",
+  "required": ["type", "width", "height", "colors"],
+  "properties": {
+    "type": {
+      "type": "string",
+      "enum": [
+        "popsicle",
+        "spheres3d",
+        "bands2d",
+        "flowlines2d",
+        "diamondgrid2d",
+        "circles2d",
+        "polygon2d",
+        "triangles2d",
+        "triangles3d",
+        "hexgrid2d",
+        "ridges2d",
+        "svg2d",
+        "svg3d"
+      ]
+    },
+    "seed": { "type": "number" },
+    "width": { "type": "number", "minimum": 1 },
+    "height": { "type": "number", "minimum": 1 },
+    "colors": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string" }
+    },
+    "backgroundColor": { "type": "string" },
+    "texture": { "type": "string" },
+    "palette": {
+      "type": "object",
+      "properties": {
+        "overrides": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              { "type": "null" },
+              { "type": "object", "additionalProperties": true }
+            ]
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "camera": {
+      "type": "object",
+      "properties": {
+        "mode": { "type": "string", "enum": ["auto", "manual"] },
+        "padding": { "type": "number" },
+        "distance": { "type": "number" },
+        "zoom": { "type": "number" },
+        "panX": { "type": "number" },
+        "panY": { "type": "number" },
+        "azimuth": { "type": "number" },
+        "elevation": { "type": "number" },
+        "near": { "type": "number" },
+        "far": { "type": "number" }
+      },
+      "additionalProperties": true
+    },
+    "bloom": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "strength": { "type": "number" },
+        "radius": { "type": "number" },
+        "threshold": { "type": "number" }
+      },
+      "additionalProperties": true
+    },
+    "emission": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "paletteIndex": { "type": "number" },
+        "intensity": { "type": "number" }
+      },
+      "additionalProperties": true
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "type": { "const": "popsicle" } }, "required": ["type"] },
+      "then": {
+        "properties": {
+          "stickCount": { "type": "number" },
+          "stickGap": { "type": "number" },
+          "stickSize": { "type": "number" },
+          "stickRatio": { "type": "number" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "svg2d" } }, "required": ["type"] },
+      "then": {
+        "properties": {
+          "svg": {
+            "type": "object",
+            "properties": {
+              "source": { "type": "string" },
+              "renderMode": { "type": "string" },
+              "mode": { "type": "string" },
+              "count": { "type": "number" }
+            },
+            "additionalProperties": true
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "svg3d" } }, "required": ["type"] },
+      "then": {
+        "properties": {
+          "svg": {
+            "type": "object",
+            "properties": {
+              "source": { "type": "string" },
+              "renderMode": { "type": "string" },
+              "count": { "type": "number" },
+              "spread": { "type": "number" },
+              "depth": { "type": "number" }
+            },
+            "additionalProperties": true
+          }
+        }
+      }
+    }
+  ],
+  "additionalProperties": true
+}
