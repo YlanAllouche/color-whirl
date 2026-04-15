@@ -227,7 +227,20 @@
   }
 
   .editor-shell.settings-maximized .panel-handle {
-    display: none;
+    display: block;
+    position: absolute;
+    top: 12px;
+    bottom: 12px;
+    width: 10px;
+    z-index: 4;
+  }
+
+  .editor-shell.settings-maximized .panel-handle[data-handle='left'] {
+    left: calc(12px + var(--left-w));
+  }
+
+  .editor-shell.settings-maximized .panel-handle[data-handle='right'] {
+    right: calc(12px + var(--right-w));
   }
 
   .editor-shell.settings-maximized .panel-left,
@@ -280,14 +293,16 @@
   }
 
   .editor-shell.settings-maximized:not(.settings-overlay-visible) .panel-left,
-  .editor-shell.settings-maximized:not(.settings-overlay-visible) .panel-right {
+  .editor-shell.settings-maximized:not(.settings-overlay-visible) .panel-right,
+  .editor-shell.settings-maximized:not(.settings-overlay-visible) .panel-handle {
     opacity: 0;
     pointer-events: none;
     transform: translateY(6px);
   }
 
   .editor-shell.settings-maximized.settings-overlay-visible .panel-left,
-  .editor-shell.settings-maximized.settings-overlay-visible .panel-right {
+  .editor-shell.settings-maximized.settings-overlay-visible .panel-right,
+  .editor-shell.settings-maximized.settings-overlay-visible .panel-handle {
     opacity: 1;
     pointer-events: auto;
     transform: translateY(0);

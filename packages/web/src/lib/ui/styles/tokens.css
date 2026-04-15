@@ -28,8 +28,8 @@
   --font-ui: 'Geist Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
 
-  --left-w: 320px;
-  --right-w: 360px;
+  --left-w: 380px;
+  --right-w: 430px;
 }
 
 body {

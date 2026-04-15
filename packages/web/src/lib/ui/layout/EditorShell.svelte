@@ -29,8 +29,15 @@
   const leftKey = 'ui.layout.leftWidth';
   const rightKey = 'ui.layout.rightWidth';
 
-  let leftW = $state(320);
-  let rightW = $state(360);
+  const LEFT_MIN = 260;
+  const LEFT_MAX = 760;
+  const RIGHT_MIN = 300;
+  const RIGHT_MAX = 860;
+  const CENTER_MIN = 320;
+  const HANDLE_GUTTER = 20;
+
+  let leftW = $state(380);
+  let rightW = $state(430);
 
   let searchInput: HTMLInputElement | null = null;
 
@@ -43,11 +50,32 @@
     return Math.max(min, Math.min(max, n));
   }
 
+  function getLeftMax(viewportW: number, right: number): number {
+    return Math.max(LEFT_MIN, Math.min(LEFT_MAX, viewportW - right - CENTER_MIN - HANDLE_GUTTER));
+  }
+
+  function getRightMax(viewportW: number, left: number): number {
+    return Math.max(RIGHT_MIN, Math.min(RIGHT_MAX, viewportW - left - CENTER_MIN - HANDLE_GUTTER));
+  }
+
+  function fitWidthsToViewport(viewportW: number) {
+    leftW = clamp(leftW, LEFT_MIN, getLeftMax(viewportW, rightW));
+    rightW = clamp(rightW, RIGHT_MIN, getRightMax(viewportW, leftW));
+    leftW = clamp(leftW, LEFT_MIN, getLeftMax(viewportW, rightW));
+  }
+
   onMount(() => {
     const l = readLocalStorageNumber(leftKey);
     const r = readLocalStorageNumber(rightKey);
-    if (l !== null) leftW = clamp(l, 240, 520);
-    if (r !== null) rightW = clamp(r, 280, 620);
+    if (l !== null) leftW = clamp(l, LEFT_MIN, LEFT_MAX);
+    if (r !== null) rightW = clamp(r, RIGHT_MIN, RIGHT_MAX);
+    fitWidthsToViewport(window.innerWidth);
+
+    const onWindowResize = () => {
+      fitWidthsToViewport(window.innerWidth);
+    };
+    window.addEventListener('resize', onWindowResize);
+    return () => window.removeEventListener('resize', onWindowResize);
   });
 
   onMount(() => {
@@ -79,12 +107,12 @@
     if (!resizing) return;
     const viewportW = window.innerWidth;
     if (resizing === 'left') {
-      const next = clamp(e.clientX, 240, Math.min(520, viewportW - 360));
+      const next = clamp(e.clientX, LEFT_MIN, getLeftMax(viewportW, rightW));
       leftW = next;
       return;
     }
 
-    const next = clamp(viewportW - e.clientX, 280, Math.min(620, viewportW - 280));
+    const next = clamp(viewportW - e.clientX, RIGHT_MIN, getRightMax(viewportW, leftW));
     rightW = next;
   }
 
