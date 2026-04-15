@@ -484,7 +484,7 @@ export function createPageState() {
 
   function generateRandomGeneratedColors() {
     const seed = randomSeedU32();
-    state.config = mergeWithLocks(generateRandomConfigNoPresetsFromSeed(seed, state.config.type));
+    state.config = mergeWithLocks(generateRandomConfigNoPresetsFromSeed(seed, state.config.type) as any) as WallpaperConfig;
     schedulePreviewRender();
   }
 
@@ -510,7 +510,7 @@ export function createPageState() {
     if (types.length > 1 && nextType === currentType) {
       nextType = types[(types.indexOf(nextType) + 1) % types.length] ?? nextType;
     }
-    state.config = mergeWithLocks(generateRandomConfigNoPresetsFromSeed(seed, nextType));
+    state.config = mergeWithLocks(generateRandomConfigNoPresetsFromSeed(seed, nextType) as any) as WallpaperConfig;
     schedulePreviewRender();
   }
 
@@ -734,17 +734,17 @@ export function createPageState() {
         const cfg = getCfgParamFromSearch(window.location.search);
         if (cfg) {
           const stateFromUrl = decodeCfgParam(cfg);
-          state.config = normalizeWallpaperConfig(stateFromUrl.c as any);
+          state.config = normalizeWallpaperConfig(stateFromUrl.c as any) as WallpaperConfig;
           state.exportFormat = stateFromUrl.f;
           state.renderMode = stateFromUrl.m;
         } else {
-          state.config = generateRandomConfigNoPresets();
+          state.config = generateRandomConfigNoPresets() as WallpaperConfig;
         }
       } else {
-        state.config = generateRandomConfigNoPresets();
+        state.config = generateRandomConfigNoPresets() as WallpaperConfig;
       }
     } catch {
-      state.config = generateRandomConfigNoPresets();
+      state.config = generateRandomConfigNoPresets() as WallpaperConfig;
     }
 
     state.urlSyncEnabled = true;
