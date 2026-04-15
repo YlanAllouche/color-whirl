@@ -510,6 +510,15 @@
         </div>
 
         <div class="palette-item-actions">
+          <button
+            type="button"
+            class="palette-nav"
+            class:locked={isLocked(`colors.${i}`)}
+            onclick={() => toggleLock(`colors.${i}`)}
+            title="Lock this swatch for randomize"
+          >
+            {isLocked(`colors.${i}`) ? 'Unlock swatch' : 'Lock swatch'}
+          </button>
           <button type="button" class="palette-nav" onclick={() => copyHex(color)}>Copy hex</button>
           <button type="button" class="palette-nav" onclick={() => swapColorWithBackground(i)}>Swap BG</button>
           <button type="button" class="palette-nav" onclick={() => toggleOverrideEditorWithCreate(i)}>

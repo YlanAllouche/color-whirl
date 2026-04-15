@@ -19,6 +19,7 @@
 
   type ExportFormat = 'png' | 'jpg' | 'webp' | 'svg';
   type RandomizationProfile = 'safe' | 'exploratory';
+  type PaletteRandomizeScheme = 'auto' | 'analogous' | 'triadic' | 'complementary' | 'split-complementary' | 'hue-between';
 
   type Props = {
     config: WallpaperConfig;
@@ -34,9 +35,12 @@
     isLocked: (path: string) => boolean;
     toggleLock: (path: string) => void;
 
+    generateRandomColorsOnly: () => void;
     generateRandomGeneratedColors: () => void;
     generateRandomIncludingType: () => void;
     randomizationProfile: RandomizationProfile;
+    paletteRandomizeScheme: PaletteRandomizeScheme;
+    paletteRandomizeHueBetweenSteps: number | null;
     switchType: (nextType: any) => void;
 
     colorPresetGroups: Array<{ group: string; presets: ColorPreset[] }>;
@@ -87,9 +91,12 @@
     clearPreviewSettleTimer,
     isLocked,
     toggleLock,
+    generateRandomColorsOnly,
     generateRandomGeneratedColors,
     generateRandomIncludingType,
     randomizationProfile = $bindable('safe'),
+    paletteRandomizeScheme = $bindable('auto'),
+    paletteRandomizeHueBetweenSteps = $bindable(null),
     switchType,
     colorPresetGroups,
     selectedColorPreset,
@@ -127,7 +134,14 @@
   </div>
 
   <div class="sidebar-content">
-    <RandomizeSection {generateRandomGeneratedColors} {generateRandomIncludingType} bind:randomizationProfile />
+    <RandomizeSection
+      {generateRandomColorsOnly}
+      {generateRandomGeneratedColors}
+      {generateRandomIncludingType}
+      bind:randomizationProfile
+      bind:paletteRandomizeScheme
+      bind:paletteRandomizeHueBetweenSteps
+    />
 
     <TypeSection {config} {switchType} />
 

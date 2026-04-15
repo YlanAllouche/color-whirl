@@ -595,6 +595,18 @@
   border-color: #444;
 }
 
+.palette-nav.locked {
+  border-color: rgba(249, 115, 22, 0.55);
+  background: rgba(249, 115, 22, 0.16);
+  color: #ffddb8;
+}
+
+.palette-nav.locked:hover {
+  border-color: rgba(249, 115, 22, 0.72);
+  background: rgba(249, 115, 22, 0.24);
+  color: #fff3e7;
+}
+
 .palette-preview {
   display: flex;
   align-items: center;

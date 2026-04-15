@@ -12,6 +12,7 @@
 
   type ExportFormat = 'png' | 'jpg' | 'webp' | 'svg';
   type RandomizationProfile = 'safe' | 'exploratory';
+  type PaletteRandomizeScheme = 'auto' | 'analogous' | 'triadic' | 'complementary' | 'split-complementary' | 'hue-between';
 
   type Props = {
     config: WallpaperConfig;
@@ -21,9 +22,12 @@
 
     schedulePreviewRender: () => void;
 
+    generateRandomColorsOnly: () => void;
     generateRandomGeneratedColors: () => void;
     generateRandomIncludingType: () => void;
     randomizationProfile: RandomizationProfile;
+    paletteRandomizeScheme: PaletteRandomizeScheme;
+    paletteRandomizeHueBetweenSteps: number | null;
     switchType: (nextType: any) => void;
 
     isLocked: (path: string) => boolean;
@@ -49,9 +53,12 @@
     supportsBloom,
     searchQuery = $bindable(),
     schedulePreviewRender,
+    generateRandomColorsOnly,
     generateRandomGeneratedColors,
     generateRandomIncludingType,
     randomizationProfile = $bindable('safe'),
+    paletteRandomizeScheme = $bindable('auto'),
+    paletteRandomizeHueBetweenSteps = $bindable(null),
     switchType,
     isLocked,
     toggleLock,
@@ -78,7 +85,14 @@
     showSearch={false}
     showColumnsToggle={false}
   >
-    <RandomizeSection {generateRandomGeneratedColors} {generateRandomIncludingType} bind:randomizationProfile />
+    <RandomizeSection
+      {generateRandomColorsOnly}
+      {generateRandomGeneratedColors}
+      {generateRandomIncludingType}
+      bind:randomizationProfile
+      bind:paletteRandomizeScheme
+      bind:paletteRandomizeHueBetweenSteps
+    />
     <TypeSection {config} {switchType} />
     {#if is3DType || supportsBloom}
       <RenderSection {config} {is3DType} {supportsBloom} {isLocked} {toggleLock} bind:renderMode />

@@ -35,9 +35,12 @@
       supportsBloom={derived.supportsBloom}
       bind:searchQuery={state.inspectorSearch}
       schedulePreviewRender={actions.schedulePreviewRender}
+      generateRandomColorsOnly={actions.generateRandomColorsOnly}
       generateRandomGeneratedColors={actions.generateRandomGeneratedColors}
       generateRandomIncludingType={actions.generateRandomIncludingType}
       bind:randomizationProfile={state.randomizationProfile}
+      bind:paletteRandomizeScheme={state.paletteRandomizeScheme}
+      bind:paletteRandomizeHueBetweenSteps={state.paletteRandomizeHueBetweenSteps}
       switchType={actions.switchType}
       isLocked={actions.isLocked}
       toggleLock={actions.toggleLock}

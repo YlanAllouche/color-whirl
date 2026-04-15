@@ -68,6 +68,7 @@ import {
 type WeightTarget = 'spheres' | 'circles' | 'polygons' | 'triangles2d' | 'prisms' | 'hexgrid' | 'ridges' | 'svg' | 'bands' | 'flowlines' | 'diamondgrid';
 type ExportFormat = 'png' | 'jpg' | 'webp' | 'svg';
 type RandomizationProfile = 'safe' | 'exploratory';
+type PaletteRandomizeScheme = 'auto' | 'analogous' | 'triadic' | 'complementary' | 'split-complementary' | 'hue-between';
 
 const RENDER_SETTLE_MS = 280;
 const SETTINGS_MAXIMIZED_KEY = 'ui.layout.settingsMaximized';
@@ -97,7 +98,9 @@ export function createPageState() {
       'bubbles.enabled': true
     } as LockMap,
     selectedColorPresetId: COLOR_PRESETS[0]?.id ?? '',
-    randomizationProfile: 'safe' as RandomizationProfile
+    randomizationProfile: 'safe' as RandomizationProfile,
+    paletteRandomizeScheme: 'auto' as PaletteRandomizeScheme,
+    paletteRandomizeHueBetweenSteps: null as number | null
   });
 
   let camDragPointerId = -1;
@@ -189,6 +192,22 @@ export function createPageState() {
     } catch {
       return (Math.floor(Math.random() * 0xffffffff) >>> 0) || 1;
     }
+  }
+
+  function getPaletteRandomizeOptions() {
+    const anchors = state.config.colors.length > 0
+      ? [state.config.colors[0], state.config.colors[state.config.colors.length - 1]]
+      : [];
+
+    return {
+      profile: state.randomizationProfile,
+      paletteScheme: state.paletteRandomizeScheme,
+      paletteSchemeSteps:
+        state.paletteRandomizeScheme === 'hue-between' && Number.isFinite(state.paletteRandomizeHueBetweenSteps)
+          ? Math.max(2, Math.round(Number(state.paletteRandomizeHueBetweenSteps)))
+          : undefined,
+      paletteSchemeAnchors: anchors
+    };
   }
 
   function markNextUrlWriteAsPush() {
@@ -299,12 +318,61 @@ export function createPageState() {
   }
 
   function removeColor(index: number) {
+    const beforeLen = state.config.colors.length;
     state.config = removeColorImpl(state.config, index);
+    if (state.config.colors.length < beforeLen) {
+      const nextLocks: LockMap = {};
+      for (const [path, value] of Object.entries(state.locks)) {
+        const match = /^colors\.(\d+)$/.exec(path);
+        if (!match) {
+          nextLocks[path] = value;
+          continue;
+        }
+        const swatchIndex = Number.parseInt(match[1], 10);
+        if (!Number.isFinite(swatchIndex)) {
+          nextLocks[path] = value;
+          continue;
+        }
+        if (swatchIndex === index) continue;
+        if (swatchIndex > index) {
+          nextLocks[`colors.${swatchIndex - 1}`] = value;
+          continue;
+        }
+        nextLocks[path] = value;
+      }
+      state.locks = nextLocks;
+    }
     schedulePreviewRender();
   }
 
   function moveColor(fromIndex: number, toIndex: number) {
-    state.config = moveColorImpl(state.config, fromIndex, toIndex);
+    const len = state.config.colors.length;
+    const from = Math.max(0, Math.min(len - 1, Math.trunc(fromIndex)));
+    const to = Math.max(0, Math.min(len - 1, Math.trunc(toIndex)));
+    state.config = moveColorImpl(state.config, from, to);
+    if (from !== to) {
+      const nextLocks: LockMap = {};
+      for (const [path, value] of Object.entries(state.locks)) {
+        const match = /^colors\.(\d+)$/.exec(path);
+        if (!match) {
+          nextLocks[path] = value;
+          continue;
+        }
+        const swatchIndex = Number.parseInt(match[1], 10);
+        if (!Number.isFinite(swatchIndex)) {
+          nextLocks[path] = value;
+          continue;
+        }
+
+        let mapped = swatchIndex;
+        if (swatchIndex === from) mapped = to;
+        else if (from < to && swatchIndex > from && swatchIndex <= to) mapped = swatchIndex - 1;
+        else if (from > to && swatchIndex >= to && swatchIndex < from) mapped = swatchIndex + 1;
+
+        nextLocks[`colors.${mapped}`] = value;
+      }
+      state.locks = nextLocks;
+    }
     schedulePreviewRender();
   }
 
@@ -518,8 +586,22 @@ export function createPageState() {
     const seed = randomSeedU32();
     markNextUrlWriteAsPush();
     state.config = mergeWithLocks(
-      (generateRandomConfigNoPresetsFromSeed as any)(seed, state.config.type, { profile: state.randomizationProfile }) as any
+      (generateRandomConfigNoPresetsFromSeed as any)(seed, state.config.type, getPaletteRandomizeOptions()) as any
     ) as WallpaperConfig;
+    schedulePreviewRender();
+  }
+
+  function generateRandomColorsOnly() {
+    const seed = randomSeedU32();
+    const randomized = (generateRandomConfigNoPresetsFromSeed as any)(seed, state.config.type, getPaletteRandomizeOptions()) as WallpaperConfig;
+    const targeted = applyRandomizedWidgetPaths({
+      currentConfig: state.config,
+      randomizedConfig: randomized,
+      widgetId: 'colors'
+    });
+
+    markNextUrlWriteAsPush();
+    state.config = mergeWithLocks(targeted) as WallpaperConfig;
     schedulePreviewRender();
   }
 
@@ -547,7 +629,7 @@ export function createPageState() {
     }
     markNextUrlWriteAsPush();
     state.config = mergeWithLocks(
-      (generateRandomConfigNoPresetsFromSeed as any)(seed, nextType, { profile: state.randomizationProfile }) as any
+      (generateRandomConfigNoPresetsFromSeed as any)(seed, nextType, getPaletteRandomizeOptions()) as any
     ) as WallpaperConfig;
     schedulePreviewRender();
   }
@@ -560,9 +642,7 @@ export function createPageState() {
     if (!canRandomizeWidget(widgetId)) return;
 
     const seed = randomSeedU32();
-    const randomized = (generateRandomConfigNoPresetsFromSeed as any)(seed, state.config.type, {
-      profile: state.randomizationProfile
-    }) as WallpaperConfig;
+    const randomized = (generateRandomConfigNoPresetsFromSeed as any)(seed, state.config.type, getPaletteRandomizeOptions()) as WallpaperConfig;
 
     const targeted = applyRandomizedWidgetPaths({
       currentConfig: state.config,
@@ -931,6 +1011,7 @@ export function createPageState() {
       togglePaletteBlock,
       switchType,
       generateRandomGeneratedColors,
+      generateRandomColorsOnly,
       generateRandomIncludingType,
       canRandomizeWidget,
       randomizeWidget,
