@@ -55,11 +55,6 @@
     <Dropdown bind:value={paletteRandomizeScheme} options={paletteSchemeOptions} ariaLabel="Palette randomization scheme" />
   </label>
 
-  <div class="control-row">
-    <span class="setting-title">Mode intent</span>
-    <span class="setting-hint">Stochastic, seed-based, lock-aware randomization</span>
-  </div>
-
   {#if paletteRandomizeScheme === 'hue-between'}
     <label class="control-row">
       <span class="setting-title">Hue-between steps</span>

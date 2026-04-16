@@ -487,7 +487,7 @@
       onclick={() => toggleLock('backgroundColor')}
       title="Click to lock/unlock for randomize"
     >
-      Background (scheme)
+      Background
     </button>
     <input type="color" bind:value={config.backgroundColor} />
   </label>
@@ -518,12 +518,7 @@
   </div>
 
   <details class="control-details">
-    <summary class="control-details-summary">Harmony helper (manual)</summary>
-
-    <div class="control-row">
-      <span class="setting-title">Mode intent</span>
-      <span class="setting-hint">Manual palette design from anchors; optional lock-aware apply</span>
-    </div>
+    <summary class="control-details-summary">Harmony helper</summary>
 
     <label class="control-row">
       <span class="setting-title">Mode</span>
