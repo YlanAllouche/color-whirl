@@ -688,6 +688,35 @@
   color: #fff3e7;
 }
 
+.palette-lock-btn {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text2);
+  border-color: var(--stroke0);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.palette-lock-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.palette-lock-btn.locked {
+  border-color: rgba(239, 68, 68, 0.6);
+  background: rgba(239, 68, 68, 0.18);
+  color: #fecaca;
+}
+
+.palette-lock-btn.locked:hover {
+  border-color: rgba(239, 68, 68, 0.78);
+  background: rgba(239, 68, 68, 0.28);
+  color: #fff;
+}
+
 .palette-preview {
   display: flex;
   align-items: center;
@@ -1045,6 +1074,17 @@
 
 .setting-title.locked:hover {
   background: rgba(249, 115, 22, 0.18);
+}
+
+.lock-title-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.lock-title-btn svg {
+  width: 14px;
+  height: 14px;
 }
 
 

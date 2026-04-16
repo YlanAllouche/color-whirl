@@ -463,12 +463,18 @@
   <label class="control-row">
     <button
       type="button"
-      class="setting-title"
+      class="setting-title lock-title-btn"
       class:locked={isLocked('colors')}
       onclick={() => toggleLock('colors')}
       title="Click to lock/unlock for randomize"
+      aria-label={isLocked('colors') ? 'Unlock all colors for randomize' : 'Lock all colors for randomize'}
+      aria-pressed={isLocked('colors')}
     >
-      Lock colors
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect width="18" height="11" x="3" y="11" rx="2" ry="2"/>
+        <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+      </svg>
+      <span>Colors</span>
     </button>
     <span class="setting-hint">Presets + palette overrides</span>
   </label>
@@ -661,12 +667,17 @@
         <div class="palette-item-actions">
           <button
             type="button"
-            class="palette-nav"
+            class="palette-nav palette-lock-btn"
             class:locked={isLocked(`colors.${i}`)}
             onclick={() => toggleLock(`colors.${i}`)}
-            title="Lock this swatch for randomize"
+            title={isLocked(`colors.${i}`) ? 'Unlock this swatch for randomize' : 'Lock this swatch for randomize'}
+            aria-label={isLocked(`colors.${i}`) ? `Unlock swatch ${i + 1} for randomize` : `Lock swatch ${i + 1} for randomize`}
+            aria-pressed={isLocked(`colors.${i}`)}
           >
-            {isLocked(`colors.${i}`) ? 'Unlock swatch' : 'Lock swatch'}
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect width="18" height="11" x="3" y="11" rx="2" ry="2"/>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
           </button>
           <button type="button" class="palette-nav" onclick={() => copyHex(color)}>Copy hex</button>
           <button type="button" class="palette-nav" onclick={() => swapColorWithBackground(i)}>Swap BG</button>

@@ -21,3 +21,4 @@ export * from './generators/svg3d.js';
 export * from './export/index.js';
 export * from './svg-tone-extraction.js';
 export * from './config/randomize.js';
+export * from './config/prune.js';

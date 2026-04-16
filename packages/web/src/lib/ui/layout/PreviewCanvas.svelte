@@ -103,6 +103,14 @@
 
   function updateSettingsOverlayFromPointer(x: number, y: number) {
     if (!settingsMaximized) return;
+    if (cameraDragActive) {
+      if (settingsOverlayVisible) setSettingsOverlayVisible(false);
+      if (settingsOverlayTimer) {
+        window.clearTimeout(settingsOverlayTimer);
+        settingsOverlayTimer = null;
+      }
+      return;
+    }
     const inSettings = isPointerInSettingsArea(x, y);
     setSettingsOverlayVisible(true);
     if (settingsOverlayTimer) window.clearTimeout(settingsOverlayTimer);
@@ -151,6 +159,11 @@
     if (target?.closest?.('.preview-overlay') || target?.closest?.('[data-settings-overlay]') || target?.closest?.('.fullscreen-toggle')) return;
 
     setCameraDragActive(true);
+    if (settingsOverlayVisible) setSettingsOverlayVisible(false);
+    if (settingsOverlayTimer) {
+      window.clearTimeout(settingsOverlayTimer);
+      settingsOverlayTimer = null;
+    }
     camDragPointerId = e.pointerId;
     camDragStartX = e.clientX;
     camDragStartY = e.clientY;
@@ -227,6 +240,7 @@
     if (!settingsMaximized) return;
     const handleMove = (event: PointerEvent) => {
       bumpOverlay();
+      if (cameraDragActive) return;
       updateSettingsOverlayFromPointer(event.clientX, event.clientY);
     };
     window.addEventListener('pointermove', handleMove, { passive: true });
